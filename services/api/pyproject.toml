@@ -1,0 +1,28 @@
+[project]
+name = "api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.19.2",
+    "fastapi[standard]>=0.141.1",
+    "numpy>=2.5.3",
+    "pandas>=3.0.5",
+    "psycopg[binary]>=3.3.5",
+    "pydantic-settings>=2.15.0",
+    "scikit-learn>=1.9.0",
+    "sqlalchemy>=2.0.52",
+    "xgboost>=3.4.1",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.412",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.6",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
