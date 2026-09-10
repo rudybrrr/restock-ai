@@ -1,27 +1,23 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from hashlib import sha256
-from secrets import compare_digest, token_urlsafe
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import APIKeyCookie, HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import delete, insert, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config import Settings
 from src.database import get_session, manager_sessions
 from src.errors import ApiError
 from src.schemas import Identity, LoginRequest
+from src.sessions import create_manager_session, revoke_manager_session, same_secret
 
 COOKIE = "restock_session"
 SessionDep = Annotated[Session, Depends(get_session)]
 bearer = HTTPBearer(auto_error=False)
 cookie = APIKeyCookie(name=COOKIE, auto_error=False)
 router = APIRouter(prefix="/auth", tags=["Access"])
-
-
-def same_secret(left: str, right: str) -> bool:
-    return compare_digest(left.encode(), right.encode())
 
 
 def require_browser_origin(request: Request) -> None:
@@ -77,29 +73,9 @@ def login(
     body: LoginRequest, request: Request, response: Response, session: SessionDep
 ) -> Identity:
     settings: Settings = request.app.state.settings
-    password = settings.manager_password.get_secret_value()
-    if not password or not (
-        same_secret(body.username, settings.manager_username)
-        and same_secret(body.password, password)
-    ):
-        raise ApiError(401, "UNAUTHENTICATED", "Invalid manager credentials")
-    token = token_urlsafe(32)
-    now = datetime.now(UTC)
-    old_token = request.cookies.get(COOKIE, "")
-    session.execute(
-        delete(manager_sessions).where(
-            (manager_sessions.c.expires_at <= now)
-            | (manager_sessions.c.token_hash == sha256(old_token.encode()).hexdigest())
-        )
+    token = create_manager_session(
+        session, settings, body, request.cookies.get(COOKIE, "")
     )
-    session.execute(
-        insert(manager_sessions).values(
-            token_hash=sha256(token.encode()).hexdigest(),
-            username=body.username,
-            expires_at=now + timedelta(hours=settings.session_hours),
-        )
-    )
-    session.commit()
     response.set_cookie(
         COOKIE,
         token,
@@ -118,13 +94,7 @@ def login(
     dependencies=[Depends(require_manager), Depends(require_browser_origin)],
 )
 def logout(request: Request, session: SessionDep) -> Response:
-    token = request.cookies.get(COOKIE, "")
-    session.execute(
-        delete(manager_sessions).where(
-            manager_sessions.c.token_hash == sha256(token.encode()).hexdigest()
-        )
-    )
-    session.commit()
+    revoke_manager_session(session, request.cookies.get(COOKIE, ""))
     response = Response(status_code=204)
     response.delete_cookie(
         COOKIE,

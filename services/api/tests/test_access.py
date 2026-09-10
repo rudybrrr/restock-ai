@@ -8,6 +8,7 @@ def test_inventory_requires_credentials() -> None:
     with TestClient(app) as client:
         response = client.get("/api/v1/inventory")
     assert response.status_code == 401
+    assert response.json()["success"] is False
     assert response.json()["error"]["code"] == "UNAUTHENTICATED"
 
 
@@ -132,6 +133,7 @@ def test_cors_and_validation_contract(client: TestClient) -> None:
         "/api/v1/auth/login", json={}, headers={"Origin": "https://frontend.example"}
     )
     assert response.status_code == 422
+    assert response.json()["success"] is False
     assert response.json()["error"]["code"] == "INVALID_REQUEST"
     assert (
         client.get(

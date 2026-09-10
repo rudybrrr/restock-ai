@@ -60,7 +60,7 @@ future manager mutations must use `require_manager` and `require_browser_origin`
 Protected GET routes under `/api/v1`: `/menu-items`, `/ingredients`, `/recipes`, `/suppliers`,
 `/supplier-offers`, `/holidays`, `/inventory`, `/auth/me`. Missing/invalid credentials return 401;
 wrong role or Origin returns 403; malformed input returns 422. Errors use
-`{"error":{"code":"UNAUTHENTICATED","message":"…","retryable":false}}`.
+`{"success":false,"error":{"code":"UNAUTHENTICATED","message":"…","retryable":false}}`.
 `GET /health` always returns `200 {"status":"ok"}` as a liveness check.
 
 Quantities and money serialize as decimal strings. Ingredients define kg, litres, or pieces;

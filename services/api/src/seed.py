@@ -56,7 +56,16 @@ def seed() -> None:
         ("pantry", "Pantry Supply"),
         ("market", "Market Supply"),
     ]
-    quantities = ["12", "30", "15", "120", "10", "18", "8", "6"]
+    quantities = {
+        "chicken": "12",
+        "rice": "30",
+        "noodles": "15",
+        "eggs": "120",
+        "tofu": "10",
+        "vegetables": "18",
+        "oil": "8",
+        "soy-sauce": "6",
+    }
     source = "https://www.mom.gov.sg/newsroom/press-releases/2025/0616-public-holidays-for-2026"
     try:
         with engine.begin() as conn:
@@ -128,9 +137,9 @@ def seed() -> None:
                     "ingredient_id": ingredient,
                     "received_at": datetime.fromisoformat("2026-02-15T08:00:00+08:00"),
                     "expiry_date": date(2026, 2, 18),
-                    "initial_quantity": Decimal(quantities[index]),
+                    "initial_quantity": Decimal(quantities[ingredient]),
                 }
-                for index, (ingredient, _, _) in enumerate(items)
+                for ingredient, _, _ in items
             ]
             lots.append(
                 {

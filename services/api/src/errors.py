@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -11,6 +13,7 @@ class ErrorDetail(BaseModel):
 
 
 class ErrorResponse(BaseModel):
+    success: Literal[False] = False
     error: ErrorDetail
 
 
@@ -23,7 +26,7 @@ class ApiError(Exception):
 async def api_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, ApiError)
     return JSONResponse(
-        status_code=exc.status, content={"error": exc.detail.model_dump()}
+        status_code=exc.status, content=ErrorResponse(error=exc.detail).model_dump()
     )
 
 
@@ -31,11 +34,10 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
     assert isinstance(exc, RequestValidationError)
     return JSONResponse(
         status_code=422,
-        content={
-            "error": {
-                "code": "INVALID_REQUEST",
-                "message": "Request does not match the API schema",
-                "retryable": False,
-            }
-        },
+        content=ErrorResponse(
+            error=ErrorDetail(
+                code="INVALID_REQUEST",
+                message="Request does not match the API schema",
+            )
+        ).model_dump(),
     )
