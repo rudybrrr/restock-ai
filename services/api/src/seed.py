@@ -27,6 +27,7 @@ class IngredientSeed:
     name: str
     unit: Literal["kg", "litres", "pieces"]
     opening_quantity: Decimal
+    interval_days: int
 
 
 def seed() -> None:
@@ -40,14 +41,14 @@ def seed() -> None:
         ("vegetable-noodles", "Vegetable noodles"),
     ]
     ingredient_seeds = [
-        IngredientSeed("chicken", "Chicken", "kg", Decimal(12)),
-        IngredientSeed("rice", "Rice", "kg", Decimal(30)),
-        IngredientSeed("noodles", "Noodles", "kg", Decimal(15)),
-        IngredientSeed("eggs", "Eggs", "pieces", Decimal(120)),
-        IngredientSeed("tofu", "Tofu", "kg", Decimal(10)),
-        IngredientSeed("vegetables", "Vegetables", "kg", Decimal(18)),
-        IngredientSeed("oil", "Cooking oil", "litres", Decimal(8)),
-        IngredientSeed("soy-sauce", "Soy sauce", "litres", Decimal(6)),
+        IngredientSeed("chicken", "Chicken", "kg", Decimal(12), 1),
+        IngredientSeed("rice", "Rice", "kg", Decimal(30), 14),
+        IngredientSeed("noodles", "Noodles", "kg", Decimal(15), 3),
+        IngredientSeed("eggs", "Eggs", "pieces", Decimal(120), 3),
+        IngredientSeed("tofu", "Tofu", "kg", Decimal(10), 2),
+        IngredientSeed("vegetables", "Vegetables", "kg", Decimal(18), 1),
+        IngredientSeed("oil", "Cooking oil", "litres", Decimal(8), 7),
+        IngredientSeed("soy-sauce", "Soy sauce", "litres", Decimal(6), 7),
     ]
     recipe_data = {
         "chicken-rice": {"chicken": ".150", "rice": ".100", "soy-sauce": ".010"},
@@ -73,11 +74,19 @@ def seed() -> None:
             def insert_if_absent(table, rows):
                 conn.execute(insert(table).values(rows).on_conflict_do_nothing())
 
-            insert_if_absent(menu_items, [{"id": key, "name": name} for key, name in dishes])
+            insert_if_absent(
+                menu_items, [{"id": key, "name": name} for key, name in dishes]
+            )
             insert_if_absent(
                 ingredients,
                 [
-                    {"id": seed.id, "name": seed.name, "unit": seed.unit}
+                    {
+                        "id": seed.id,
+                        "name": seed.name,
+                        "unit": seed.unit,
+                        "interval_days": seed.interval_days,
+                        "starting_date": date(2026, 2, 15),
+                    }
                     for seed in ingredient_seeds
                 ],
             )

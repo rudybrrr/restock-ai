@@ -20,6 +20,8 @@ class MenuItem(NamedRecord):
 
 class Ingredient(NamedRecord):
     unit: Literal["kg", "litres", "pieces"]
+    interval_days: int
+    starting_date: date
 
 
 class RecipeItem(Model):
@@ -82,6 +84,22 @@ class InventoryLot(Model):
     quantity: Decimal
     counted_at: AwareDatetime
     provenance: Literal["PHYSICAL"] = "PHYSICAL"
+
+
+class EstimatedInventoryLot(Model):
+    id: str
+    ingredient_id: str
+    unit: Literal["kg", "litres", "pieces"]
+    received_at: AwareDatetime
+    expiry_date: date
+    initial_quantity: Decimal
+    counted_at: AwareDatetime
+    quantity: Decimal
+    provenance: Literal["ESTIMATED"] = "ESTIMATED"
+    as_of: AwareDatetime
+    coverage_start: AwareDatetime
+    coverage_complete: bool
+    status: Literal["ACTIVE", "EXPIRED"]
 
 
 class LoginRequest(BaseModel):

@@ -23,6 +23,9 @@ EventType = Literal[
     "DELIVERY_SHORT",
     "DELIVERY_RECEIVED",
     "DELIVERY_CANCELLED",
+    "SALES_UPDATED",
+    "INVENTORY_LOT_EXPIRED",
+    "MANUAL_REASSESSMENT_REQUESTED",
 ]
 
 
@@ -33,6 +36,55 @@ class DailyDraft(BaseModel):
     sales: dict[str, Annotated[int, Field(ge=0, strict=True)]] = Field(
         default_factory=dict
     )
+
+
+class SalesBatchCreate(BaseModel):
+    """A complete, incremental simulator report for one non-overlapping interval."""
+
+    model_config = ConfigDict(extra="forbid")
+    source: Annotated[str, Field(min_length=1, max_length=128)]
+    batch_id: Annotated[str, Field(min_length=1, max_length=128)]
+    period_start: AwareDatetime
+    period_end: AwareDatetime
+    sales: dict[str, Annotated[int, Field(ge=0, strict=True)]] = Field(
+        default_factory=dict
+    )
+    replaces_id: str | None = None
+
+
+class SalesBatch(SalesBatchCreate):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    revision: int
+    active: bool
+
+
+class SalesBatchEventPayload(BaseModel):
+    batch: SalesBatch
+
+
+class SalesBatchEvent(BaseModel):
+    id: str
+    type: Literal["SALES_UPDATED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: SalesBatchEventPayload
+
+
+class ExpiryEvent(BaseModel):
+    id: str
+    type: Literal["INVENTORY_LOT_EXPIRED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: dict
+
+
+class ManualAssessmentEvent(BaseModel):
+    id: str
+    type: Literal["MANUAL_REASSESSMENT_REQUESTED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: dict
 
 
 class DailyRevision(DailyDraft):
@@ -207,7 +259,10 @@ class DeliveryEvent(BaseModel):
     payload: DeliveryEventPayload
 
 
-Event = Annotated[DailyEvent | DeliveryEvent, Field(discriminator="type")]
+Event = Annotated[
+    DailyEvent | DeliveryEvent | SalesBatchEvent | ExpiryEvent | ManualAssessmentEvent,
+    Field(discriminator="type"),
+]
 
 
 class AuditEntry(BaseModel):

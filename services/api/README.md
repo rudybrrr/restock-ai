@@ -157,3 +157,25 @@ Record deliveries **before** submitting the day's closing counts:
 GET `/api/v1/events` and `/api/v1/audit` expose typed events, effective times, immutable delivery snapshots,
 and recording actor/time. Each submission, purchase, update or receipt commits together with its events
 and audit entries. Daily assessment execution is connected in later tickets; drafts emit no assessment event.
+
+## Tickets 7 and 8: simulated sales and first planning run
+
+`POST /api/v1/sales-batches` accepts a complete incremental simulator interval.
+Each batch has a `source`, `batch_id`, timezone-aware period bounds, and dish
+quantities; omitted dishes are zero. Identical retries have no second effect,
+while conflicting identities and overlapping intervals return `409`. Submit a
+new identity with `replaces_id` to correct a batch without double deduction.
+
+`GET /api/v1/inventory/estimated?as_of=<timestamp>` reports recipe-derived
+FIFO balances separately from physical observations, with coverage metadata.
+Lots are excluded on the Singapore day after expiry and retained as `EXPIRED`
+history.
+
+A manager starts a durable assessment with `POST /api/v1/assessments` and an
+`as_of` timestamp; it returns `202`. The agent bearer credential claims the
+run at `POST /api/v1/runs/claim`, calls
+`POST /api/v1/runs/{id}/tools/optimise` with forecast dish quantities, then
+completes it at `POST /api/v1/runs/{id}/complete`. The tool checks frozen
+inventory, recipes, complete supplier inputs, MOQ, pack size, availability,
+and delivery slots before an immutable `PENDING_APPROVAL` version is stored.
+Read them through `GET /runs/{id}` and `GET /plans/{version_id}`.

@@ -1,12 +1,18 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
 from src import database as db
-from src import deliveries, operations
-from src.auth import SessionDep, authenticate, require_browser_origin, require_manager
+from src import deliveries, operations, planning, sales
+from src.auth import (
+    SessionDep,
+    authenticate,
+    require_agent,
+    require_browser_origin,
+    require_manager,
+)
 from src.operations_schemas import (
     AuditEntry,
     DailyDraft,
@@ -17,13 +23,24 @@ from src.operations_schemas import (
     DeliveryUpdate,
     Event,
     ReceiptCreate,
+    SalesBatch,
+    SalesBatchCreate,
 )
-from src.schemas import Identity
+from src.planning_schemas import (
+    AssessmentRequest,
+    Candidate,
+    Completion,
+    OptimiseRequest,
+    PlanningRun,
+    PurchasePlanVersion,
+)
+from src.schemas import EstimatedInventoryLot, Identity
 
 router = APIRouter(
     tags=["Daily updates and deliveries"], dependencies=[Depends(authenticate)]
 )
 Manager = Annotated[Identity, Depends(require_manager)]
+Agent = Annotated[Identity, Depends(require_agent)]
 mutation = [Depends(require_browser_origin)]
 
 
@@ -62,6 +79,50 @@ def audit(session: SessionDep):
         .mappings()
         .all()
     )
+
+
+@router.post(
+    "/sales-batches", response_model=SalesBatch, status_code=201, dependencies=mutation
+)
+def create_sales_batch(body: SalesBatchCreate, session: SessionDep, manager: Manager):
+    return sales.create_sales_batch(session, body, manager.username)
+
+
+@router.get("/inventory/estimated", response_model=list[EstimatedInventoryLot])
+def estimated_inventory(as_of: datetime, session: SessionDep):
+    return sales.estimated_inventory(session, as_of)
+
+
+@router.post(
+    "/assessments", response_model=PlanningRun, status_code=202, dependencies=mutation
+)
+def request_assessment(body: AssessmentRequest, session: SessionDep, manager: Manager):
+    return planning.request_run(session, body.as_of)
+
+
+@router.get("/runs/{run_id}", response_model=PlanningRun)
+def read_run(run_id: str, session: SessionDep):
+    return planning.get_run(session, run_id)
+
+
+@router.post("/runs/claim", response_model=PlanningRun)
+def claim_run(session: SessionDep, agent: Agent):
+    return planning.claim_run(session)
+
+
+@router.post("/runs/{run_id}/tools/optimise", response_model=Candidate)
+def optimise_run(run_id: str, body: OptimiseRequest, session: SessionDep, agent: Agent):
+    return planning.optimise(session, run_id, body)
+
+
+@router.post("/runs/{run_id}/complete", response_model=PlanningRun)
+def complete_run(run_id: str, body: Completion, session: SessionDep, agent: Agent):
+    return planning.complete_run(session, run_id, body)
+
+
+@router.get("/plans/{version_id}", response_model=PurchasePlanVersion)
+def read_plan(version_id: str, session: SessionDep):
+    return planning.read_plan(session, version_id)
 
 
 @router.post(

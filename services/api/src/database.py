@@ -31,6 +31,8 @@ ingredients = Table(
     Column("id", String, primary_key=True),
     Column("name", String, nullable=False),
     Column("unit", String, nullable=False),
+    Column("interval_days", Integer, nullable=False, server_default="1"),
+    Column("starting_date", Date, nullable=False, server_default="2026-02-15"),
     CheckConstraint("unit IN ('kg', 'litres', 'pieces')"),
 )
 recipes = Table(
@@ -90,6 +92,7 @@ inventory_lots = Table(
     Column("received_at", DateTime(timezone=True), nullable=False),
     Column("expiry_date", Date, nullable=False),
     Column("initial_quantity", Numeric(12, 3), nullable=False),
+    Column("status", String, nullable=False, server_default="ACTIVE"),
     CheckConstraint("initial_quantity >= 0"),
 )
 stock_counts = Table(
@@ -137,6 +140,68 @@ events = Table(
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("source", String, nullable=False),
     Column("payload", JSON, nullable=False),
+)
+sales_batches = Table(
+    "sales_batches",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("source", String, nullable=False),
+    Column("batch_id", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("period_start", DateTime(timezone=True), nullable=False),
+    Column("period_end", DateTime(timezone=True), nullable=False),
+    Column("sales", JSON, nullable=False),
+    Column("replaces_id", ForeignKey("sales_batches.id")),
+    Column("active", Integer, nullable=False, server_default="1"),
+    UniqueConstraint("source", "batch_id", "revision"),
+    CheckConstraint("period_end > period_start"),
+)
+planning_runs = Table(
+    "planning_runs",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("status", String, nullable=False),
+    Column("trigger", String, nullable=False),
+    Column("as_of", DateTime(timezone=True), nullable=False),
+    Column("input_revision", Integer, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("outcome", String),
+    Column("plan_version_id", String),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("claimed_at", DateTime(timezone=True)),
+    Column("deadline_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+)
+purchase_plans = Table(
+    "purchase_plans",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+plan_versions = Table(
+    "plan_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("plan_id", ForeignKey("purchase_plans.id"), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("run_id", ForeignKey("planning_runs.id"), nullable=False),
+    Column("status", String, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("costs", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("plan_id", "version"),
+)
+purchase_plan_lines = Table(
+    "purchase_plan_lines",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("plan_version_id", ForeignKey("plan_versions.id"), nullable=False),
+    Column("ingredient_id", ForeignKey("ingredients.id"), nullable=False),
+    Column("supplier_id", ForeignKey("suppliers.id"), nullable=False),
+    Column("quantity", Numeric(12, 3), nullable=False),
+    Column("unit_price", Numeric(12, 2), nullable=False),
+    Column("arrival_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("quantity > 0 AND unit_price >= 0"),
 )
 audit_entries = Table(
     "audit_entries",
