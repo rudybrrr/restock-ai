@@ -139,13 +139,13 @@
 > Goal: prove `OpenClaw -> Claude/Bedrock -> real FastAPI tool -> validated result -> Backend -> PLAN-v1`.
 
 - [ ] Verify OpenClaw runtime
-  - [ ] Agent config loads
+  - [x] Agent config loads
   - [ ] Structured output works
 
 - [ ] Verify Claude Sonnet 4.5 / Bedrock
   - [ ] Successful model request
-  - [ ] Failure path tested
-  - [ ] Secrets stay out of prompts / logs
+  - [x] Failure path tested
+  - [x] Secrets stay out of prompts / logs
 
 - [ ] Connect one real FastAPI tool
   - [ ] Canonical Pydantic request
@@ -153,11 +153,11 @@
   - [ ] Error codes
 
 - [ ] Build minimal Coordinator
-  - [ ] Receive invocation
+  - [x] Receive invocation
   - [ ] Read active-plan context
   - [ ] Call one real tool
-  - [ ] Produce typed completion payload
-  - [ ] Do not mutate plan state directly
+  - [x] Produce typed completion payload
+  - [x] Do not mutate plan state directly
 
 - [ ] Connect completion to Backend
   - [ ] `run_id`
@@ -183,10 +183,10 @@
 
 - [ ] Test Pass 1
   - [ ] Happy path
-  - [ ] Invalid structured output
+  - [x] Invalid structured output
   - [ ] Tool exception
   - [ ] Stale state revision
-  - [ ] Missing required data
+  - [x] Missing required data
 
 - [ ] Review and commit Pass 1
 

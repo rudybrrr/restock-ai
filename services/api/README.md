@@ -92,3 +92,30 @@ uv run ruff check .
 PowerShell: `$env:TEST_DATABASE_URL='postgresql://restock:restock_dev@localhost:5432/postgres'`.
 Tests cover stored catalog reads, batch separation, manager sessions, agent permissions, invalid credentials,
 logout revocation, CORS and CSRF. Operational stock edits and purchase workflows belong to later tickets.
+
+## Coordinator runtime smoke test
+
+The Pass 1A Coordinator uses OpenClaw's isolated, embedded `agent exec` command
+with the official Amazon Bedrock provider. It has the `minimal` tool profile and
+does not expose ReStock business tools, database writes, plan publication, or
+approval operations.
+
+Set `AWS_REGION` and `BEDROCK_MODEL_ID`. The model ID must identify Claude Sonnet
+4.5, for example the regional inference profile
+`us.anthropic.claude-sonnet-4-5-20250929-v1:0`. AWS authentication uses the
+standard SDK credential chain (environment credentials, shared profile, web
+identity, or instance role); credentials are not application settings. An
+organiser-supplied standard Bedrock-compatible runtime URL can be set with
+`BEDROCK_BASE_URL`. No custom compatibility endpoint is currently documented in
+this repository.
+
+Pipe one canonical `AgentInvocation` JSON object to:
+
+```sh
+uv run python -m src.coordinator_runtime
+```
+
+The command returns either a validated `AgentCompletionPublication` JSON object
+or the existing backend error envelope. It never falls back to another provider.
+The runtime-only smoke outcome is `ESCALATE / MISSING_REQUIRED_DATA`; it does not
+claim that a purchasing calculation or plan publication occurred.
