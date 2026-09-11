@@ -86,7 +86,11 @@ def inventory(session: SessionDep):
     latest = (
         select(db.stock_counts)
         .distinct(db.stock_counts.c.lot_id)
-        .order_by(db.stock_counts.c.lot_id, db.stock_counts.c.counted_at.desc())
+        .order_by(
+            db.stock_counts.c.lot_id,
+            db.stock_counts.c.counted_at.desc(),
+            db.stock_counts.c.sequence.desc(),
+        )
         .subquery()
     )
     query = (

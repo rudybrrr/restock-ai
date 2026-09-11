@@ -99,7 +99,8 @@ stock_counts = Table(
     Column("lot_id", ForeignKey("inventory_lots.id"), nullable=False),
     Column("quantity", Numeric(12, 3), nullable=False),
     Column("counted_at", DateTime(timezone=True), nullable=False),
-    UniqueConstraint("lot_id", "counted_at"),
+    Column("sequence", Integer, nullable=False, server_default="0"),
+    UniqueConstraint("lot_id", "counted_at", "sequence"),
     CheckConstraint("quantity >= 0"),
 )
 manager_sessions = Table(
@@ -108,6 +109,74 @@ manager_sessions = Table(
     Column("token_hash", String(64), primary_key=True),
     Column("username", String, nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
+)
+
+daily_drafts = Table(
+    "daily_drafts",
+    metadata,
+    Column("day", Date, primary_key=True),
+    Column("payload", JSON, nullable=False),
+)
+daily_revisions = Table(
+    "daily_revisions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("day", Date, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("cutoff", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("actor", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("day", "revision"),
+)
+events = Table(
+    "events",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("type", String, nullable=False),
+    Column("timestamp", DateTime(timezone=True), nullable=False),
+    Column("source", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+)
+audit_entries = Table(
+    "audit_entries",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("event_id", ForeignKey("events.id"), nullable=False),
+    Column("actor", String, nullable=False),
+    Column("action", String, nullable=False),
+    Column("timestamp", DateTime(timezone=True), nullable=False),
+)
+
+
+deliveries = Table(
+    "deliveries",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("supplier_id", ForeignKey("suppliers.id"), nullable=False),
+    Column("ingredient_id", ForeignKey("ingredients.id"), nullable=False),
+    Column("kind", String, nullable=False),
+    Column("expected_quantity", Numeric(12, 3), nullable=False),
+    Column("cancelled_quantity", Numeric(12, 3), nullable=False, server_default="0"),
+    Column("expected_at", DateTime(timezone=True), nullable=False),
+    Column("ordered_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("expected_quantity > 0 AND cancelled_quantity >= 0"),
+    CheckConstraint("kind IN ('NORMAL', 'EMERGENCY')"),
+)
+delivery_receipts = Table(
+    "delivery_receipts",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("delivery_id", ForeignKey("deliveries.id"), nullable=False),
+    Column("lot_id", ForeignKey("inventory_lots.id"), nullable=False, unique=True),
+    Column("request_id", String, nullable=False),
+    Column("quantity", Numeric(12, 3), nullable=False),
+    Column("received_at", DateTime(timezone=True), nullable=False),
+    Column("expiry_date", Date, nullable=False),
+    Column("remainder", String, nullable=False),
+    UniqueConstraint("delivery_id", "request_id"),
+    CheckConstraint("quantity > 0"),
+    CheckConstraint("remainder IN ('EXPECTED', 'CANCELLED')"),
 )
 
 

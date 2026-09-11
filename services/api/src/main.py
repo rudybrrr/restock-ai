@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import create_engine
 
-from src import auth, catalog
+from src import auth, catalog, operations_routes
 from src.config import Settings
 from src.errors import (
     ApiError,
@@ -48,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     api.include_router(auth.router)
     api.include_router(catalog.router)
+    api.include_router(operations_routes.router)
     app.include_router(api)
 
     @app.get("/health")

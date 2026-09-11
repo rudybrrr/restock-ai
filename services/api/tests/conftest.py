@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from sqlalchemy.engine import make_url
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def database_url() -> Iterator[str]:
     admin_url = os.environ.get("TEST_DATABASE_URL")
     if not admin_url:
@@ -58,3 +58,21 @@ def client(database_url: str) -> Iterator[TestClient]:
         create_app(settings), base_url="https://api.example"
     ) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def reject_audit_write(database_url: str) -> Iterator[None]:
+    """Inject a real PostgreSQL write failure; assertions stay at the HTTP seam."""
+    url = (
+        make_url(database_url)
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False)
+    )
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(
+            "ALTER TABLE audit_entries ADD CONSTRAINT test_unavailable CHECK (false) NOT VALID"
+        )
+        try:
+            yield
+        finally:
+            conn.execute("ALTER TABLE audit_entries DROP CONSTRAINT test_unavailable")
