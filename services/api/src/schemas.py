@@ -9,12 +9,16 @@ class Model(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class MenuItem(Model):
+class NamedRecord(Model):
     id: str
     name: str
 
 
-class Ingredient(MenuItem):
+class MenuItem(NamedRecord):
+    pass
+
+
+class Ingredient(NamedRecord):
     unit: Literal["kg", "litres", "pieces"]
 
 
@@ -24,7 +28,7 @@ class RecipeItem(Model):
     quantity: Decimal
 
 
-class Supplier(MenuItem):
+class Supplier(NamedRecord):
     pass
 
 

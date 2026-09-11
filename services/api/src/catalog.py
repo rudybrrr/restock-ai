@@ -1,7 +1,8 @@
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, Table, select
 
 from src import database as db
 from src.auth import SessionDep, authenticate
@@ -18,62 +19,45 @@ from src.schemas import (
 router = APIRouter(tags=["Catalog and inventory"], dependencies=[Depends(authenticate)])
 
 
+def catalog_rows(
+    session: SessionDep, table: Table, *ordering: ColumnElement[Any]
+) -> list[dict[str, Any]]:
+    return [
+        dict(row)
+        for row in session.execute(select(table).order_by(*ordering)).mappings().all()
+    ]
+
+
 @router.get("/menu-items", response_model=list[MenuItem])
 def menu_items(session: SessionDep):
-    return (
-        session.execute(select(db.menu_items).order_by(db.menu_items.c.id))
-        .mappings()
-        .all()
-    )
+    return catalog_rows(session, db.menu_items, db.menu_items.c.id)
 
 
 @router.get("/ingredients", response_model=list[Ingredient])
 def ingredients(session: SessionDep):
-    return (
-        session.execute(select(db.ingredients).order_by(db.ingredients.c.id))
-        .mappings()
-        .all()
-    )
+    return catalog_rows(session, db.ingredients, db.ingredients.c.id)
 
 
 @router.get("/recipes", response_model=list[RecipeItem])
 def recipes(session: SessionDep):
-    return (
-        session.execute(
-            select(db.recipes).order_by(
-                db.recipes.c.menu_item_id, db.recipes.c.ingredient_id
-            )
-        )
-        .mappings()
-        .all()
+    return catalog_rows(
+        session, db.recipes, db.recipes.c.menu_item_id, db.recipes.c.ingredient_id
     )
 
 
 @router.get("/suppliers", response_model=list[Supplier])
 def suppliers(session: SessionDep):
-    return (
-        session.execute(select(db.suppliers).order_by(db.suppliers.c.id))
-        .mappings()
-        .all()
-    )
+    return catalog_rows(session, db.suppliers, db.suppliers.c.id)
 
 
 @router.get("/supplier-offers", response_model=list[SupplierOffer])
 def supplier_offers(session: SessionDep):
-    return (
-        session.execute(select(db.supplier_offers).order_by(db.supplier_offers.c.id))
-        .mappings()
-        .all()
-    )
+    return catalog_rows(session, db.supplier_offers, db.supplier_offers.c.id)
 
 
 @router.get("/holidays", response_model=list[Holiday])
 def holidays(session: SessionDep):
-    return (
-        session.execute(select(db.holidays).order_by(db.holidays.c.date))
-        .mappings()
-        .all()
-    )
+    return catalog_rows(session, db.holidays, db.holidays.c.date)
 
 
 @router.get(

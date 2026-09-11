@@ -1,7 +1,9 @@
 """Insert the fixed, synthetic 2026-02-15 demo baseline without overwriting data."""
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import insert
@@ -19,6 +21,14 @@ from src.database import (
 )
 
 
+@dataclass(frozen=True)
+class IngredientSeed:
+    id: str
+    name: str
+    unit: Literal["kg", "litres", "pieces"]
+    opening_quantity: Decimal
+
+
 def seed() -> None:
     engine = create_engine(Settings().database_url)
     observed = datetime.fromisoformat("2026-02-15T22:00:00+08:00")
@@ -29,15 +39,15 @@ def seed() -> None:
         ("tofu-bowl", "Tofu vegetable bowl"),
         ("vegetable-noodles", "Vegetable noodles"),
     ]
-    items = [
-        ("chicken", "Chicken", "kg"),
-        ("rice", "Rice", "kg"),
-        ("noodles", "Noodles", "kg"),
-        ("eggs", "Eggs", "pieces"),
-        ("tofu", "Tofu", "kg"),
-        ("vegetables", "Vegetables", "kg"),
-        ("oil", "Cooking oil", "litres"),
-        ("soy-sauce", "Soy sauce", "litres"),
+    ingredient_seeds = [
+        IngredientSeed("chicken", "Chicken", "kg", Decimal(12)),
+        IngredientSeed("rice", "Rice", "kg", Decimal(30)),
+        IngredientSeed("noodles", "Noodles", "kg", Decimal(15)),
+        IngredientSeed("eggs", "Eggs", "pieces", Decimal(120)),
+        IngredientSeed("tofu", "Tofu", "kg", Decimal(10)),
+        IngredientSeed("vegetables", "Vegetables", "kg", Decimal(18)),
+        IngredientSeed("oil", "Cooking oil", "litres", Decimal(8)),
+        IngredientSeed("soy-sauce", "Soy sauce", "litres", Decimal(6)),
     ]
     recipe_data = {
         "chicken-rice": {"chicken": ".150", "rice": ".100", "soy-sauce": ".010"},
@@ -56,29 +66,22 @@ def seed() -> None:
         ("pantry", "Pantry Supply"),
         ("market", "Market Supply"),
     ]
-    quantities = {
-        "chicken": "12",
-        "rice": "30",
-        "noodles": "15",
-        "eggs": "120",
-        "tofu": "10",
-        "vegetables": "18",
-        "oil": "8",
-        "soy-sauce": "6",
-    }
     source = "https://www.mom.gov.sg/newsroom/press-releases/2025/0616-public-holidays-for-2026"
     try:
         with engine.begin() as conn:
 
-            def add(table, rows):
+            def insert_if_absent(table, rows):
                 conn.execute(insert(table).values(rows).on_conflict_do_nothing())
 
-            add(menu_items, [{"id": key, "name": name} for key, name in dishes])
-            add(
+            insert_if_absent(menu_items, [{"id": key, "name": name} for key, name in dishes])
+            insert_if_absent(
                 ingredients,
-                [{"id": key, "name": name, "unit": unit} for key, name, unit in items],
+                [
+                    {"id": seed.id, "name": seed.name, "unit": seed.unit}
+                    for seed in ingredient_seeds
+                ],
             )
-            add(
+            insert_if_absent(
                 recipes,
                 [
                     {
@@ -90,14 +93,16 @@ def seed() -> None:
                     for ingredient, quantity in recipe.items()
                 ],
             )
-            add(suppliers, [{"id": key, "name": name} for key, name in supplier_data])
-            add(
+            insert_if_absent(
+                suppliers, [{"id": key, "name": name} for key, name in supplier_data]
+            )
+            insert_if_absent(
                 supplier_offers,
                 [
                     {
-                        "id": f"{supplier}-{ingredient}",
+                        "id": f"{supplier}-{ingredient.id}",
                         "supplier_id": supplier,
-                        "ingredient_id": ingredient,
+                        "ingredient_id": ingredient.id,
                         "unit_price": Decimal("4.50") + index,
                         "available_quantity": Decimal(200),
                         "moq": Decimal(1),
@@ -116,11 +121,11 @@ def seed() -> None:
                         "emergency_fee_sgd": Decimal(12),
                         "observed_at": observed,
                     }
-                    for index, (ingredient, _, _) in enumerate(items)
+                    for index, ingredient in enumerate(ingredient_seeds)
                     for supplier, _ in supplier_data
                 ],
             )
-            add(
+            insert_if_absent(
                 holidays,
                 [
                     {
@@ -133,13 +138,13 @@ def seed() -> None:
             )
             lots = [
                 {
-                    "id": f"{ingredient}-01",
-                    "ingredient_id": ingredient,
+                    "id": f"{ingredient.id}-01",
+                    "ingredient_id": ingredient.id,
                     "received_at": datetime.fromisoformat("2026-02-15T08:00:00+08:00"),
                     "expiry_date": date(2026, 2, 18),
-                    "initial_quantity": Decimal(quantities[ingredient]),
+                    "initial_quantity": ingredient.opening_quantity,
                 }
-                for ingredient, _, _ in items
+                for ingredient in ingredient_seeds
             ]
             lots.append(
                 {
@@ -150,8 +155,8 @@ def seed() -> None:
                     "initial_quantity": Decimal(5),
                 }
             )
-            add(inventory_lots, lots)
-            add(
+            insert_if_absent(inventory_lots, lots)
+            insert_if_absent(
                 stock_counts,
                 [
                     {

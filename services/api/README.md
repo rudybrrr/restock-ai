@@ -84,13 +84,13 @@ Tests create a unique `restock_test_<uuid>` database, migrate and seed it twice,
 HTTP, and drop only that generated database in cleanup. They fail explicitly when PostgreSQL is not configured.
 
 ```sh
-export TEST_DATABASE_URL=postgresql://restock:restock_dev@localhost:5432/postgres
+export TEST_DATABASE_URL=postgresql://restock:restock_dev@127.0.0.1:5432/postgres
 uv run pytest
 uv run pyright
 uv run ruff check .
 ```
 
-PowerShell: `$env:TEST_DATABASE_URL='postgresql://restock:restock_dev@localhost:5432/postgres'`.
+PowerShell: `$env:TEST_DATABASE_URL='postgresql://restock:restock_dev@127.0.0.1:5432/postgres'`.
 Tests cover stored catalog reads, batch separation, manager sessions, agent permissions, invalid credentials,
 logout revocation, CORS and CSRF, closing revisions, deliveries, retries, and atomic audit writes.
 

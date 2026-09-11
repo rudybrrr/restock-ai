@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = (
-        "postgresql+psycopg://restock:restock_dev@localhost:5432/restock"
+        "postgresql+psycopg://restock:restock_dev@127.0.0.1:5432/restock"
     )
     manager_username: str = "manager"
     manager_password: SecretStr = SecretStr("")
