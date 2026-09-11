@@ -1,5 +1,9 @@
 # ReStock Architecture Contract
 
+The detailed Agent authority, orchestration, failure, and evaluation design is
+maintained in [AGENTS_PLAN.md](AGENTS_PLAN.md). This document defines the shared
+system boundary and must use the same canonical backend contracts.
+
 ## 1. Core idea
 
 ReStock is an adaptive restaurant inventory and procurement agent.
@@ -80,16 +84,21 @@ requires_approval
 approval_reason
 ```
 
-Statuses:
+The MVP uses a branching, version-bound lifecycle:
 
 ```text
-VALID
 PENDING_APPROVAL
+-> APPROVED | REJECTED | INVALIDATED | SUPERSEDED
+
 APPROVED
-INVALIDATED
-REJECTED
-SUPERSEDED
+-> INVALIDATED | SUPERSEDED
 ```
+
+Every new actionable recommendation is created as `PENDING_APPROVAL`. `REJECTED`
+records an explicit manager decision, `INVALIDATED` records a material assumption
+failure, and `SUPERSEDED` records replacement by a newer version without asserting
+that the older version became unsafe. `VALID` has no distinct MVP meaning and is
+not a canonical status.
 
 Approvals must always include:
 
@@ -134,23 +143,32 @@ MANAGER_INSTRUCTION
 
 ## 6. Agent tools
 
-The OpenClaw agent should eventually call:
+Agent-facing capabilities should eventually expose narrow adapters such as:
 
 ```text
 get_active_plan()
 get_event_context()
 forecast_demand()
-calculate_requirements()
-get_inventory_state()
+compare_forecast_versions()
+calculate_ingredient_requirements()
+calculate_estimated_inventory()
+calculate_expiry_risk()
+calculate_stockout_risk()
 get_supplier_options()
+check_supplier_feasibility()
+enumerate_supplier_allocations()
 optimise_purchase_plan()
-validate_plan()
-create_plan()
-request_approval()
+validate_purchase_plan()
+get_approval_requirement()
+request_human_review()
 record_agent_decision()
 ```
 
-The agent must **not** directly change budgets, recipes, MOQ, supplier contracts, approval thresholds, invent stock, add unapproved suppliers, approve purchases, or bypass policy.
+These are typed adapters over backend or Decision Engine implementations, not
+independent calculations. A listed contract does not imply that its adapter or
+kernel has been implemented. The agent must **not** directly create or mutate plan
+rows, change budgets, recipes, MOQ, supplier contracts or approval thresholds,
+invent stock, add unapproved suppliers, approve purchases, or bypass policy.
 
 Every agent cycle ends with one outcome:
 
@@ -158,8 +176,53 @@ Every agent cycle ends with one outcome:
 KEEP_CURRENT_PLAN
 REVISE_PLAN
 REQUEST_HUMAN_APPROVAL
-ESCALATE_INSUFFICIENT_INFORMATION
+ESCALATE
 ```
+
+`ESCALATE` carries one canonical reason:
+
+```text
+MISSING_REQUIRED_DATA
+NO_FEASIBLE_SUPPLIER
+UNRESOLVED_SHORTAGE
+POLICY_VIOLATION
+CALCULATION_INCOMPLETE
+TOOL_FAILURE
+CALL_LIMIT_REACHED
+```
+
+The optional detail `SEARCH_LIMIT_REACHED` applies to
+`CALCULATION_INCOMPLETE`. It means bounded search ended inconclusively;
+`NO_FEASIBLE_SUPPLIER` means deterministic search established infeasibility, and
+`TOOL_FAILURE` means execution itself failed.
+
+Agents submit a typed completion with a captured state revision and evidence
+references. Backend alone compares the revision, validates the candidate, applies
+the plan transition, persists the immutable version, and records audit history.
+`captured_state_revision` is the opaque revision read before Agent reasoning.
+Publication compares it with the current authoritative revision before any write.
+A mismatch returns `STATE_REVISION_STALE`, performs no plan mutation, and requires
+a fresh read and a new Agent run; stale output is never replayed against new state.
+
+## 6.1 Tool implementation status
+
+The canonical Python contract freezes the following tool names and common
+request/result/error envelopes. No adapter or numerical kernel is implemented in
+the current repository checkout.
+
+| Capability | Contract | Adapter | Kernel / backend workflow |
+|---|---|---|---|
+| `forecast_demand`, `compare_forecast_versions` | Defined | Missing | Missing |
+| ingredient requirements, estimated inventory, expiry and stockout risk | Defined | Missing | Missing |
+| supplier options, feasibility, allocation enumeration | Defined | Missing | Missing |
+| purchase-plan optimisation and validation | Defined | Missing | Missing |
+| approval requirement and human review | Defined | Missing | Missing |
+| Agent decision recording | Defined | Missing | Missing |
+
+Future adapters must replace their generic `parameters` payload with the owning
+kernel's canonical typed inputs when those interfaces land. They must not add a
+second implementation of forecasting, inventory, supplier, optimisation,
+validation, or policy logic.
 
 ## 7. Backend API
 
@@ -201,12 +264,17 @@ Important error codes:
 
 ```text
 PLAN_VERSION_STALE
+STATE_REVISION_STALE
 PLAN_INVALID
 MISSING_REQUIRED_DATA
 NO_FEASIBLE_SUPPLIER
+UNRESOLVED_SHORTAGE
+CALCULATION_INCOMPLETE
+SEARCH_LIMIT_REACHED
 POLICY_VIOLATION
 OPTIMISATION_FAILED
 FORECAST_FAILED
+AGENT_OUTPUT_INVALID
 RESOURCE_NOT_FOUND
 ```
 
@@ -221,14 +289,24 @@ timestamp
 event_id
 plan_id
 plan_version
+state_revision
 actor
 action
-reason_summary
-tools_called[]
-result
+agent_run_id
+specialist_call_id
+tool_call_id
+evidence_refs[]
+requested_outcome
+plan_transition
+approval_action
+final_outcome
+reason_codes[]
+summary
 ```
 
-Frontend should show concise event, tool, and decision summaries. Do not expose hidden chain-of-thought.
+Audit history is append-only and business-level. Frontend should show concise
+trigger, tool, validation, transition, approval, and outcome summaries. Do not
+persist or expose hidden chain-of-thought.
 
 ## 10. Week 1 integration target
 
