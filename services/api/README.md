@@ -20,6 +20,7 @@ safe to repeat: existing IDs are preserved, never reset or overwritten. Use a ne
 Open [the connection check](http://localhost:8000/connect), sign in, then click **Read inventory**.
 [Swagger UI](http://localhost:8000/docs) and `/openapi.json` contain the typed API contracts.
 In Swagger, call login first to set the manager cookie, or use **Authorize → HTTPBearer** for the agent token.
+See [TESTING.md](TESTING.md) for role-specific Swagger and HTTP scenarios.
 
 ## Teammate access
 
