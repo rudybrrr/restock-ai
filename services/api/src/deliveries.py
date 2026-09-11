@@ -13,6 +13,7 @@ from src.operations_schemas import (
     Delivery,
     DeliveryCreate,
     DeliveryUpdate,
+    EventType,
     ReceiptCreate,
 )
 
@@ -51,7 +52,7 @@ def read_delivery(session: Session, delivery_id: str) -> Delivery:
 
 def delivery_event(
     session: Session,
-    event_type: str,
+    event_type: EventType,
     actor: str,
     delivery: Delivery,
     effective_at,
@@ -186,8 +187,8 @@ def receive_delivery(
     if body.closing_counts.keys() != {row["day"] for row in affected}:
         raise ApiError(
             409,
-            "STOCKTAKE_CONFLICT",
-            "Supply closing_counts for these completed days: "
+            "CLOSING_COUNT_CONFLICT",
+            "Supply a closing stock count for each completed day: "
             + ", ".join(str(row["day"]) for row in affected),
         )
     lot_id, receipt_id = str(uuid4()), str(uuid4())

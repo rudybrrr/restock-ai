@@ -153,7 +153,7 @@ from those counts.
 After any manager action, call `GET /events` and `GET /audit` to see the recorded event, actor, and timestamps.
 
 If a receipt arrived before a completed closing cutoff, the first receive request returns
-`409 STOCKTAKE_CONFLICT`. Retry with a physical count for the new lot at each affected closing day:
+`409 CLOSING_COUNT_CONFLICT`. Retry with a physical count for the new lot at each affected closing day:
 
 ```json
 {

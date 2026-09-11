@@ -32,7 +32,9 @@ def test_late_receipt_reconciles_completed_closing_counts(client: TestClient) ->
         "expiry_date": "2026-02-20",
         "remainder": "EXPECTED",
     }
-    assert client.post(path + "/receive", json=receipt).status_code == 409
+    conflict = client.post(path + "/receive", json=receipt)
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "CLOSING_COUNT_CONFLICT"
     receipt["closing_counts"] = {"2026-02-16": "2"}
     result = client.post(path + "/receive", json=receipt)
     assert result.status_code == 200, result.text

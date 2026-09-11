@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
-from src.operations_schemas import DailyDraft
+from src.operations_schemas import DailyDraft, EventType
 
 
 def lock_inventory(session: Session) -> None:
@@ -16,7 +16,9 @@ def lock_inventory(session: Session) -> None:
     session.execute(text("SELECT pg_advisory_xact_lock(20260215)"))
 
 
-def record_event(session: Session, event_type: str, actor: str, payload: dict) -> None:
+def record_event(
+    session: Session, event_type: EventType, actor: str, payload: dict
+) -> None:
     event_id = str(uuid4())
     now = datetime.now(UTC)
     session.execute(

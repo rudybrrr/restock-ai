@@ -15,6 +15,16 @@ Quantity = Annotated[
     ),
 ]
 
+EventType = Literal[
+    "DAILY_UPDATE_SUBMITTED",
+    "EXTERNAL_ORDER_RECORDED",
+    "DELIVERY_UPDATED",
+    "DELIVERY_DELAYED",
+    "DELIVERY_SHORT",
+    "DELIVERY_RECEIVED",
+    "DELIVERY_CANCELLED",
+]
+
 
 class DailyDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
