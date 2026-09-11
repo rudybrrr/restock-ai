@@ -1,6 +1,4 @@
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
 
 
 def test_submission_rolls_back_when_audit_storage_fails(
@@ -15,8 +13,7 @@ def test_submission_rolls_back_when_audit_storage_fails(
         "sales": {dish["id"]: 0 for dish in client.get("/api/v1/menu-items").json()},
     }
     client.post(path + "/draft", json=body)
-    with pytest.raises(IntegrityError):
-        client.post(path + "/submit")
+    assert client.post(path + "/submit").status_code == 500
     assert client.get("/api/v1/inventory").json() == before
     assert client.get(path).json()["revisions"] == []
     assert client.get(path).json()["draft"] == body

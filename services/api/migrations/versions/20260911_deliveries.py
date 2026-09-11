@@ -50,6 +50,7 @@ def upgrade() -> None:
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expiry_date", sa.Date(), nullable=False),
         sa.Column("remainder", sa.String(), nullable=False),
+        sa.Column("closing_counts", sa.JSON(), nullable=False),
         sa.UniqueConstraint("delivery_id", "request_id"),
         sa.CheckConstraint("quantity > 0"),
         sa.CheckConstraint("remainder IN ('EXPECTED', 'CANCELLED')"),

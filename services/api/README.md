@@ -148,7 +148,10 @@ Record deliveries **before** submitting the day's closing counts:
    reuse returns 409. Over-receipt returns 409; update the expected total first when recording extra supply.
 4. Refresh `/inventory` before preparing closing counts: include the received lots. Future deliveries
    never appear as counted stock. A newly reported receipt at/before an already submitted cutoff returns
-   `409 STOCKTAKE_CONFLICT`, preventing silent invalidation of the completed count. Record receipts before closing.
+   `409 STOCKTAKE_CONFLICT` listing affected days. Retry with `closing_counts`, for example
+   `"closing_counts":{"2026-02-16":"2"}`, supplying the new lot's physical quantity at **each** affected
+   day's original cutoff. The receipt and corrected daily revisions commit atomically; prior counts and
+   sales remain in history. Matching saved drafts gain the new lot while preserving other draft edits.
 
 GET `/api/v1/events` and `/api/v1/audit` expose typed events, effective times, immutable delivery snapshots,
 and recording actor/time. Each submission, purchase, update or receipt commits together with its events

@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
-from src.operations import lock_inventory, record_event
+from src.operations import lock_inventory, record_daily_revision, record_event
 from src.operations_schemas import (
+    DailyDraft,
     Delivery,
     DeliveryCreate,
     DeliveryUpdate,
@@ -172,19 +173,22 @@ def receive_delivery(
             "INVALID_RECEIPT_TIME",
             "Receipt must follow purchase and precede expiry",
         )
-    # A late-reported lot would invalidate a completed stocktake's completeness.
-    cutoff = session.execute(
-        select(db.daily_revisions.c.cutoff)
-        .where(
-            db.daily_revisions.c.cutoff >= body.received_at,
+    affected = (
+        session.execute(
+            select(db.daily_revisions)
+            .where(db.daily_revisions.c.cutoff >= body.received_at)
+            .distinct(db.daily_revisions.c.day)
+            .order_by(db.daily_revisions.c.day, db.daily_revisions.c.revision.desc())
         )
-        .limit(1)
-    ).first()
-    if cutoff:
+        .mappings()
+        .all()
+    )
+    if body.closing_counts.keys() != {row["day"] for row in affected}:
         raise ApiError(
             409,
             "STOCKTAKE_CONFLICT",
-            "Receipt precedes an existing closing cutoff; reconcile before recording",
+            "Supply closing_counts for these completed days: "
+            + ", ".join(str(row["day"]) for row in affected),
         )
     lot_id, receipt_id = str(uuid4()), str(uuid4())
     session.execute(
@@ -206,9 +210,29 @@ def receive_delivery(
     )
     session.execute(
         insert(db.delivery_receipts).values(
-            id=receipt_id, delivery_id=delivery_id, lot_id=lot_id, **body.model_dump()
+            id=receipt_id,
+            delivery_id=delivery_id,
+            lot_id=lot_id,
+            **body.model_dump(exclude={"closing_counts"}),
+            closing_counts=body.model_dump(mode="json")["closing_counts"],
         )
     )
+    for row in affected:
+        closing = DailyDraft.model_validate(row["payload"])
+        closing.counts[lot_id] = body.closing_counts[row["day"]]
+        record_daily_revision(session, row["day"], closing, actor)
+        draft_payload = session.execute(
+            select(db.daily_drafts.c.payload).where(db.daily_drafts.c.day == row["day"])
+        ).scalar_one_or_none()
+        if draft_payload is not None:
+            draft = DailyDraft.model_validate(draft_payload)
+            if draft.cutoff == closing.cutoff:
+                draft.counts[lot_id] = body.closing_counts[row["day"]]
+                session.execute(
+                    update(db.daily_drafts)
+                    .where(db.daily_drafts.c.day == row["day"])
+                    .values(payload=draft.model_dump(mode="json"))
+                )
     if body.remainder == "CANCELLED":
         session.execute(
             update(db.deliveries)

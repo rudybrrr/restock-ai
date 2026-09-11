@@ -62,6 +62,7 @@ class ReceiptCreate(BaseModel):
     received_at: AwareDatetime
     expiry_date: date
     remainder: Literal["EXPECTED", "CANCELLED"]
+    closing_counts: dict[date, Quantity] = Field(default_factory=dict)
 
 
 class Receipt(ReceiptCreate):

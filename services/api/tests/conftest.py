@@ -53,15 +53,21 @@ def client(database_url: str) -> Iterator[TestClient]:
         manager_password=SecretStr("test-manager-password"),
         agent_token=SecretStr("test-agent-token"),
         allowed_origins=["https://frontend.example"],
+        cookie_secure=True,
+        cookie_samesite="lax",
     )
     with TestClient(
-        create_app(settings), base_url="https://api.example"
+        create_app(settings),
+        base_url="https://api.example",
+        raise_server_exceptions=False,
     ) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def reject_audit_write(database_url: str) -> Iterator[None]:
+def reject_audit_write(
+    database_url: str, request: pytest.FixtureRequest
+) -> Iterator[None]:
     """Inject a real PostgreSQL write failure; assertions stay at the HTTP seam."""
     url = (
         make_url(database_url)
@@ -69,8 +75,16 @@ def reject_audit_write(database_url: str) -> Iterator[None]:
         .render_as_string(hide_password=False)
     )
     with psycopg.connect(url, autocommit=True) as conn:
+        action = getattr(request, "param", None)
+        predicate = (
+            sql.SQL("false")
+            if action is None
+            else sql.SQL("action <> {}").format(sql.Literal(action))
+        )
         conn.execute(
-            "ALTER TABLE audit_entries ADD CONSTRAINT test_unavailable CHECK (false) NOT VALID"
+            sql.SQL(
+                "ALTER TABLE audit_entries ADD CONSTRAINT test_unavailable CHECK ({}) NOT VALID"
+            ).format(predicate)
         )
         try:
             yield

@@ -122,7 +122,16 @@ def submit_day(session: Session, day: date, actor: str) -> dict:
         raise ApiError(
             409, "CUTOFF_CONFLICT", "Corrections must retain the original cutoff"
         )
-    revision = len(history["revisions"]) + 1
+    result = record_daily_revision(session, day, body, actor)
+    session.commit()
+    return result
+
+
+def record_daily_revision(
+    session: Session, day: date, body: DailyDraft, actor: str
+) -> dict:
+    """Append a validated observation inside the caller's inventory transaction."""
+    revision = len(read_day(session, day)["revisions"]) + 1
     row = {
         "id": str(uuid4()),
         "day": day,
@@ -160,5 +169,4 @@ def submit_day(session: Session, day: date, actor: str) -> dict:
             "cutoff": body.cutoff.isoformat(),
         },
     )
-    session.commit()
     return {**row, **body.model_dump()}

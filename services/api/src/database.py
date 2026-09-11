@@ -174,6 +174,7 @@ delivery_receipts = Table(
     Column("received_at", DateTime(timezone=True), nullable=False),
     Column("expiry_date", Date, nullable=False),
     Column("remainder", String, nullable=False),
+    Column("closing_counts", JSON, nullable=False),
     UniqueConstraint("delivery_id", "request_id"),
     CheckConstraint("quantity > 0"),
     CheckConstraint("remainder IN ('EXPECTED', 'CANCELLED')"),
