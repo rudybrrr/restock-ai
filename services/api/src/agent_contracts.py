@@ -92,6 +92,20 @@ class InvocationMode(StrEnum):
     MANUAL = "MANUAL"
 
 
+class EventType(StrEnum):
+    SALES_UPDATED = "SALES_UPDATED"
+    PROMOTION_CREATED = "PROMOTION_CREATED"
+    PROMOTION_CHANGED = "PROMOTION_CHANGED"
+    INVENTORY_ADJUSTED = "INVENTORY_ADJUSTED"
+    INVENTORY_WASTED = "INVENTORY_WASTED"
+    SUPPLIER_AVAILABILITY_CHANGED = "SUPPLIER_AVAILABILITY_CHANGED"
+    SUPPLIER_PRICE_CHANGED = "SUPPLIER_PRICE_CHANGED"
+    DELIVERY_DELAYED = "DELIVERY_DELAYED"
+    DELIVERY_SHORT = "DELIVERY_SHORT"
+    DELIVERY_CANCELLED = "DELIVERY_CANCELLED"
+    MANAGER_INSTRUCTION = "MANAGER_INSTRUCTION"
+
+
 class AgentInvocation(ContractModel):
     run_id: Identifier
     invocation_mode: InvocationMode
@@ -141,6 +155,17 @@ class SpecialistStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class RecommendedNextStep(StrEnum):
+    NONE = "NONE"
+    CHECK_DEMAND = "CHECK_DEMAND"
+    CHECK_INVENTORY = "CHECK_INVENTORY"
+    CHECK_PROCUREMENT = "CHECK_PROCUREMENT"
+    KEEP_CURRENT_PLAN = "KEEP_CURRENT_PLAN"
+    SUBMIT_REVISION = "SUBMIT_REVISION"
+    REQUEST_HUMAN_APPROVAL = "REQUEST_HUMAN_APPROVAL"
+    ESCALATE = "ESCALATE"
+
+
 class SpecialistResult(ContractModel):
     run_id: Identifier
     task_id: Identifier
@@ -151,9 +176,35 @@ class SpecialistResult(ContractModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     candidate_result_ref: EvidenceRef | None = None
     missing_information: list[Identifier] = Field(default_factory=list)
-    recommended_next_step: Identifier
+    recommended_next_step: RecommendedNextStep
+    escalation_reason: EscalationReason | None = None
+    escalation_detail: EscalationDetail | None = None
     summary: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
     schema_version: SchemaVersion = "1"
+
+    @model_validator(mode="after")
+    def enforce_escalation_semantics(self) -> "SpecialistResult":
+        if any(
+            ref.category is not EvidenceCategory.MATERIALITY
+            for ref in self.materiality_evidence_refs
+        ):
+            raise ValueError("materiality evidence references have the wrong category")
+        if self.candidate_result_ref is not None and (
+            self.candidate_result_ref.category is not EvidenceCategory.CANDIDATE_RESULT
+        ):
+            raise ValueError("candidate result reference has the wrong category")
+        if self.status is SpecialistStatus.ESCALATED:
+            if self.escalation_reason is None:
+                raise ValueError("ESCALATED specialist result requires a reason")
+        elif self.escalation_reason is not None or self.escalation_detail is not None:
+            raise ValueError("escalation fields require ESCALATED specialist status")
+        if self.escalation_detail is not None and (
+            self.escalation_reason is not EscalationReason.CALCULATION_INCOMPLETE
+        ):
+            raise ValueError(
+                "SEARCH_LIMIT_REACHED is only valid with CALCULATION_INCOMPLETE"
+            )
+        return self
 
 
 class AgentCompletionPublication(ContractModel):

@@ -16,6 +16,7 @@ from src.agent_contracts import (
     AuditEvent,
     EscalationDetail,
     EscalationReason,
+    EventType,
     EvidenceCategory,
     EvidenceRef,
     EvidenceSource,
@@ -24,6 +25,10 @@ from src.agent_contracts import (
     PlanTransition,
     PurchasePlanLine,
     PurchasePlanVersion,
+    RecommendedNextStep,
+    SpecialistResult,
+    SpecialistStatus,
+    SpecialistType,
     StateRevisionCheck,
     StateRevisionStaleError,
     ToolErrorEnvelope,
@@ -88,6 +93,36 @@ def test_agent_outcomes_are_frozen() -> None:
         "REQUEST_HUMAN_APPROVAL",
         "ESCALATE",
     }
+
+
+def test_event_types_and_specialist_next_steps_are_authoritative() -> None:
+    assert {item.value for item in EventType} == {
+        "SALES_UPDATED",
+        "PROMOTION_CREATED",
+        "PROMOTION_CHANGED",
+        "INVENTORY_ADJUSTED",
+        "INVENTORY_WASTED",
+        "SUPPLIER_AVAILABILITY_CHANGED",
+        "SUPPLIER_PRICE_CHANGED",
+        "DELIVERY_DELAYED",
+        "DELIVERY_SHORT",
+        "DELIVERY_CANCELLED",
+        "MANAGER_INSTRUCTION",
+    }
+    assert RecommendedNextStep("CHECK_INVENTORY") is RecommendedNextStep.CHECK_INVENTORY
+
+
+def test_specialist_escalation_requires_a_typed_reason() -> None:
+    with pytest.raises(ValidationError, match="requires a reason"):
+        SpecialistResult(
+            run_id="RUN-1",
+            task_id="TASK-1",
+            specialist=SpecialistType.DEMAND,
+            status=SpecialistStatus.ESCALATED,
+            interpreted_impact="Demand evidence is incomplete.",
+            recommended_next_step=RecommendedNextStep.ESCALATE,
+            summary="Cannot safely continue.",
+        )
 
 
 def test_escalation_reasons_and_search_detail_are_frozen() -> None:

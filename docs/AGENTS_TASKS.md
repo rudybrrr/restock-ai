@@ -194,10 +194,10 @@
 
 # 4. Coding Pass 2 — Coordinator Control Plane
 
-- [ ] Add invocation modes
-  - [ ] `SCHEDULED`
-  - [ ] `EVENT`
-  - [ ] `MANUAL`
+- [x] Add invocation modes
+  - [x] `SCHEDULED`
+  - [x] `EVENT`
+  - [x] `MANUAL`
 
 - [ ] Add Coordinator control-plane tools
   - [ ] `get_active_plan`
@@ -205,32 +205,33 @@
   - [ ] `validate_final_plan`
   - [ ] `record_agent_decision`
   - [ ] `request_human_review`
+  - Blocked: Coordinator ports exist, but authoritative backend implementations and persistence are not yet available.
 
-- [ ] Add final outcomes
-  - [ ] `KEEP_CURRENT_PLAN`
-  - [ ] `REVISE_PLAN`
-  - [ ] `REQUEST_HUMAN_APPROVAL`
-  - [ ] `ESCALATE`
+- [x] Add final outcomes
+  - [x] `KEEP_CURRENT_PLAN`
+  - [x] `REVISE_PLAN`
+  - [x] `REQUEST_HUMAN_APPROVAL`
+  - [x] `ESCALATE`
 
-- [ ] Add bounded orchestration
-  - [ ] Max 2 specialist rounds
-  - [ ] Max 6 specialist calls per run
-  - [ ] Max 1 retry per failed tool call
-  - [ ] No specialist recursion
-  - [ ] No specialist-to-specialist calls
+- [x] Add bounded orchestration
+  - [x] Max 2 specialist rounds
+  - [x] Max 6 specialist calls per run
+  - [x] Max 1 retry per failed tool call
+  - [x] No specialist recursion
+  - [x] No specialist-to-specialist calls
 
-- [ ] Add dynamic routing
-  - [ ] Call only needed specialists
-  - [ ] Support sequential dependencies
-  - [ ] Do not waste calls on unrelated specialists
+- [x] Add dynamic routing
+  - [x] Call only needed specialists
+  - [x] Support sequential dependencies
+  - [x] Do not waste calls on unrelated specialists
 
-- [ ] Test Coordinator permissions
-  - [ ] Cannot approve
-  - [ ] Cannot bypass validator
-  - [ ] Cannot mutate plan/database directly
-  - [ ] Cannot perform specialist calculations itself
+- [x] Test Coordinator permissions
+  - [x] Cannot approve
+  - [x] Cannot bypass validator
+  - [x] Cannot mutate plan/database directly
+  - [x] Cannot perform specialist calculations itself
 
-- [ ] Review and commit Pass 2
+- [x] Review and commit Pass 2
 
 ---
 
