@@ -13,6 +13,7 @@ from src.agent_contracts import (
     AgentCompletionPublication,
     AgentInvocation,
     AgentOutcome,
+    AgentToolName,
     AuditAction,
     AuditEvent,
     EscalationDetail,
@@ -258,6 +259,15 @@ class Coordinator:
                     )
                 final_step = result.recommended_next_step
                 if result.candidate_result_ref is not None:
+                    if not self._candidate_is_actionable(delegation, result):
+                        return self._finish(
+                            invocation,
+                            AgentOutcome.ESCALATE,
+                            evidence_refs,
+                            trace,
+                            "Specialist candidate provenance or validation linkage was invalid.",
+                            EscalationReason.TOOL_FAILURE,
+                        )
                     candidate_ref = result.candidate_result_ref
                 follow_up = FOLLOW_UP_ROUTE.get(result.recommended_next_step)
                 if follow_up is not None:
@@ -393,6 +403,8 @@ class Coordinator:
                 ref for ref in refs if ref.category is EvidenceCategory.MATERIALITY
             ],
             context_refs=list(refs),
+            invocation_mode=invocation.invocation_mode,
+            event_type=invocation.trigger_type,
         )
 
     def _execute_with_retry(self, delegation: SpecialistDelegation) -> SpecialistResult:
@@ -439,6 +451,37 @@ class Coordinator:
             ref.state_revision is None
             or ref.state_revision == invocation.captured_state_revision
             for ref in refs
+        )
+
+    @staticmethod
+    def _candidate_is_actionable(
+        delegation: SpecialistDelegation, result: SpecialistResult
+    ) -> bool:
+        candidate = result.candidate_result_ref
+        if candidate is None:
+            return False
+        if (
+            delegation.specialist is not SpecialistType.PROCUREMENT
+            or candidate.category is not EvidenceCategory.CANDIDATE_RESULT
+            or candidate.source is not EvidenceSource.DECISION_ENGINE
+            or candidate not in result.evidence_refs
+            or candidate.run_id != delegation.run_id
+            or candidate.specialist_call_id != delegation.task_id
+            or candidate.tool_call_id is None
+            or candidate.producer_tool != AgentToolName.OPTIMISE_PURCHASE_PLAN.value
+            or candidate.call_sequence is None
+        ):
+            return False
+        return any(
+            ref.category is EvidenceCategory.VALIDATION_RESULT
+            and ref.source is EvidenceSource.DECISION_ENGINE
+            and ref.run_id == delegation.run_id
+            and ref.specialist_call_id == delegation.task_id
+            and ref.tool_call_id is not None
+            and ref.producer_tool == AgentToolName.VALIDATE_PURCHASE_PLAN.value
+            and ref.call_sequence is not None
+            and ref.call_sequence > candidate.call_sequence
+            for ref in result.evidence_refs
         )
 
     def _call_limit(
@@ -496,11 +539,22 @@ class Coordinator:
                 plan_id=invocation.affected_plan_id,
                 plan_version=invocation.affected_plan_version,
                 run_id=invocation.run_id,
+                invocation_mode=invocation.invocation_mode,
+                event_type=invocation.trigger_type,
                 evidence_refs=completion.evidence_refs,
                 final_outcome=completion.outcome,
-                reason_codes=[completion.escalation_reason.value]
-                if completion.escalation_reason
-                else [],
+                reason_codes=[
+                    code
+                    for code in (
+                        completion.escalation_reason.value
+                        if completion.escalation_reason
+                        else None,
+                        completion.escalation_detail.value
+                        if completion.escalation_detail
+                        else None,
+                    )
+                    if code is not None
+                ],
                 summary=completion.summary,
             )
         )
@@ -567,6 +621,8 @@ class Coordinator:
             plan_id=invocation.affected_plan_id,
             plan_version=invocation.affected_plan_version,
             run_id=invocation.run_id,
+            invocation_mode=invocation.invocation_mode,
+            event_type=invocation.trigger_type,
             specialist_call_id=delegation.task_id,
             specialist=delegation.specialist,
             call_sequence=call_order,

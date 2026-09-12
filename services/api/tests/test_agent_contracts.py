@@ -382,6 +382,29 @@ def test_audit_event_is_business_level_and_strict() -> None:
         )
 
 
+def test_tool_evidence_provenance_is_complete_or_absent() -> None:
+    with pytest.raises(ValidationError):
+        EvidenceRef.model_validate(
+            {
+                **evidence(EvidenceCategory.SUPPLIER_STATE).model_dump(),
+                "run_id": "RUN-1",
+            }
+        )
+
+    linked = EvidenceRef(
+        category=EvidenceCategory.CANDIDATE_RESULT,
+        source=EvidenceSource.DECISION_ENGINE,
+        reference_id="CANDIDATE-1",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+        specialist_call_id="TASK-1",
+        tool_call_id="TASK-1-TOOL-1",
+        producer_tool=AgentToolName.OPTIMISE_PURCHASE_PLAN.value,
+        call_sequence=1,
+    )
+    assert linked.tool_call_id == "TASK-1-TOOL-1"
+
+
 def test_audit_event_has_backward_compatible_structural_agent_metadata() -> None:
     event = AuditEvent(
         audit_event_id="AUDIT-SPECIALIST-1",

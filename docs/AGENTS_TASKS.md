@@ -281,8 +281,9 @@
 
 - [ ] Prove this specialist earns its existence
   - [x] Add structural scripted coverage for context-sensitive tool sequencing
-  - [ ] At least one scenario where contextual reasoning changes tool sequence or follow-up investigation
-  - Pending: final retention proof requires the real model/tool path or a shared evaluation scenario.
+  - [x] Add an offline local scenario where trusted cached context avoids unnecessary tool calls and changed context triggers bounded investigation
+  - [ ] Confirm the same value on the real model/tool path or a shared evaluation scenario
+  - Pending: final retention proof still requires the real model/tool path or shared evaluation evidence.
 
 - [ ] Review and commit Pass 3
 
@@ -443,27 +444,27 @@
   - [ ] Plan-version validity
 
 - [ ] Implement fail-closed unknown-data handling
-  - [ ] Supplier availability
+  - [x] Supplier availability at the Coordinator / Procurement orchestration boundary
   - [ ] Shelf life
   - [ ] Recipe quantity
-  - [ ] MOQ / pack size
-  - [ ] Lead time
+  - [x] MOQ / pack size at the Coordinator / Procurement orchestration boundary
+  - [x] Lead time at the Coordinator / Procurement orchestration boundary
   - [ ] Promotion details
   - [ ] Inventory freshness
 
 - [ ] Test prompt injection
-  - [ ] Manager text tries to override policy
-  - [ ] Supplier text contains instructions
+  - [x] Manager text tries to override policy
+  - [x] Supplier text contains instructions
   - [ ] Promotion text contains instructions
   - [ ] Attempt to add unapproved supplier
-  - [ ] Attempt to change MOQ / budget
-  - [ ] Attempt to bypass approval
-  - [ ] Attempt to treat unknown as available
+  - [x] Attempt to change MOQ / budget
+  - [x] Attempt to bypass approval
+  - [x] Attempt to treat unknown as available
 
 - [ ] Test tool permissions
-  - [ ] Specialists cannot use another domain's tools
-  - [ ] Specialists cannot call agents
-  - [ ] Specialists cannot mutate plan state
+  - [x] Procurement cannot use another domain's tools
+  - [x] Procurement cannot call agents
+  - [x] Procurement cannot mutate plan state
 
 - [ ] Review and commit Pass 8
 

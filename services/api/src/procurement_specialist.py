@@ -20,6 +20,7 @@ from src.agent_contracts import (
     EscalationReason,
     EvidenceCategory,
     EvidenceRef,
+    EvidenceSource,
     Identifier,
     RecommendedNextStep,
     SpecialistDelegation,
@@ -45,6 +46,54 @@ PROCUREMENT_TOOL_ALLOWLIST = frozenset(
         AgentToolName.GET_APPROVAL_REQUIREMENT,
     }
 )
+
+PROCUREMENT_PRIMARY_EVIDENCE: dict[
+    AgentToolName, tuple[EvidenceCategory, EvidenceSource]
+] = {
+    AgentToolName.GET_SUPPLIER_OPTIONS: (
+        EvidenceCategory.SUPPLIER_STATE,
+        EvidenceSource.BACKEND,
+    ),
+    AgentToolName.CHECK_SUPPLIER_FEASIBILITY: (
+        EvidenceCategory.SUPPLIER_STATE,
+        EvidenceSource.DECISION_ENGINE,
+    ),
+    AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS: (
+        EvidenceCategory.SUPPLIER_STATE,
+        EvidenceSource.DECISION_ENGINE,
+    ),
+    AgentToolName.OPTIMISE_PURCHASE_PLAN: (
+        EvidenceCategory.CANDIDATE_RESULT,
+        EvidenceSource.DECISION_ENGINE,
+    ),
+    AgentToolName.VALIDATE_PURCHASE_PLAN: (
+        EvidenceCategory.VALIDATION_RESULT,
+        EvidenceSource.DECISION_ENGINE,
+    ),
+    AgentToolName.GET_APPROVAL_REQUIREMENT: (
+        EvidenceCategory.APPROVAL_REQUIREMENT,
+        EvidenceSource.POLICY_ENGINE,
+    ),
+}
+
+TRUSTED_DOMAIN_ERRORS: dict[str, frozenset[AgentToolName]] = {
+    EscalationReason.NO_FEASIBLE_SUPPLIER.value: frozenset(
+        {
+            AgentToolName.CHECK_SUPPLIER_FEASIBILITY,
+            AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS,
+            AgentToolName.OPTIMISE_PURCHASE_PLAN,
+        }
+    ),
+    EscalationReason.CALCULATION_INCOMPLETE.value: frozenset(
+        {AgentToolName.OPTIMISE_PURCHASE_PLAN}
+    ),
+    EscalationReason.POLICY_VIOLATION.value: frozenset(
+        {
+            AgentToolName.VALIDATE_PURCHASE_PLAN,
+            AgentToolName.GET_APPROVAL_REQUIREMENT,
+        }
+    ),
+}
 
 PROCUREMENT_SPECIALIST_INSTRUCTIONS = (
     "Investigate procurement context using only the six approved tools. "
@@ -293,8 +342,12 @@ class ProcurementSpecialist:
             )
             tool_outcome = self._execute_tool(delegation, request, logical_calls)
             if isinstance(tool_outcome, ErrorResponse):
-                return self._from_tool_error(delegation, evidence, tool_outcome)
-            if not self._valid_tool_result(delegation, request, tool_outcome):
+                return self._from_tool_error(
+                    delegation, evidence, request, tool_outcome
+                )
+            if not self._valid_tool_result(
+                delegation, request, logical_calls, tool_outcome
+            ):
                 return self._escalation(
                     delegation,
                     evidence,
@@ -304,14 +357,10 @@ class ProcurementSpecialist:
 
             protected = [tool_outcome.output_ref, *tool_outcome.evidence_refs]
             candidate_outputs = [
-                ref
-                for ref in protected
-                if ref.category is EvidenceCategory.CANDIDATE_RESULT
+                ref for ref in protected if ref.category is EvidenceCategory.CANDIDATE_RESULT
             ]
             validation_outputs = [
-                ref
-                for ref in protected
-                if ref.category is EvidenceCategory.VALIDATION_RESULT
+                ref for ref in protected if ref.category is EvidenceCategory.VALIDATION_RESULT
             ]
             if candidate_outputs:
                 if selected_tool is not AgentToolName.OPTIMISE_PURCHASE_PLAN:
@@ -321,7 +370,7 @@ class ProcurementSpecialist:
                         EscalationReason.TOOL_FAILURE,
                         "Only the optimiser may return a candidate result reference.",
                     )
-                candidate_ref = candidate_outputs[0]
+                candidate_ref = tool_outcome.output_ref
                 validation_ref = None
             if validation_outputs:
                 if selected_tool is not AgentToolName.VALIDATE_PURCHASE_PLAN:
@@ -331,7 +380,7 @@ class ProcurementSpecialist:
                         EscalationReason.TOOL_FAILURE,
                         "Only the validator may return validation evidence.",
                     )
-                validation_ref = validation_outputs[0]
+                validation_ref = tool_outcome.output_ref
 
             tool_results.append(tool_outcome)
             evidence = _unique_refs(
@@ -349,17 +398,45 @@ class ProcurementSpecialist:
     def _valid_tool_result(
         delegation: SpecialistDelegation,
         request: ToolRequest,
+        logical_call: int,
         result: ToolResult,
     ) -> bool:
         refs = [result.output_ref, *result.evidence_refs]
+        expected_category, expected_source = PROCUREMENT_PRIMARY_EVIDENCE[request.tool]
         return (
             result.tool_call_id == request.tool_call_id
             and result.run_id == delegation.run_id
             and result.tool is request.tool
             and result.schema_version == request.schema_version
+            and result.output_ref.category is expected_category
+            and result.output_ref.source is expected_source
             and all(
                 ref.state_revision is None
                 or ref.state_revision == delegation.captured_state_revision
+                for ref in refs
+            )
+            and all(
+                ref.run_id == delegation.run_id
+                and ref.specialist_call_id == delegation.task_id
+                and ref.tool_call_id == request.tool_call_id
+                and ref.producer_tool == request.tool.value
+                and ref.call_sequence == logical_call
+                for ref in refs
+            )
+            and all(
+                ref.category is not EvidenceCategory.CANDIDATE_RESULT
+                or (
+                    request.tool is AgentToolName.OPTIMISE_PURCHASE_PLAN
+                    and ref.source is EvidenceSource.DECISION_ENGINE
+                )
+                for ref in refs
+            )
+            and all(
+                ref.category is not EvidenceCategory.VALIDATION_RESULT
+                or (
+                    request.tool is AgentToolName.VALIDATE_PURCHASE_PLAN
+                    and ref.source is EvidenceSource.DECISION_ENGINE
+                )
                 for ref in refs
             )
         )
@@ -422,7 +499,9 @@ class ProcurementSpecialist:
                     continue
                 return outcome
 
-            if not self._valid_tool_result(delegation, request, outcome):
+            if not self._valid_tool_result(
+                delegation, request, logical_call, outcome
+            ):
                 error = ErrorResponse.model_validate(
                     {
                         "error": {
@@ -484,10 +563,13 @@ class ProcurementSpecialist:
                 plan_id=delegation.active_plan_id,
                 plan_version=delegation.active_plan_version,
                 run_id=delegation.run_id,
+                invocation_mode=delegation.invocation_mode,
+                event_type=delegation.event_type,
                 specialist_call_id=delegation.task_id,
                 specialist=SpecialistType.PROCUREMENT,
                 call_sequence=logical_call,
                 tool_call_id=request.tool_call_id,
+                tool_name=request.tool,
                 attempt_number=attempt,
                 evidence_refs=list(refs),
                 reason_codes=reason_codes,
@@ -564,6 +646,7 @@ class ProcurementSpecialist:
         self,
         delegation: SpecialistDelegation,
         evidence: Sequence[EvidenceRef],
+        request: ToolRequest,
         error: ErrorResponse,
     ) -> SpecialistResult:
         reasons = {
@@ -577,6 +660,9 @@ class ProcurementSpecialist:
             )
         }
         reason = reasons.get(error.error.code, EscalationReason.TOOL_FAILURE)
+        allowed_tools = TRUSTED_DOMAIN_ERRORS.get(error.error.code)
+        if allowed_tools is not None and request.tool not in allowed_tools:
+            reason = EscalationReason.TOOL_FAILURE
         detail = None
         details = error.error.details or {}
         raw_detail = details.get("detail") or details.get("termination_code")

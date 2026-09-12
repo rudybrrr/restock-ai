@@ -6,6 +6,7 @@ import pytest
 from src.agent_contracts import (
     AgentInvocation,
     AgentOutcome,
+    AgentToolName,
     EscalationReason,
     EventType,
     EvidenceCategory,
@@ -270,17 +271,26 @@ def test_round_limit_is_enforced() -> None:
 
 
 def test_call_limit_is_enforced() -> None:
-    sequence = [
-        RecommendedNextStep.CHECK_INVENTORY,
-        RecommendedNextStep.CHECK_PROCUREMENT,
-        RecommendedNextStep.CHECK_DEMAND,
-    ]
+    self_routes = {
+        SpecialistType.DEMAND: RecommendedNextStep.CHECK_DEMAND,
+        SpecialistType.INVENTORY: RecommendedNextStep.CHECK_INVENTORY,
+        SpecialistType.PROCUREMENT: RecommendedNextStep.CHECK_PROCUREMENT,
+    }
     executor = FakeExecutor(
-        lambda delegation, count: completed(delegation, sequence[(count - 1) % 3])
+        lambda delegation, count: completed(
+            delegation, self_routes[delegation.specialist]
+        )
     )
-    result = Coordinator(FakeControlPlane(), executor, clock=lambda: NOW).run(invocation())
-    assert len(executor.calls) <= MAX_SPECIALIST_CALLS
+    result = Coordinator(FakeControlPlane(), executor, clock=lambda: NOW).run(
+        invocation(InvocationMode.SCHEDULED, FULL_PLANNING_TRIGGER)
+    )
+    assert len(executor.calls) == MAX_SPECIALIST_CALLS
     assert result.completion.escalation_reason is EscalationReason.CALL_LIMIT_REACHED
+    assert [event.call_sequence for event in result.trace[:-1]] == list(
+        range(1, MAX_SPECIALIST_CALLS + 1)
+    )
+    assert all(event.tool_call_id is None for event in result.trace)
+    assert result.trace[-1].reason_codes == [EscalationReason.CALL_LIMIT_REACHED.value]
 
 
 def test_external_failure_is_retried_once_without_aws() -> None:
@@ -298,20 +308,40 @@ def test_external_failure_is_retried_once_without_aws() -> None:
 
 
 def test_revision_requires_candidate_and_authoritative_validation() -> None:
-    candidate = ref(
-        EvidenceCategory.CANDIDATE_RESULT,
-        "CANDIDATE-1",
-        EvidenceSource.DECISION_ENGINE,
+    candidate = EvidenceRef(
+        category=EvidenceCategory.CANDIDATE_RESULT,
+        source=EvidenceSource.DECISION_ENGINE,
+        reference_id="CANDIDATE-1",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+        specialist_call_id="RUN-1-TASK-1",
+        tool_call_id="RUN-1-TASK-1-TOOL-1",
+        producer_tool=AgentToolName.OPTIMISE_PURCHASE_PLAN.value,
+        call_sequence=1,
+    )
+    specialist_validation = EvidenceRef(
+        category=EvidenceCategory.VALIDATION_RESULT,
+        source=EvidenceSource.DECISION_ENGINE,
+        reference_id="SPECIALIST-VALIDATION-1",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+        specialist_call_id="RUN-1-TASK-1",
+        tool_call_id="RUN-1-TASK-1-TOOL-2",
+        producer_tool=AgentToolName.VALIDATE_PURCHASE_PLAN.value,
+        call_sequence=2,
     )
     executor = FakeExecutor(
         lambda delegation, count: completed(
             delegation,
             RecommendedNextStep.SUBMIT_REVISION,
             candidate_result_ref=candidate,
+            evidence_refs=[candidate, specialist_validation],
         )
     )
     control_plane = FakeControlPlane()
-    result = Coordinator(control_plane, executor, clock=lambda: NOW).run(invocation())
+    result = Coordinator(control_plane, executor, clock=lambda: NOW).run(
+        invocation(trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED)
+    )
     assert result.completion.outcome is AgentOutcome.REVISE_PLAN
     assert control_plane.validation_ref in result.completion.evidence_refs
 
@@ -320,8 +350,74 @@ def test_revision_requires_candidate_and_authoritative_validation() -> None:
             delegation, RecommendedNextStep.SUBMIT_REVISION
         )
     )
-    result = Coordinator(FakeControlPlane(), no_candidate, clock=lambda: NOW).run(invocation())
+    result = Coordinator(FakeControlPlane(), no_candidate, clock=lambda: NOW).run(
+        invocation(trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED)
+    )
     assert result.completion.outcome is AgentOutcome.ESCALATE
+
+
+def test_coordinator_rejects_arbitrary_or_unvalidated_candidate_reference() -> None:
+    arbitrary = ref(
+        EvidenceCategory.CANDIDATE_RESULT,
+        "MODEL-INVENTED-CANDIDATE",
+        EvidenceSource.DECISION_ENGINE,
+    )
+    result = Coordinator(
+        FakeControlPlane(),
+        FakeExecutor(
+            lambda delegation, count: completed(
+                delegation,
+                RecommendedNextStep.SUBMIT_REVISION,
+                candidate_result_ref=arbitrary,
+                evidence_refs=[arbitrary],
+            )
+        ),
+        clock=lambda: NOW,
+    ).run(invocation(trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED))
+    assert result.completion.outcome is AgentOutcome.ESCALATE
+    assert result.completion.escalation_reason is EscalationReason.TOOL_FAILURE
+
+
+def test_control_plane_failure_is_retried_once_then_fails_closed() -> None:
+    class FailingControlPlane(FakeControlPlane):
+        attempts = 0
+
+        def get_event_context(self, invocation):
+            self.attempts += 1
+            raise RuntimeError("offline control-plane failure")
+
+    control_plane = FailingControlPlane()
+    executor = FakeExecutor()
+    result = Coordinator(control_plane, executor, clock=lambda: NOW).run(invocation())
+    assert control_plane.attempts == MAX_EXTERNAL_RETRIES + 1
+    assert executor.calls == []
+    assert result.completion.escalation_reason is EscalationReason.TOOL_FAILURE
+
+    candidate = EvidenceRef(
+        category=EvidenceCategory.CANDIDATE_RESULT,
+        source=EvidenceSource.DECISION_ENGINE,
+        reference_id="LINKED-BUT-UNVALIDATED",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+        specialist_call_id="RUN-1-TASK-1",
+        tool_call_id="RUN-1-TASK-1-TOOL-1",
+        producer_tool=AgentToolName.OPTIMISE_PURCHASE_PLAN.value,
+        call_sequence=1,
+    )
+    result = Coordinator(
+        FakeControlPlane(),
+        FakeExecutor(
+            lambda delegation, count: completed(
+                delegation,
+                RecommendedNextStep.SUBMIT_REVISION,
+                candidate_result_ref=candidate,
+                evidence_refs=[candidate],
+            )
+        ),
+        clock=lambda: NOW,
+    ).run(invocation(trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED))
+    assert result.completion.outcome is AgentOutcome.ESCALATE
+    assert result.completion.escalation_reason is EscalationReason.TOOL_FAILURE
 
 
 def test_human_approval_outcome_uses_control_plane_without_approving() -> None:
@@ -368,6 +464,8 @@ def test_trace_uses_canonical_audit_events_and_records_call_order() -> None:
     assert result.trace[0].specialist_call_id == "RUN-1-TASK-1"
     assert result.trace[0].specialist is SpecialistType.DEMAND
     assert result.trace[0].call_sequence == 1
+    assert result.trace[0].invocation_mode is InvocationMode.EVENT
+    assert result.trace[0].event_type == EventType.PROMOTION_CHANGED
     assert result.trace[0].reason_codes == []
     assert result.trace[-1].final_outcome is result.completion.outcome
     assert control_plane.recorded[0][0] == result.completion

@@ -78,11 +78,30 @@ class EvidenceRef(ContractModel):
     reference_id: Identifier
     version: PositiveInt | None = None
     state_revision: StateRevision | None = None
+    run_id: Identifier | None = None
+    specialist_call_id: Identifier | None = None
+    tool_call_id: Identifier | None = None
+    producer_tool: Identifier | None = None
+    call_sequence: PositiveInt | None = None
 
     @model_validator(mode="after")
     def require_version_or_revision(self) -> "EvidenceRef":
         if self.version is None and self.state_revision is None:
             raise ValueError("evidence must identify a version or state revision")
+        provenance = (
+            self.run_id,
+            self.specialist_call_id,
+            self.tool_call_id,
+            self.producer_tool,
+            self.call_sequence,
+        )
+        if any(value is not None for value in provenance) and any(
+            value is None for value in provenance
+        ):
+            raise ValueError(
+                "tool evidence provenance requires run, specialist call, tool call, "
+                "producer tool, and call sequence"
+            )
         return self
 
 
@@ -140,6 +159,8 @@ class SpecialistDelegation(ContractModel):
     active_plan_version: PositiveInt | None = None
     materiality_evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     context_refs: list[EvidenceRef] = Field(default_factory=list)
+    invocation_mode: InvocationMode | None = None
+    event_type: Identifier | None = None
     required_output_schema_version: SchemaVersion = "1"
 
     @model_validator(mode="after")
@@ -456,10 +477,13 @@ class AuditEvent(ContractModel):
     plan_id: Identifier | None = None
     plan_version: PositiveInt | None = None
     run_id: Identifier | None = None
+    invocation_mode: InvocationMode | None = None
+    event_type: Identifier | None = None
     specialist_call_id: Identifier | None = None
     specialist: SpecialistType | None = None
     call_sequence: PositiveInt | None = None
     tool_call_id: Identifier | None = None
+    tool_name: AgentToolName | None = None
     attempt_number: PositiveInt | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     requested_outcome: AgentOutcome | None = None
@@ -482,6 +506,8 @@ class AuditEvent(ContractModel):
             raise ValueError("call sequence requires a specialist call id")
         if self.attempt_number is not None and self.tool_call_id is None:
             raise ValueError("attempt number requires a tool call id")
+        if self.tool_name is not None and self.tool_call_id is None:
+            raise ValueError("tool name requires a tool call id")
         return self
 
 
