@@ -244,6 +244,7 @@ audit_entries = Table(
     Column("actor", String, nullable=False),
     Column("action", String, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON),
 )
 
 

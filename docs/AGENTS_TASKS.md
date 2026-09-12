@@ -154,25 +154,26 @@
 
 - [ ] Build minimal Coordinator
   - [x] Receive invocation
-  - [ ] Read active-plan context
+  - [x] Read active-plan context
   - [ ] Call one real tool
   - [x] Produce typed completion payload
   - [x] Do not mutate plan state directly
 
-- [ ] Connect completion to Backend
-  - [ ] `run_id`
-  - [ ] `captured_state_revision`
-  - [ ] outcome
-  - [ ] reason codes
-  - [ ] evidence refs
-  - [ ] affected plan/version
-  - [ ] summary
+- [x] Connect completion to Backend
+  - [x] `run_id`
+  - [x] `captured_state_revision`
+  - [x] outcome
+  - [x] reason codes
+  - [x] evidence refs
+  - [x] affected plan/version
+  - [x] summary
 
 - [ ] Persist genuine `PLAN-v1`
   - [ ] Backend checks state revision
   - [ ] Backend validates candidate
   - [ ] Backend creates immutable `PENDING_APPROVAL` version
   - [ ] Audit entry written
+  - Blocked: Backend publication and Agent audit adapters are connected, but a genuine PLAN-v1 still requires Aniq's deterministic candidate/optimiser path. PostgreSQL integration tests are present but were not executable in this local environment.
 
 - [ ] Show first concise trace
   - [ ] Trigger
@@ -200,12 +201,13 @@
   - [x] `MANUAL`
 
 - [ ] Add Coordinator control-plane tools
-  - [ ] `get_active_plan`
-  - [ ] `get_event_context`
-  - [ ] `validate_final_plan`
-  - [ ] `record_agent_decision`
+  - [x] `get_active_plan`
+  - [x] `get_event_context`
+  - [x] `validate_final_plan`
+  - [x] `record_agent_decision`
   - [ ] `request_human_review`
-  - Blocked: Coordinator ports exist, but authoritative backend implementations and persistence are not yet available.
+  - Thin adapters and a local production composition root call the authoritative Backend planning services; they do not access Backend tables directly.
+  - Blocked: exact-version human-review validation is connected, but the Backend does not expose a distinct persisted review-request workflow.
 
 - [x] Add final outcomes
   - [x] `KEEP_CURRENT_PLAN`
@@ -401,29 +403,30 @@
 
 # 9. Coding Pass 7 — Approval and Plan Safety
 
-- [ ] Implement exact-version approval
-  - [ ] `plan_id`
-  - [ ] `plan_version`
-  - [ ] approver
-  - [ ] timestamp
-  - [ ] decision
+- [x] Implement exact-version approval
+  - [x] `plan_id`
+  - [x] `plan_version`
+  - [x] approver
+  - [x] timestamp
+  - [x] decision
 
 - [ ] Implement stale-approval rejection
-  - [ ] Old plan reviewed
-  - [ ] State changes
+  - [x] Old plan reviewed
+  - [x] State changes
   - [ ] New plan created
-  - [ ] Old approval returns `PLAN_VERSION_STALE`
+  - [x] Old approval returns `PLAN_VERSION_STALE`
+  - Blocked: the full old-plan/new-plan acceptance scenario still requires the real deterministic replanning path.
 
 - [ ] Implement lifecycle transitions
-  - [ ] `PENDING_APPROVAL -> APPROVED`
-  - [ ] `PENDING_APPROVAL -> REJECTED`
+  - [x] `PENDING_APPROVAL -> APPROVED`
+  - [x] `PENDING_APPROVAL -> REJECTED`
   - [ ] `PENDING_APPROVAL -> INVALIDATED`
-  - [ ] `PENDING_APPROVAL -> SUPERSEDED`
+  - [x] `PENDING_APPROVAL -> SUPERSEDED`
   - [ ] `APPROVED -> INVALIDATED`
   - [ ] `APPROVED -> SUPERSEDED`
 
-- [ ] Confirm no Agent approval authority
-- [ ] Confirm no real order placement / payment
+- [x] Confirm no Agent approval authority
+- [x] Confirm no real order placement / payment
 
 - [ ] Review and commit Pass 7
 
@@ -472,45 +475,46 @@
 
 # 11. Coding Pass 9 — Business Audit Trail
 
-- [ ] Persist Coordinator runs
-  - [ ] `run_id`
-  - [ ] trigger
-  - [ ] plan/version
-  - [ ] captured state revision
-  - [ ] start/end
-  - [ ] outcome / reason
+- [x] Persist Coordinator runs
+  - [x] `run_id`
+  - [x] trigger
+  - [x] plan/version
+  - [x] captured state revision
+  - [x] start/end
+  - [x] outcome / reason
 
 - [ ] Persist specialist calls
-  - [ ] `agent_call_id`
-  - [ ] parent run
+  - [x] `agent_call_id`
+  - [x] parent run
   - [ ] objective
-  - [ ] context refs
+  - [x] context refs
   - [ ] structured result
   - [ ] status / timing
 
 - [ ] Persist tool calls
-  - [ ] `tool_call_id`
-  - [ ] parent agent call
-  - [ ] tool name
+  - [x] `tool_call_id`
+  - [x] parent agent call
+  - [x] tool name
   - [ ] request schema version
-  - [ ] evidence / result refs
-  - [ ] success / failure
+  - [x] evidence / result refs
+  - [x] success / failure
   - [ ] duration
   - [ ] error / termination code
 
 - [ ] Persist business decision events
-  - [ ] Event
+  - [x] Event
   - [ ] Materiality evidence
-  - [ ] Routing
-  - [ ] Tool use
-  - [ ] Validation
+  - [x] Routing
+  - [x] Tool use
+  - [x] Validation
   - [ ] Plan transition
   - [ ] Approval
-  - [ ] Final outcome
+  - [x] Final outcome
 
-- [ ] Keep audit history append-only
+- [x] Keep audit history append-only
 - [ ] Expose concise timeline to frontend
-- [ ] Do not store hidden chain-of-thought
+- [x] Do not store hidden chain-of-thought
+  - PostgreSQL-backed verification remains pending locally; `TEST_DATABASE_URL` is unset and neither Docker nor port 5432 is available. Canonical materiality, supersession-transition, approval, and termination-detail audit coverage remains incomplete.
 
 - [ ] Review and commit Pass 9
 

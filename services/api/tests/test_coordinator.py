@@ -13,11 +13,13 @@ from src.agent_contracts import (
     EvidenceRef,
     EvidenceSource,
     InvocationMode,
+    PlanPublicationResult,
     RecommendedNextStep,
     SpecialistDelegation,
     SpecialistResult,
     SpecialistStatus,
     SpecialistType,
+    StateRevisionStaleError,
 )
 from src.coordinator import (
     FULL_PLANNING_TRIGGER,
@@ -79,8 +81,11 @@ class FakeControlPlane:
     ) -> EvidenceRef:
         return self.validation_ref
 
-    def record_agent_decision(self, completion, trace) -> None:
+    def record_agent_decision(
+        self, completion, trace
+    ) -> PlanPublicationResult | None:
         self.recorded.append((completion, tuple(trace)))
+        return None
 
     def request_human_review(self, completion) -> None:
         self.review_requests.append(completion)
@@ -150,6 +155,62 @@ def test_all_invocation_modes_are_accepted(mode, trigger, classifier, expected) 
     ).run(invocation(mode, trigger))
     assert result.completion.outcome is AgentOutcome.KEEP_CURRENT_PLAN
     assert executor.calls[0].specialist is expected
+
+
+def test_stale_publication_error_is_not_converted_to_a_generic_escalation() -> None:
+    class StaleControlPlane(FakeControlPlane):
+        def record_agent_decision(self, completion, trace) -> None:
+            raise StateRevisionStaleError("stale")
+
+    with pytest.raises(StateRevisionStaleError):
+        Coordinator(StaleControlPlane(), FakeExecutor(), clock=lambda: NOW).run(
+            invocation()
+        )
+
+
+def test_backend_publication_result_is_returned_with_coordinator_execution() -> None:
+    expected = PlanPublicationResult(
+        run_id="RUN-1",
+        state_revision="STATE-1",
+        requested_outcome=AgentOutcome.KEEP_CURRENT_PLAN,
+        audit_event_refs=[ref(EvidenceCategory.AUDIT_EVENT, "AUDIT-1")],
+        published_at=NOW,
+    )
+
+    class PublishingControlPlane(FakeControlPlane):
+        def record_agent_decision(self, completion, trace):
+            return expected
+
+    result = Coordinator(
+        PublishingControlPlane(), FakeExecutor(), clock=lambda: NOW
+    ).run(invocation())
+
+    assert result.publication_result is expected
+
+
+@pytest.mark.parametrize(
+    "executor",
+    [
+        FakeExecutor(),
+        FakeExecutor(
+            lambda delegation, count: completed(
+                delegation,
+                status=SpecialistStatus.ESCALATED,
+                recommended_next_step=RecommendedNextStep.ESCALATE,
+                escalation_reason=EscalationReason.MISSING_REQUIRED_DATA,
+            )
+        ),
+    ],
+)
+def test_coordinator_outcomes_always_cross_the_publication_boundary(
+    executor: FakeExecutor,
+) -> None:
+    control_plane = FakeControlPlane()
+
+    result = Coordinator(control_plane, executor, clock=lambda: NOW).run(invocation())
+
+    assert len(control_plane.recorded) == 1
+    assert control_plane.recorded[0][0] == result.completion
 
 
 @pytest.mark.parametrize(

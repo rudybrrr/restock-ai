@@ -161,7 +161,7 @@ def test_newer_request_waits_for_active_attempt_and_replaces_stale_work(
         json={"outcome": "ESCALATE", "escalation_reason": "MISSING_REQUIRED_DATA"},
     )
     assert completion.status_code == 409, completion.text
-    assert completion.json()["error"]["code"] == "STALE_RUN_INPUT"
+    assert completion.json()["error"]["code"] == "STATE_REVISION_STALE"
     claimed = client.post("/api/v1/runs/claim")
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["id"] == pending.json()["id"]
@@ -316,3 +316,39 @@ def test_concurrent_requests_and_completions_do_not_duplicate_work(
         == completions[1].json()["plan_version_id"]
     )
     assert len(client.get("/api/v1/plan-history").json()) == 1
+
+
+def test_exact_pending_version_cannot_be_approved_after_state_changes(
+    client: TestClient,
+) -> None:
+    sign_in(client)
+    client.post("/api/v1/assessments", json={"as_of": "2026-02-15T22:00:00+08:00"})
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    run = client.post("/api/v1/runs/claim").json()
+    candidate = client.post(
+        f"/api/v1/runs/{run['id']}/tools/optimise",
+        json={"dish_quantities": {"chicken-rice": 200}},
+    ).json()
+    completed = client.post(
+        f"/api/v1/runs/{run['id']}/complete",
+        json={"outcome": "REVISE_PLAN", "candidate": candidate},
+    )
+    plan = client.get(f"/api/v1/plans/{completed.json()['plan_version_id']}").json()
+
+    sign_in(client)
+    changed = client.post(
+        "/api/v1/assessments", json={"as_of": "2026-02-16T08:00:00+08:00"}
+    )
+    assert changed.status_code == 202, changed.text
+    rejected = client.post(
+        f"/api/v1/plans/{plan['id']}/decision",
+        json={
+            "plan_id": plan["plan_id"],
+            "plan_version": plan["version"],
+            "decision": "APPROVED",
+        },
+    )
+
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["error"]["code"] == "PLAN_VERSION_STALE"
+    assert client.get(f"/api/v1/plans/{plan['id']}").json()["status"] == "PENDING_APPROVAL"

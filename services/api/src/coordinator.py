@@ -23,11 +23,13 @@ from src.agent_contracts import (
     EvidenceRef,
     EvidenceSource,
     InvocationMode,
+    PlanPublicationResult,
     RecommendedNextStep,
     SpecialistDelegation,
     SpecialistResult,
     SpecialistStatus,
     SpecialistType,
+    StateRevisionStaleError,
 )
 
 MAX_SPECIALIST_ROUNDS = 2
@@ -58,7 +60,7 @@ class CoordinatorControlPlane(Protocol):
         self,
         completion: AgentCompletionPublication,
         trace: Sequence[AuditEvent],
-    ) -> None: ...
+    ) -> PlanPublicationResult | None: ...
 
     def request_human_review(self, completion: AgentCompletionPublication) -> None: ...
 
@@ -77,6 +79,7 @@ class ManualRouteClassifier(Protocol):
 class CoordinatorExecution:
     completion: AgentCompletionPublication
     trace: tuple[AuditEvent, ...]
+    publication_result: PlanPublicationResult | None = None
 
 
 EVENT_INITIAL_ROUTE: dict[EventType, SpecialistType | None] = {
@@ -422,6 +425,8 @@ class Coordinator:
         for attempt in range(MAX_EXTERNAL_RETRIES + 1):
             try:
                 return call()
+            except StateRevisionStaleError:
+                raise
             except Exception as error:
                 if attempt == MAX_EXTERNAL_RETRIES:
                     raise ControlPlaneFailure from error
@@ -558,8 +563,9 @@ class Coordinator:
                 summary=completion.summary,
             )
         )
+        publication_result = None
         try:
-            self._retry_control_plane(
+            publication_result = self._retry_control_plane(
                 lambda: self._control_plane.record_agent_decision(completion, trace)
             )
         except ControlPlaneFailure:
@@ -579,7 +585,11 @@ class Coordinator:
                         "summary": completion.summary,
                     }
                 )
-        return CoordinatorExecution(completion=completion, trace=tuple(trace))
+        return CoordinatorExecution(
+            completion=completion,
+            trace=tuple(trace),
+            publication_result=publication_result,
+        )
 
     def _completion(
         self,

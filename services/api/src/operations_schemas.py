@@ -379,3 +379,4 @@ class AuditEntry(BaseModel):
     actor: str
     action: str
     timestamp: AwareDatetime
+    payload: dict | None = None

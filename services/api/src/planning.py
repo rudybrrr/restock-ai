@@ -1,14 +1,34 @@
 """Short transactions around frozen agent runs and deterministic candidate validation."""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_UP, Decimal
 from uuid import uuid4
 
 from sqlalchemy import func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from src import database as db
+from src.agent_contracts import (
+    AgentCompletionPublication,
+    AgentOutcome,
+    AuditAction,
+    AuditEvent,
+    EvidenceCategory,
+    EvidenceRef,
+    EvidenceSource,
+    PlanPublicationResult,
+    PlanStatus,
+    StateRevisionStaleError,
+)
+from src.agent_contracts import (
+    PurchasePlanLine as CanonicalPurchasePlanLine,
+)
+from src.agent_contracts import (
+    PurchasePlanVersion as CanonicalPurchasePlanVersion,
+)
 from src.deliveries import read_delivery
 from src.errors import ApiError
 from src.operations import lock_inventory, record_event
@@ -39,6 +59,99 @@ def _json(value):
 
 def _revision(session: Session) -> int:
     return session.execute(select(func.count()).select_from(db.events)).scalar_one()
+
+
+def current_state_revision(session: Session) -> str:
+    """Return the authoritative opaque revision used by Agent publications."""
+    return str(_revision(session))
+
+
+def get_active_plan(
+    session: Session, plan_id: str | None = None
+) -> PurchasePlanVersion | None:
+    """Return the latest actionable version, optionally scoped to one plan."""
+    statement = select(db.plan_versions.c.id).where(
+        db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED"))
+    )
+    if plan_id is not None:
+        statement = statement.where(db.plan_versions.c.plan_id == plan_id)
+    version_id = session.execute(
+        statement.order_by(db.plan_versions.c.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
+    return read_plan(session, version_id) if version_id is not None else None
+
+
+def get_event_context(session: Session, run_id: str, event_id: str) -> dict:
+    """Read a trigger event only when it belongs to the requested planning run."""
+    event = (
+        session.execute(
+            select(db.events)
+            .join(
+                db.assessment_requests,
+                db.assessment_requests.c.event_id == db.events.c.id,
+            )
+            .where(
+                db.assessment_requests.c.run_id == run_id,
+                db.events.c.id == event_id,
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if event is None:
+        raise ApiError(404, "EVENT_CONTEXT_NOT_FOUND", "Run trigger event does not exist")
+    return dict(event)
+
+
+def _require_claimed_agent_revision(
+    run: PlanningRun, captured_state_revision: str
+) -> None:
+    if captured_state_revision != str(run.input_revision):
+        raise StateRevisionStaleError(
+            "captured state revision does not match the claimed Backend run"
+        )
+
+
+def validate_candidate_reference(
+    session: Session,
+    run_id: str,
+    reference_id: str,
+    captured_state_revision: str,
+) -> Candidate:
+    """Validate a stored deterministic candidate without publishing it."""
+    lock_inventory(session)
+    run = get_run(session, run_id)
+    if run.status != "RUNNING":
+        raise ApiError(409, "RUN_NOT_RUNNING", "Only a claimed assessment can validate")
+    _require_claimed_agent_revision(run, captured_state_revision)
+    if reference_id != f"{run_id}:candidate":
+        raise ApiError(409, "PLAN_INVALID", "Candidate reference does not belong to run")
+    stored = run.snapshot.get("calculated_candidate")
+    if stored is None:
+        raise ApiError(409, "UNCERTIFIED_OUTCOME", "No deterministic candidate is stored")
+    candidate = Candidate.model_validate(stored)
+    _validate_candidate(run.snapshot, candidate)
+    return candidate
+
+
+def validate_human_review_request(
+    session: Session, completion: AgentCompletionPublication
+) -> None:
+    """Ensure a Coordinator can request review only for the exact active version."""
+    if completion.outcome is not AgentOutcome.REQUEST_HUMAN_APPROVAL:
+        raise ApiError(422, "INVALID_OUTCOME", "Completion does not request review")
+    if completion.affected_plan_id is None or completion.affected_plan_version is None:
+        raise ApiError(409, "NO_CURRENT_PLAN", "Human review requires an exact plan version")
+    lock_inventory(session)
+    run = get_run(session, completion.run_id)
+    _require_claimed_agent_revision(run, completion.captured_state_revision)
+    active = get_active_plan(session, completion.affected_plan_id)
+    if (
+        active is None
+        or active.version != completion.affected_plan_version
+        or active.status is not PlanStatus.PENDING_APPROVAL
+    ):
+        raise ApiError(409, "PLAN_NOT_PENDING", "Only the exact pending version can be reviewed")
 
 
 def _snapshot(session: Session, as_of: datetime, run_id: str) -> dict:
@@ -466,7 +579,14 @@ def _validate_candidate(snapshot: dict, candidate: Candidate) -> None:
         )
 
 
-def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun:
+def complete_run(
+    session: Session,
+    run_id: str,
+    body: Completion,
+    *,
+    captured_state_revision: str | None = None,
+    audit_events: Sequence[AuditEvent] = (),
+) -> PlanningRun:
     lock_inventory(session)
     run = get_run(session, run_id)
     if run.status == "SUCCEEDED":
@@ -493,20 +613,24 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         raise ApiError(
             409, "RUN_EXPIRED", "Assessment deadline elapsed before completion"
         )
-    if _revision(session) != run.input_revision:
+    expected_revision = captured_state_revision or str(run.input_revision)
+    if (
+        expected_revision != str(run.input_revision)
+        or current_state_revision(session) != expected_revision
+    ):
         session.execute(
             update(db.planning_runs)
             .where(db.planning_runs.c.id == run_id)
             .values(
                 status="FAILED",
-                failure_reason="STALE_RUN_INPUT",
+                failure_reason="STATE_REVISION_STALE",
                 completed_at=datetime.now(UTC),
             )
         )
         session.commit()
         raise ApiError(
             409,
-            "STALE_RUN_INPUT",
+            "STATE_REVISION_STALE",
             "Newer operational input requires a new assessment before publication",
         )
     if (body.outcome == "ESCALATE") != (body.escalation_reason is not None):
@@ -653,8 +777,167 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
             completed_at=datetime.now(UTC),
         )
     )
+    _persist_agent_audit(session, run, audit_events, version_id)
     session.commit()
     return get_run(session, run_id)
+
+
+def _persist_agent_audit(
+    session: Session,
+    run: PlanningRun,
+    audit_events: Sequence[AuditEvent],
+    plan_version_id: str | None,
+) -> None:
+    """Append canonical Agent trace events to the existing Backend audit store."""
+    if not audit_events:
+        return
+    if run.trigger_event_id is None:
+        raise ApiError(409, "AUDIT_CONTEXT_MISSING", "Run has no persisted trigger event")
+    publication = None
+    if plan_version_id is not None:
+        publication = dict(
+            session.execute(
+                select(
+                    db.plan_versions.c.id,
+                    db.plan_versions.c.plan_id,
+                    db.plan_versions.c.version,
+                    db.plan_versions.c.status,
+                ).where(db.plan_versions.c.id == plan_version_id)
+            )
+            .mappings()
+            .one()
+        )
+    for event in audit_events:
+        if event.run_id != run.id:
+            raise ApiError(409, "AUDIT_CONTEXT_MISMATCH", "Audit event belongs to another run")
+        payload = event.model_dump(mode="json")
+        if event.action is AuditAction.RUN_COMPLETED:
+            payload["backend_publication"] = {
+                "plan_version": publication,
+                "requested_outcome": event.final_outcome,
+            }
+        session.execute(
+            pg_insert(db.audit_entries)
+            .values(
+                id=event.audit_event_id,
+                event_id=run.trigger_event_id,
+                actor=event.actor,
+                action=event.action,
+                timestamp=event.timestamp,
+                payload=payload,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+
+
+def _canonical_plan_version(
+    stored: PurchasePlanVersion,
+    run: PlanningRun,
+    completion: AgentCompletionPublication,
+) -> CanonicalPurchasePlanVersion:
+    units = {
+        ingredient["id"]: ingredient["unit"]
+        for ingredient in run.snapshot["ingredients"]
+    }
+    candidate_ref = completion.candidate_result_ref
+    if candidate_ref is None:
+        raise ApiError(409, "PLAN_INVALID", "Published plan has no candidate reference")
+    revision = completion.captured_state_revision
+    return CanonicalPurchasePlanVersion(
+        plan_id=stored.plan_id,
+        version=stored.version,
+        status=stored.status,
+        forecast_ref=EvidenceRef(
+            category=EvidenceCategory.FORECAST_RESULT,
+            source=EvidenceSource.BACKEND,
+            reference_id=stored.forecast_id,
+            state_revision=revision,
+        ),
+        inventory_snapshot_ref=EvidenceRef(
+            category=EvidenceCategory.INVENTORY_SNAPSHOT,
+            source=EvidenceSource.BACKEND,
+            reference_id=stored.inventory_snapshot_id,
+            state_revision=revision,
+        ),
+        candidate_result_ref=candidate_ref,
+        created_at=stored.created_at,
+        trigger_id=run.trigger_event_id or completion.run_id,
+        state_revision=revision,
+        lines=[
+            CanonicalPurchasePlanLine(
+                ingredient_id=line.ingredient_id,
+                supplier_id=line.supplier_id,
+                quantity=line.quantity,
+                unit=units[line.ingredient_id],
+                unit_price=line.unit_price,
+                delivery_at=line.arrival_at,
+            )
+            for line in stored.lines
+        ],
+        total_purchase_cost=stored.total_purchase_cost,
+        expected_waste_cost=stored.expected_waste_cost,
+        expected_stockout_cost=stored.expected_stockout_cost,
+        delivery_cost=stored.delivery_cost,
+        emergency_penalty=stored.emergency_penalty,
+        total_expected_cost=stored.total_expected_cost,
+        approval_reason="MANAGER_APPROVAL_REQUIRED",
+    )
+
+
+def publish_agent_completion(
+    session: Session,
+    completion: AgentCompletionPublication,
+    trace: Sequence[AuditEvent],
+) -> PlanPublicationResult:
+    """Publish one canonical Agent completion through the Backend transaction."""
+    candidate = None
+    if completion.outcome is AgentOutcome.REVISE_PLAN:
+        if completion.candidate_result_ref is None:
+            raise ApiError(422, "INVALID_OUTCOME", "REVISE_PLAN requires a candidate")
+        candidate = validate_candidate_reference(
+            session,
+            completion.run_id,
+            completion.candidate_result_ref.reference_id,
+            completion.captured_state_revision,
+        )
+    body = Completion(
+        outcome=completion.outcome,
+        escalation_reason=completion.escalation_reason,
+        candidate=candidate,
+    )
+    try:
+        published = complete_run(
+            session,
+            completion.run_id,
+            body,
+            captured_state_revision=completion.captured_state_revision,
+            audit_events=trace,
+        )
+    except ApiError as error:
+        if error.detail.code == "STATE_REVISION_STALE":
+            raise StateRevisionStaleError(error.detail.message) from error
+        raise
+    created = None
+    if published.plan_version_id is not None and completion.outcome is AgentOutcome.REVISE_PLAN:
+        created = _canonical_plan_version(
+            read_plan(session, published.plan_version_id), published, completion
+        )
+    return PlanPublicationResult(
+        run_id=published.id,
+        state_revision=completion.captured_state_revision,
+        requested_outcome=completion.outcome,
+        created_plan_version=created,
+        audit_event_refs=[
+            EvidenceRef(
+                category=EvidenceCategory.AUDIT_EVENT,
+                source=EvidenceSource.BACKEND,
+                reference_id=event.audit_event_id,
+                state_revision=completion.captured_state_revision,
+            )
+            for event in trace
+        ],
+        published_at=published.completed_at or datetime.now(UTC),
+    )
 
 
 def decide_plan(
@@ -708,7 +991,9 @@ def decide_plan(
     ).scalar_one_or_none()
     if decision == "APPROVED" and _revision(session) != certified_revision:
         raise ApiError(
-            409, "PLAN_STALE", "Operational inputs changed; reassess before approval"
+            409,
+            "PLAN_VERSION_STALE",
+            "Operational inputs changed; reassess before approval",
         )
     session.execute(
         update(db.plan_versions)
