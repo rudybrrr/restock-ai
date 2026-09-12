@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = (
-        "postgresql+psycopg://restock:restock_dev@localhost:5432/restock"
+        "postgresql+psycopg://restock:restock_dev@127.0.0.1:5432/restock"
     )
     manager_username: str = "manager"
     manager_password: SecretStr = SecretStr("")
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     session_hours: int = 8
+    enable_development_calculator: bool = False
 
     @model_validator(mode="after")
     def validate_access(self) -> "Settings":

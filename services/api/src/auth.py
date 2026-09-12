@@ -66,6 +66,14 @@ def require_manager(identity: IdentityDep) -> Identity:
     return identity
 
 
+def require_agent(identity: IdentityDep) -> Identity:
+    if identity.role != "agent":
+        raise ApiError(
+            403, "AGENT_REQUIRED", "This action requires an agent credential"
+        )
+    return identity
+
+
 @router.post(
     "/login", response_model=Identity, dependencies=[Depends(require_browser_origin)]
 )
