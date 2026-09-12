@@ -1,4 +1,4 @@
-# Backend ticket 1: seeded inventory
+# Backend: inventory, closing counts, and deliveries
 
 From the repository root, run `docker compose up -d postgres`. Then in `services/api`:
 
@@ -20,6 +20,7 @@ safe to repeat: existing IDs are preserved, never reset or overwritten. Use a ne
 Open [the connection check](http://localhost:8000/connect), sign in, then click **Read inventory**.
 [Swagger UI](http://localhost:8000/docs) and `/openapi.json` contain the typed API contracts.
 In Swagger, call login first to set the manager cookie, or use **Authorize → HTTPBearer** for the agent token.
+See [TESTING.md](TESTING.md) for role-specific Swagger and HTTP scenarios.
 
 ## Teammate access
 
@@ -83,15 +84,112 @@ Tests create a unique `restock_test_<uuid>` database, migrate and seed it twice,
 HTTP, and drop only that generated database in cleanup. They fail explicitly when PostgreSQL is not configured.
 
 ```sh
-export TEST_DATABASE_URL=postgresql://restock:restock_dev@localhost:5432/postgres
+export TEST_DATABASE_URL=postgresql://restock:restock_dev@127.0.0.1:5432/postgres
 uv run pytest
 uv run pyright
 uv run ruff check .
 ```
 
-PowerShell: `$env:TEST_DATABASE_URL='postgresql://restock:restock_dev@localhost:5432/postgres'`.
+PowerShell: `$env:TEST_DATABASE_URL='postgresql://restock:restock_dev@127.0.0.1:5432/postgres'`.
 Tests cover stored catalog reads, batch separation, manager sessions, agent permissions, invalid credentials,
-logout revocation, CORS and CSRF. Operational stock edits and purchase workflows belong to later tickets.
+logout revocation, CORS and CSRF, closing revisions, deliveries, retries, and atomic audit writes.
+
+## Tickets 2 and 3: interactive daily and delivery flow
+
+Apply `alembic upgrade head` before starting the updated API. In `/docs`, sign in through
+`POST /api/v1/auth/login` first. Swagger supplies the browser Origin; it must be allowed.
+All writes below require the manager cookie and allowed Origin. Agents can read these APIs.
+The existing `/connect` inventory view shows each lot's expiry and physical observation time.
+
+1. Execute `GET /api/v1/inventory` and `GET /api/v1/menu-items` to obtain batch and dish IDs.
+2. Use `POST /api/v1/daily-updates/2026-02-16/draft` with the shape below. Add every received,
+   unexpired batch and every dish. Explicit `0` is valid; missing entries prevent submission.
+   Expired historical batches may optionally be counted. Quantities use each ingredient's base unit.
+3. Execute `POST /api/v1/daily-updates/2026-02-16/submit` with no body. Incomplete submissions
+   return 422 and preserve the draft. Read draft/history with `GET` on the day URL.
+4. Correct a day by saving another complete draft and submitting again with the same cutoff.
+   Previous revisions, sales, source cutoff, actor and real recording time remain in history.
+   The newest revision at the latest cutoff supplies PHYSICAL inventory; dish sales are never deducted.
+
+```json
+{"cutoff":"2026-02-16T22:00:00+08:00","counts":{"chicken-01":"7.5","chicken-02":"0"},"sales":{"chicken-rice":0}}
+```
+
+This abbreviated example is a valid draft, not a complete submission. `/inventory` contains the other
+batch IDs; `/menu-items` contains the other dish IDs. Source timestamps must include a timezone;
+the cutoff must fall on the URL's day in Singapore. Cutoff changes on a correction return 409.
+
+Record deliveries **before** submitting the day's closing counts:
+
+1. Read `/supplier-offers` and copy an approved supplier/ingredient pair. POST `/api/v1/deliveries`:
+
+   ```json
+   {"supplier_id":"<supplier ID>","ingredient_id":"chicken","kind":"NORMAL","expected_quantity":"10","ordered_at":"2026-02-16T08:00:00+08:00","expected_at":"2026-02-16T10:00:00+08:00"}
+   ```
+
+   `EMERGENCY` is also supported. This records an external fact without plan approval and returns 201.
+   It adds expected supply, not inventory. GET `/deliveries` or `/deliveries/{id}` to read it.
+2. POST `/api/v1/deliveries/{id}/update` to record changed expectations or cancel the remainder:
+
+   ```json
+   {"expected_quantity":"10","expected_at":"2026-02-16T12:00:00+08:00","effective_at":"2026-02-16T09:00:00+08:00","cancel_remainder":false}
+   ```
+
+   Expected quantity is the total shipment quantity, including receipts. Completed/cancelled deliveries
+   cannot be reopened. Updates preserve previous expectations in event snapshots.
+3. POST `/api/v1/deliveries/{id}/receive`:
+
+   ```json
+   {"request_id":"supplier-slip-001","quantity":"4","received_at":"2026-02-16T12:00:00+08:00","expiry_date":"2026-02-19","remainder":"EXPECTED"}
+   ```
+
+   The result shows received `4`, outstanding `6`, cancelled `0`, and a distinct lot ID. A later receipt
+   uses a new request ID and its own expiry. Set remainder to `CANCELLED` to cancel the unreceived balance.
+   Identical receipt retries return current delivery state with no additional stock or events; conflicting
+   reuse returns 409. Over-receipt returns 409; update the expected total first when recording extra supply.
+4. Refresh `/inventory` before preparing closing counts: include the received lots. Future deliveries
+   never appear as counted stock. A newly reported receipt at/before an already submitted cutoff returns
+   `409 CLOSING_COUNT_CONFLICT` listing affected days. Retry with `closing_counts`, for example
+   `"closing_counts":{"2026-02-16":"2"}`, supplying the new lot's physical quantity at **each** affected
+   day's original cutoff. The receipt and corrected daily revisions commit atomically; prior counts and
+   sales remain in history. Matching saved drafts gain the new lot while preserving other draft edits.
+
+GET `/api/v1/events` and `/api/v1/audit` expose typed events, effective times, immutable delivery snapshots,
+and recording actor/time. Each submission, purchase, update or receipt commits together with its events
+and audit entries. Daily submissions now queue a durable assessment; drafts emit no assessment event.
+
+## Tickets 7 and 8: simulated sales and first planning run
+
+`POST /api/v1/sales-batches` accepts a complete incremental simulator interval.
+Each batch has a `source`, `batch_id`, timezone-aware period bounds, and dish
+quantities; omitted dishes are zero. Identical retries have no second effect,
+while conflicting identities and overlapping intervals return `409`. Submit a
+new identity with `replaces_id` to correct a batch without double deduction.
+
+`GET /api/v1/inventory/estimated?as_of=<timestamp>` reports recipe-derived
+earliest-expiry balances separately from physical observations, with coverage metadata.
+Lots are excluded on the Singapore day after expiry and retained as `EXPIRED`
+history.
+
+A manager starts a durable assessment with `POST /api/v1/assessments` and an
+`as_of` timestamp; it returns `202`. The agent bearer credential claims the
+run at `POST /api/v1/runs/claim`, calls
+`POST /api/v1/runs/{id}/tools/optimise` with forecast dish quantities, then
+completes it at `POST /api/v1/runs/{id}/complete`. The tool checks frozen
+inventory, recipes, complete supplier inputs, MOQ, pack size, availability,
+and delivery slots before an immutable `PENDING_APPROVAL` version is stored.
+Read them through `GET /runs/{id}` and `GET /plans/{version_id}`.
+
+The described calculator is a **development fixture**, disabled by default. Set
+`ENABLE_DEVELOPMENT_CALCULATOR=true` only to test backend plan/approval plumbing.
+It does not implement the teammate's forecasting, materiality, dated-horizon or
+contingency optimiser. Without integration or explicit fixture opt-in, its tool
+returns `503 DECISION_ENGINE_NOT_CONNECTED`. Do not call tickets 5–8 fully complete
+based on fixture results.
+
+The current [backend handover](../../docs/BACKEND_HANDOVER.md) lists all new routes,
+ownership boundaries, exact-version approval payloads, cycle decisions, promotion
+and supplier triggers, reconciliation assumptions, and outstanding integration.
 
 ## Coordinator runtime smoke test
 
