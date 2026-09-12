@@ -95,19 +95,24 @@ logout revocation, CORS and CSRF. Operational stock edits and purchase workflows
 
 ## Coordinator runtime smoke test
 
-The Pass 1A Coordinator uses OpenClaw's isolated, embedded `agent exec` command
-with the official Amazon Bedrock provider. It has the `minimal` tool profile and
-does not expose ReStock business tools, database writes, plan publication, or
-approval operations.
+ReStock uses the organiser-provided LLM gateway. Configure the Agent/LLM runtime
+in the local or deployed environment with:
 
-Set `AWS_REGION` and `BEDROCK_MODEL_ID`. The model ID must identify Claude Sonnet
-4.5, for example the regional inference profile
-`us.anthropic.claude-sonnet-4-5-20250929-v1:0`. AWS authentication uses the
-standard SDK credential chain (environment credentials, shared profile, web
-identity, or instance role); credentials are not application settings. An
-organiser-supplied standard Bedrock-compatible runtime URL can be set with
-`BEDROCK_BASE_URL`. No custom compatibility endpoint is currently documented in
-this repository.
+```dotenv
+LLM_GATEWAY_URL=https://api.softwaresystems.app
+LLM_GATEWAY_API_KEY=
+LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
+`LLM_GATEWAY_API_KEY` is a secret. Set the real value only in local or runtime
+environment configuration; never commit it or add it to `.env.example`.
+The environment template reflects the canonical gateway configuration. Updating
+the Coordinator provider wiring is intentionally outside the scope of this
+configuration change.
+
+The Pass 1A Coordinator uses OpenClaw's isolated, embedded `agent exec` command.
+It has the `minimal` tool profile and does not expose ReStock business tools,
+database writes, plan publication, or approval operations.
 
 Pipe one canonical `AgentInvocation` JSON object to:
 
