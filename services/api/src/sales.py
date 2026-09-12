@@ -1,7 +1,7 @@
 """Durable simulator sales input and recipe-derived inventory estimates."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
-from src.operations import lock_inventory, record_event
+from src.operations import expire_lots, lock_inventory, record_event
 from src.operations_schemas import SalesBatch, SalesBatchCreate
 
 SINGAPORE = ZoneInfo("Asia/Singapore")
@@ -24,37 +24,6 @@ def _model(row: RowMapping | dict) -> SalesBatch:
 
 def _known_dishes(session: Session) -> set[str]:
     return set(session.execute(select(db.menu_items.c.id)).scalars())
-
-
-def _expire_lots(session: Session, as_of: datetime, actor: str) -> None:
-    today = as_of.astimezone(SINGAPORE).date()
-    expired = (
-        session.execute(
-            select(db.inventory_lots).where(
-                db.inventory_lots.c.expiry_date < today,
-                db.inventory_lots.c.status == "ACTIVE",
-            )
-        )
-        .mappings()
-        .all()
-    )
-    for lot in expired:
-        session.execute(
-            update(db.inventory_lots)
-            .where(db.inventory_lots.c.id == lot["id"])
-            .values(status="EXPIRED")
-        )
-        record_event(
-            session,
-            "INVENTORY_LOT_EXPIRED",
-            actor,
-            {
-                "lot_id": lot["id"],
-                "effective_at": datetime.combine(
-                    today, datetime.min.time(), SINGAPORE
-                ).isoformat(),
-            },
-        )
 
 
 def create_sales_batch(
@@ -79,8 +48,8 @@ def create_sales_batch(
         .mappings()
         .all()
     )
-    if existing:
-        original = _model(existing[-1])
+    for previous in existing:
+        original = _model(previous)
         if (
             SalesBatchCreate.model_validate(
                 {key: getattr(original, key) for key in SalesBatchCreate.model_fields}
@@ -128,15 +97,33 @@ def create_sales_batch(
             )
     # A complete physical count defines a hard boundary: never guess a partial batch split.
     cutoff = session.execute(
-        select(db.stock_counts.c.counted_at).order_by(
-            db.stock_counts.c.counted_at.desc()
+        select(db.stock_counts.c.counted_at)
+        .where(
+            db.stock_counts.c.counted_at > body.period_start,
+            db.stock_counts.c.counted_at < body.period_end,
         )
+        .limit(1)
     ).scalar()
-    if cutoff is not None and body.period_start < cutoff < body.period_end:
+    if cutoff is not None:
         raise ApiError(
             422,
             "UNSUPPORTED_CUTOFF_SPLIT",
-            "Batch must end or begin at a stocktake cutoff",
+            "Batch must end or begin at a stocktake or receipt cutoff",
+        )
+    expiry_dates = session.execute(
+        select(db.inventory_lots.c.expiry_date).distinct()
+    ).scalars()
+    crosses_expiry = any(
+        body.period_start
+        < datetime.combine(expiry + timedelta(days=1), time.min, SINGAPORE)
+        < body.period_end
+        for expiry in expiry_dates
+    )
+    if crosses_expiry:
+        raise ApiError(
+            422,
+            "UNSUPPORTED_EXPIRY_SPLIT",
+            "Split sales batches at midnight when stock expires",
         )
     if replaced is not None:
         session.execute(
@@ -158,7 +145,7 @@ def create_sales_batch(
     }
     session.execute(insert(db.sales_batches).values(**row))
     result = _model(row)
-    _expire_lots(session, body.period_end, actor)
+    expire_lots(session, body.period_end, actor)
     record_event(
         session, "SALES_UPDATED", actor, {"batch": result.model_dump(mode="json")}
     )
@@ -198,7 +185,20 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
     )
     if not lots:
         return []
-    baseline = max(row["counted_at"] for row in lots)
+    # Replay observations and usage in time order. A new receipt only resets its
+    # own lot; it must never reset consumption already recorded against old lots.
+    observations = (
+        session.execute(
+            select(db.stock_counts)
+            .where(
+                db.stock_counts.c.counted_at <= as_of,
+            )
+            .order_by(db.stock_counts.c.counted_at, db.stock_counts.c.sequence)
+        )
+        .mappings()
+        .all()
+    )
+    baseline = min(row["counted_at"] for row in observations)
     batches = (
         session.execute(
             select(db.sales_batches)
@@ -212,44 +212,78 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
         .mappings()
         .all()
     )
-    recipe_usage: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     recipes = session.execute(select(db.recipes)).mappings().all()
-    for batch in batches:
+    remaining: dict[str, Decimal] = {}
+    deficits: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    lot_by_id = {row["id"]: row for row in lots}
+    # At a shared timestamp the previous interval's sales precede the closing
+    # observation; that physical observation then authoritatively resets stock.
+    timeline = [
+        (row["counted_at"], 1, row["sequence"], "count", row)
+        for row in observations
+        if row["lot_id"] in lot_by_id
+    ]
+    timeline += [(row["period_end"], 0, 0, "sales", row) for row in batches]
+    counts_by_time: dict[datetime, set[str]] = defaultdict(set)
+    for observation in observations:
+        counts_by_time[observation["counted_at"]].add(observation["lot_id"])
+    for event_at, _, _, kind, row in sorted(timeline, key=lambda item: item[:3]):
+        if kind == "count":
+            remaining[row["lot_id"]] = row["quantity"]
+            ingredient = lot_by_id[row["lot_id"]]["ingredient_id"]
+            current_lots = {
+                lot["id"]
+                for lot in lots
+                if lot["ingredient_id"] == ingredient and lot["received_at"] <= event_at
+            }
+            if current_lots <= counts_by_time[event_at]:
+                deficits[ingredient] = Decimal(0)
+            continue
+        usage_by_ingredient: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
         for recipe in recipes:
-            recipe_usage[recipe["ingredient_id"]] += (
-                Decimal(str(batch["sales"].get(recipe["menu_item_id"], 0)))
+            usage_by_ingredient[recipe["ingredient_id"]] += (
+                Decimal(str(row["sales"].get(recipe["menu_item_id"], 0)))
                 * recipe["quantity"]
             )
-    remaining = {row["id"]: row["quantity"] for row in lots}
+        # Intervals are half-open: sales ending at midnight belong to the prior day.
+        service_day = (
+            (event_at - timedelta(microseconds=1)).astimezone(SINGAPORE).date()
+        )
+        for ingredient, usage in usage_by_ingredient.items():
+            for lot in lots:
+                if (
+                    lot["ingredient_id"] != ingredient
+                    or lot["id"] not in remaining
+                    or lot["received_at"] > row["period_start"]
+                    or lot["expiry_date"] < service_day
+                ):
+                    continue
+                deduction = min(remaining[lot["id"]], usage)
+                remaining[lot["id"]] -= deduction
+                usage -= deduction
+            deficits[ingredient] += usage
     today = as_of.astimezone(SINGAPORE).date()
-    for ingredient, usage in recipe_usage.items():
-        for lot in (
-            row
-            for row in lots
-            if row["ingredient_id"] == ingredient and row["expiry_date"] >= today
-        ):
-            deduction = min(remaining[lot["id"]], usage)
-            remaining[lot["id"]] -= deduction
-            usage -= deduction
-            if usage == 0:
+    result = []
+    for lot in lots:
+        coverage_end = lot["counted_at"]
+        for batch in batches:
+            if batch["period_end"] <= coverage_end:
+                continue
+            if batch["period_start"] != coverage_end:
                 break
-    coverage_end = baseline
-    for batch in batches:
-        if batch["period_start"] != coverage_end:
-            break
-        coverage_end = batch["period_end"]
-    complete = coverage_end >= as_of
-    return [
-        {
-            **row,
-            "quantity": Decimal(0)
-            if row["expiry_date"] < today
-            else remaining[row["id"]],
-            "provenance": "ESTIMATED",
-            "as_of": as_of,
-            "coverage_start": baseline,
-            "coverage_complete": complete,
-            "status": "EXPIRED" if row["expiry_date"] < today else row["status"],
-        }
-        for row in lots
-    ]
+            coverage_end = batch["period_end"]
+        result.append(
+            {
+                **lot,
+                "quantity": Decimal(0)
+                if lot["expiry_date"] < today
+                else remaining[lot["id"]],
+                "provenance": "ESTIMATED",
+                "as_of": as_of,
+                "coverage_start": lot["counted_at"],
+                "coverage_complete": coverage_end >= as_of,
+                "status": "EXPIRED" if lot["expiry_date"] < today else "ACTIVE",
+                "unallocated_consumption": deficits[lot["ingredient_id"]],
+            }
+        )
+    return result

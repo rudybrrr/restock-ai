@@ -19,6 +19,27 @@ from sqlalchemy.orm import Session
 
 metadata = MetaData()
 
+promotions = Table(
+    "promotions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("revision", Integer, nullable=False),
+    Column("payload", JSON, nullable=False),
+    CheckConstraint("revision > 0"),
+)
+
+order_cycles = Table(
+    "order_cycles",
+    metadata,
+    Column("ingredient_id", ForeignKey("ingredients.id"), primary_key=True),
+    Column("scheduled_date", Date, primary_key=True),
+    Column("status", String, nullable=False),
+    Column("decided_at", DateTime(timezone=True), nullable=False),
+    Column("actor", String, nullable=False),
+    Column("note", String),
+    CheckConstraint("status IN ('ORDERED', 'SKIPPED')"),
+)
+
 menu_items = Table(
     "menu_items",
     metadata,
@@ -123,6 +144,7 @@ daily_drafts = Table(
 daily_revisions = Table(
     "daily_revisions",
     metadata,
+    Column("reconciliation", JSON),
     Column("id", String, primary_key=True),
     Column("day", Date, nullable=False),
     Column("revision", Integer, nullable=False),
@@ -162,16 +184,27 @@ planning_runs = Table(
     Column("id", String, primary_key=True),
     Column("status", String, nullable=False),
     Column("trigger", String, nullable=False),
+    Column("trigger_event_id", ForeignKey("events.id")),
     Column("as_of", DateTime(timezone=True), nullable=False),
     Column("input_revision", Integer, nullable=False),
     Column("snapshot", JSON, nullable=False),
     Column("outcome", String),
+    Column("escalation_reason", String),
+    Column("failure_reason", String),
     Column("plan_version_id", String),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("claimed_at", DateTime(timezone=True)),
     Column("deadline_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
 )
+assessment_requests = Table(
+    "assessment_requests",
+    metadata,
+    Column("event_id", ForeignKey("events.id"), primary_key=True),
+    Column("run_id", ForeignKey("planning_runs.id"), nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+)
+
 purchase_plans = Table(
     "purchase_plans",
     metadata,
@@ -218,6 +251,8 @@ deliveries = Table(
     "deliveries",
     metadata,
     Column("id", String, primary_key=True),
+    Column("source_plan_line_id", ForeignKey("purchase_plan_lines.id")),
+    Column("cycle_date", Date),
     Column("supplier_id", ForeignKey("suppliers.id"), nullable=False),
     Column("ingredient_id", ForeignKey("ingredients.id"), nullable=False),
     Column("kind", String, nullable=False),

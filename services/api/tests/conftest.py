@@ -55,6 +55,7 @@ def client(database_url: str) -> Iterator[TestClient]:
         allowed_origins=["https://frontend.example"],
         cookie_secure=True,
         cookie_samesite="lax",
+        enable_development_calculator=True,
     )
     with TestClient(
         create_app(settings),

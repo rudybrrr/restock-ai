@@ -56,7 +56,8 @@ def test_agent_can_read_catalog_but_cannot_logout_a_manager(client: TestClient) 
     assert offer["unit_price"] == "4.50"
     assert offer["currency"] == "SGD"
     assert offer["order_cutoff"]["kind"] == "LOCAL_TIME"
-    assert offer["feasible_delivery_at"] == ["2026-02-16T08:00:00+08:00"]
+    assert offer["feasible_delivery_at"][0] == "2026-02-16T08:00:00+08:00"
+    assert len(offer["feasible_delivery_at"]) == 87
     denied = client.post(
         "/api/v1/auth/logout", headers={"Origin": "https://frontend.example"}
     )

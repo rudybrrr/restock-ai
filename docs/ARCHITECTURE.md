@@ -138,6 +138,8 @@ ORDER_CYCLE_UPDATED
 INVENTORY_LOT_EXPIRED
 MANUAL_REASSESSMENT_REQUESTED
 MANAGER_INSTRUCTION
+PLAN_APPROVED
+PLAN_REJECTED
 ```
 
 ## 6. Agent tools
@@ -296,7 +298,7 @@ The backend-owner planning session refined the larger proposal as follows:
 - Batches remain stored as EXPIRED starting the day after expiry in Singapore simulation time. The intraday scenario requires explicit event/arrival times; daily delivery defaults must not backdate emergency arrivals.
 - PurchasePlan.id is stable across revisions and distinct from ingredient order cycles. Approvals carry plan_id and plan_version. Snapshot IDs resolve to preserved artifacts even if stored as typed JSON.
 
-Detailed implementation proposals are in BACKEND_DESIGN.md and confirmed decisions in BACKEND_PLAN.md under restock-ai/docs. These are documentation contracts, not implemented API behaviour. The outcome/reason split and lifecycle table below supersede the older ESCALATE_INSUFFICIENT_INFORMATION and VALID names; no published implementation needs migration yet.
+The approved scope is in BACKEND_SPEC.md. Current implementation and teammate integration gaps are recorded in BACKEND_HANDOVER.md. These contracts describe the target behaviour; consult the handover before assuming every integration is implemented. The outcome/reason split and lifecycle table below supersede the older ESCALATE_INSUFFICIENT_INFORMATION and VALID names.
 
 
 ## 13. MVP lifecycle and supplier schema
@@ -339,5 +341,7 @@ lead_time_minutes and feasible_delivery_at make the review's generic lead_time a
 ### Sales reconciliation acceptance checks
 
 Compare final daily dish totals with the latest non-duplicated batch revisions for the SAME dish and SAME business-day interval. With complete interval coverage, record MATCHED or a per-dish RECONCILIATION_DISCREPANCY with both totals and signed difference. With incomplete coverage, record INCOMPLETE_COVERAGE; do not label an expected partial-day difference a sales error. Explicit daily final totals are authoritative for historical forecasting, without adding intraday totals. Preserve batches and comparison evidence.
+
+For the daytime MVP, the business-day sales interval runs from Singapore midnight through that day's submitted closing cutoff. Zero-sales batches may establish coverage before opening. Overnight business-day configuration is not implemented. Each closing revision preserves its comparison evidence; corrected final totals supersede earlier revisions in authoritative forecasting history.
 
 Tests must cover a matching full day, a mismatching full day, incomplete coverage, duplicate batch retry, corrected batch, and a new physical count resetting the inventory baseline without a second deduction. A sales discrepancy is not inventory waste and does not prevent an independently valid physical count becoming the new stock baseline.

@@ -156,7 +156,7 @@ Record deliveries **before** submitting the day's closing counts:
 
 GET `/api/v1/events` and `/api/v1/audit` expose typed events, effective times, immutable delivery snapshots,
 and recording actor/time. Each submission, purchase, update or receipt commits together with its events
-and audit entries. Daily assessment execution is connected in later tickets; drafts emit no assessment event.
+and audit entries. Daily submissions now queue a durable assessment; drafts emit no assessment event.
 
 ## Tickets 7 and 8: simulated sales and first planning run
 
@@ -167,7 +167,7 @@ while conflicting identities and overlapping intervals return `409`. Submit a
 new identity with `replaces_id` to correct a batch without double deduction.
 
 `GET /api/v1/inventory/estimated?as_of=<timestamp>` reports recipe-derived
-FIFO balances separately from physical observations, with coverage metadata.
+earliest-expiry balances separately from physical observations, with coverage metadata.
 Lots are excluded on the Singapore day after expiry and retained as `EXPIRED`
 history.
 
@@ -179,3 +179,14 @@ completes it at `POST /api/v1/runs/{id}/complete`. The tool checks frozen
 inventory, recipes, complete supplier inputs, MOQ, pack size, availability,
 and delivery slots before an immutable `PENDING_APPROVAL` version is stored.
 Read them through `GET /runs/{id}` and `GET /plans/{version_id}`.
+
+The described calculator is a **development fixture**, disabled by default. Set
+`ENABLE_DEVELOPMENT_CALCULATOR=true` only to test backend plan/approval plumbing.
+It does not implement the teammate's forecasting, materiality, dated-horizon or
+contingency optimiser. Without integration or explicit fixture opt-in, its tool
+returns `503 DECISION_ENGINE_NOT_CONNECTED`. Do not call tickets 5–8 fully complete
+based on fixture results.
+
+The current [backend handover](../../docs/BACKEND_HANDOVER.md) lists all new routes,
+ownership boundaries, exact-version approval payloads, cycle decisions, promotion
+and supplier triggers, reconciliation assumptions, and outstanding integration.

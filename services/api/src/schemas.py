@@ -2,7 +2,7 @@ from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class Model(BaseModel):
@@ -99,6 +99,11 @@ class EstimatedInventoryLot(Model):
     as_of: AwareDatetime
     coverage_start: AwareDatetime
     coverage_complete: bool
+    unallocated_consumption: Decimal = Field(
+        default=Decimal(0),
+        ge=0,
+        description="Ingredient-level recipe usage not covered by usable stock; repeated across its lots, not additive and not measured waste.",
+    )
     status: Literal["ACTIVE", "EXPIRED"]
 
 

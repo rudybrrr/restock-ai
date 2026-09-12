@@ -9,16 +9,19 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
 from src import database as db
+from src.deliveries import read_delivery
 from src.errors import ApiError
-from src.operations import record_event
+from src.operations import lock_inventory, record_event
 from src.planning_schemas import (
     Candidate,
     Completion,
     OptimiseRequest,
+    PlanDecision,
     PlanLine,
     PlanningRun,
     PurchasePlanVersion,
 )
+from src.reconciliation import authoritative_daily_sales
 from src.sales import estimated_inventory
 
 
@@ -41,9 +44,44 @@ def _revision(session: Session) -> int:
 def _snapshot(session: Session, as_of: datetime, run_id: str) -> dict:
     return {
         "as_of": as_of.isoformat(),
+        "authoritative_daily_sales": authoritative_daily_sales(session, as_of),
         "forecast_id": f"{run_id}:forecast",
         "inventory_snapshot_id": f"{run_id}:inventory",
         "inventory": [_json(row) for row in estimated_inventory(session, as_of)],
+        "commitments": [
+            read_delivery(session, key).model_dump(mode="json")
+            for key in session.execute(select(db.deliveries.c.id)).scalars()
+        ],
+        "ingredients": [
+            _json(dict(row))
+            for row in session.execute(select(db.ingredients)).mappings()
+        ],
+        "cycle_decisions": [
+            _json(dict(row))
+            for row in session.execute(select(db.order_cycles)).mappings()
+        ],
+        "holidays": [
+            _json(dict(row)) for row in session.execute(select(db.holidays)).mappings()
+        ],
+        "promotions": [
+            {"id": row["id"], **row["payload"]}
+            for row in session.execute(select(db.promotions)).mappings()
+        ],
+        "daily_history": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.daily_revisions).where(db.daily_revisions.c.cutoff <= as_of)
+            ).mappings()
+        ],
+        "sales_batches": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.sales_batches).where(
+                    db.sales_batches.c.active == 1,
+                    db.sales_batches.c.period_end <= as_of,
+                )
+            ).mappings()
+        ],
         "recipes": [
             _json(dict(row)) for row in session.execute(select(db.recipes)).mappings()
         ],
@@ -54,18 +92,57 @@ def _snapshot(session: Session, as_of: datetime, run_id: str) -> dict:
     }
 
 
-def request_run(session: Session, as_of: datetime) -> PlanningRun:
+def request_run(
+    session: Session, as_of: datetime, revises_plan_id: str | None = None
+) -> PlanningRun:
+    lock_inventory(session)
+    _expire_runs(session)
+    if (
+        revises_plan_id is not None
+        and not session.execute(
+            select(db.purchase_plans.c.id).where(
+                db.purchase_plans.c.id == revises_plan_id
+            )
+        ).first()
+    ):
+        raise ApiError(404, "PLAN_NOT_FOUND", "The plan to revise does not exist")
     existing = (
         session.execute(
-            select(db.planning_runs).where(
-                db.planning_runs.c.status.in_(("QUEUED", "RUNNING"))
-            )
+            select(db.planning_runs).where(db.planning_runs.c.status == "QUEUED")
         )
         .mappings()
         .one_or_none()
     )
     if existing:
-        return PlanningRun.model_validate(existing)
+        if existing["snapshot"].get("revises_plan_id") != revises_plan_id:
+            raise ApiError(
+                409,
+                "ASSESSMENT_TARGET_CONFLICT",
+                "A queued request already targets a different planning horizon",
+            )
+        if existing["status"] == "QUEUED" and as_of > existing["as_of"]:
+            session.execute(
+                update(db.planning_runs)
+                .where(db.planning_runs.c.id == existing["id"])
+                .values(as_of=as_of)
+            )
+        session.commit()
+        return get_run(session, existing["id"])
+    running = (
+        session.execute(
+            select(db.planning_runs).where(db.planning_runs.c.status == "RUNNING")
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if (
+        running
+        and as_of <= running["as_of"]
+        and _revision(session) == running["input_revision"]
+        and running["snapshot"].get("revises_plan_id") == revises_plan_id
+    ):
+        session.commit()
+        return PlanningRun.model_validate(running)
     run_id = str(uuid4())
     row = {
         "id": run_id,
@@ -73,16 +150,27 @@ def request_run(session: Session, as_of: datetime) -> PlanningRun:
         "trigger": "MANUAL_REASSESSMENT_REQUESTED",
         "as_of": as_of,
         "input_revision": _revision(session),
-        "snapshot": {},
+        "snapshot": {"revises_plan_id": revises_plan_id},
         "created_at": datetime.now(UTC),
     }
     session.execute(insert(db.planning_runs).values(**row))
-    record_event(
+    trigger_event_id = record_event(
         session,
         "MANUAL_REASSESSMENT_REQUESTED",
         "manager",
         {"run_id": run_id, "effective_at": as_of.isoformat()},
     )
+    session.execute(
+        update(db.planning_runs)
+        .where(db.planning_runs.c.id == run_id)
+        .values(trigger_event_id=trigger_event_id)
+    )
+    session.execute(
+        insert(db.assessment_requests).values(
+            event_id=trigger_event_id, run_id=run_id, effective_at=as_of
+        )
+    )
+    row["trigger_event_id"] = trigger_event_id
     session.commit()
     return PlanningRun.model_validate(row)
 
@@ -98,7 +186,45 @@ def get_run(session: Session, run_id: str) -> PlanningRun:
     return PlanningRun.model_validate(row)
 
 
+def retry_run(session: Session, run_id: str, as_of: datetime) -> PlanningRun:
+    lock_inventory(session)
+    _expire_runs(session)
+    previous = get_run(session, run_id)
+    if previous.status not in ("FAILED", "SUCCEEDED"):
+        raise ApiError(
+            409, "RUN_NOT_FINISHED", "Only a completed or failed attempt can be retried"
+        )
+    target = previous.snapshot.get("revises_plan_id")
+    if previous.plan_version_id:
+        target = read_plan(session, previous.plan_version_id).plan_id
+    return request_run(session, as_of, target)
+
+
+def _expire_runs(session: Session) -> None:
+    session.execute(
+        update(db.planning_runs)
+        .where(
+            db.planning_runs.c.status == "RUNNING",
+            db.planning_runs.c.deadline_at < datetime.now(UTC),
+        )
+        .values(
+            status="FAILED",
+            failure_reason="RUN_EXPIRED",
+            completed_at=datetime.now(UTC),
+        )
+    )
+
+
 def claim_run(session: Session) -> PlanningRun:
+    lock_inventory(session)
+    _expire_runs(session)
+    if session.execute(
+        select(db.planning_runs.c.id).where(db.planning_runs.c.status == "RUNNING")
+    ).first():
+        session.commit()
+        raise ApiError(
+            409, "RUN_IN_PROGRESS", "Only one agent attempt may run at a time"
+        )
     row = (
         session.execute(
             select(db.planning_runs)
@@ -109,9 +235,10 @@ def claim_run(session: Session) -> PlanningRun:
         .first()
     )
     if row is None:
+        session.commit()
         raise ApiError(409, "NO_QUEUED_RUN", "There is no queued assessment")
     now = datetime.now(UTC)
-    snapshot = _snapshot(session, row["as_of"], row["id"])
+    snapshot = {**row["snapshot"], **_snapshot(session, row["as_of"], row["id"])}
     session.execute(
         update(db.planning_runs)
         .where(db.planning_runs.c.id == row["id"])
@@ -128,12 +255,23 @@ def claim_run(session: Session) -> PlanningRun:
 
 
 def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
+    lock_inventory(session)
     run = get_run(session, run_id)
     if run.status != "RUNNING":
         raise ApiError(
             409, "RUN_NOT_CLAIMED", "Claim the assessment before using its tools"
         )
     snapshot = run.snapshot
+    if any(
+        not lot["coverage_complete"]
+        for lot in snapshot["inventory"]
+        if lot["status"] == "ACTIVE"
+    ):
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "Complete sales coverage or a current stocktake is required to certify inventory",
+        )
     quantities: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     for recipe in snapshot["recipes"]:
         quantities[recipe["ingredient_id"]] += Decimal(
@@ -188,7 +326,31 @@ def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
                 "NO_FEASIBLE_SUPPLIER",
                 f"No complete feasible offer for {ingredient}",
             )
-        offer = min(offers, key=lambda item: Decimal(str(item["unit_price"])))
+
+        def allocation(item: dict, shortage: Decimal = shortage) -> Decimal:
+            pack = Decimal(str(item["pack_size"]))
+            return (max(shortage, Decimal(str(item["moq"]))) / pack).to_integral_value(
+                rounding=ROUND_UP
+            ) * pack
+
+        offers = [
+            item
+            for item in offers
+            if allocation(item) <= Decimal(str(item["available_quantity"]))
+        ]
+        if not offers:
+            raise ApiError(
+                409,
+                "NO_FEASIBLE_SUPPLIER",
+                f"Available {ingredient} cannot cover the shortage",
+            )
+        offer = min(
+            offers,
+            key=lambda item: (
+                allocation(item) * Decimal(str(item["unit_price"]))
+                + Decimal(str(item["delivery_fee_sgd"]))
+            ),
+        )
         pack = Decimal(str(offer["pack_size"]))
         quantity = max(shortage, Decimal(str(offer["moq"])))
         quantity = (quantity / pack).to_integral_value(rounding=ROUND_UP) * pack
@@ -216,7 +378,7 @@ def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
     purchase = sum(
         (line["quantity"] * line["unit_price"] for line in lines), Decimal(0)
     )
-    return Candidate(
+    candidate = Candidate(
         forecast_id=snapshot["forecast_id"],
         inventory_snapshot_id=snapshot["inventory_snapshot_id"],
         lines=[PlanLine.model_validate(line) for line in lines],
@@ -224,6 +386,19 @@ def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
         delivery_cost=delivery_cost,
         total_expected_cost=purchase + delivery_cost,
     )
+    session.execute(
+        update(db.planning_runs)
+        .where(db.planning_runs.c.id == run_id)
+        .values(
+            snapshot={
+                **snapshot,
+                "forecast": body.model_dump(mode="json"),
+                "calculated_candidate": candidate.model_dump(mode="json"),
+            }
+        )
+    )
+    session.commit()
+    return candidate
 
 
 def _validate_candidate(snapshot: dict, candidate: Candidate) -> None:
@@ -292,8 +467,15 @@ def _validate_candidate(snapshot: dict, candidate: Candidate) -> None:
 
 
 def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun:
+    lock_inventory(session)
     run = get_run(session, run_id)
     if run.status == "SUCCEEDED":
+        if run.snapshot.get("completion") != body.model_dump(mode="json"):
+            raise ApiError(
+                409,
+                "COMPLETION_CONFLICT",
+                "Run already completed with a different result",
+            )
         return run
     if run.status != "RUNNING":
         raise ApiError(409, "RUN_NOT_RUNNING", "Only a claimed assessment can complete")
@@ -301,13 +483,27 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         session.execute(
             update(db.planning_runs)
             .where(db.planning_runs.c.id == run_id)
-            .values(status="FAILED", completed_at=datetime.now(UTC))
+            .values(
+                status="FAILED",
+                failure_reason="RUN_EXPIRED",
+                completed_at=datetime.now(UTC),
+            )
         )
         session.commit()
         raise ApiError(
             409, "RUN_EXPIRED", "Assessment deadline elapsed before completion"
         )
     if _revision(session) != run.input_revision:
+        session.execute(
+            update(db.planning_runs)
+            .where(db.planning_runs.c.id == run_id)
+            .values(
+                status="FAILED",
+                failure_reason="STALE_RUN_INPUT",
+                completed_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
         raise ApiError(
             409,
             "STALE_RUN_INPUT",
@@ -320,6 +516,57 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
             422, "INVALID_OUTCOME", "REVISE_PLAN requires exactly one candidate"
         )
     version_id = None
+    if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
+        calculated = run.snapshot.get("calculated_candidate")
+        if calculated is None:
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Run the deterministic tools before certifying a plan or no-purchase result",
+            )
+        target = run.snapshot.get("revises_plan_id")
+        current = (
+            session.execute(
+                select(db.plan_versions)
+                .where(
+                    db.plan_versions.c.plan_id == target,
+                    db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+                )
+                .order_by(db.plan_versions.c.version.desc())
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if current is None:
+            if body.outcome != "KEEP_CURRENT_PLAN" or calculated["lines"]:
+                raise ApiError(
+                    409,
+                    "NO_CURRENT_PLAN",
+                    "There is no current plan matching this decision",
+                )
+        else:
+            stored = read_plan(session, current["id"])
+            comparable = set(Candidate.model_fields) - {
+                "forecast_id",
+                "inventory_snapshot_id",
+            }
+            if Candidate.model_validate(calculated).model_dump(
+                include=comparable
+            ) != stored.model_dump(include=comparable):
+                raise ApiError(
+                    409,
+                    "PLAN_CHANGED",
+                    "Calculated purchases changed; publish a new pending version",
+                )
+            if (
+                body.outcome == "REQUEST_HUMAN_APPROVAL"
+                and current["status"] != "PENDING_APPROVAL"
+            ):
+                raise ApiError(
+                    409, "PLAN_NOT_PENDING", "Only a pending plan can request approval"
+                )
+            version_id = current["id"]
     if body.candidate:
         candidate = body.candidate
         snapshot = run.snapshot
@@ -334,14 +581,44 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
                 "Candidate must reference this run's frozen artifacts and have lines",
             )
         _validate_candidate(snapshot, candidate)
-        plan_id, version_id = str(uuid4()), str(uuid4())
+        if snapshot.get("calculated_candidate") != candidate.model_dump(mode="json"):
+            raise ApiError(
+                409,
+                "PLAN_INVALID",
+                "Candidate must match this run's deterministic tool result",
+            )
+        previous = (
+            session.execute(
+                select(db.plan_versions)
+                .where(db.plan_versions.c.plan_id == snapshot.get("revises_plan_id"))
+                .order_by(db.plan_versions.c.version.desc())
+                .limit(1)
+            )
+            .mappings()
+            .first()
+        )
+        plan_id = previous["plan_id"] if previous else str(uuid4())
+        version_number = previous["version"] + 1 if previous else 1
+        version_id = str(uuid4())
         now = datetime.now(UTC)
-        session.execute(insert(db.purchase_plans).values(id=plan_id, created_at=now))
+        if previous is None:
+            session.execute(
+                insert(db.purchase_plans).values(id=plan_id, created_at=now)
+            )
+        else:
+            session.execute(
+                update(db.plan_versions)
+                .where(
+                    db.plan_versions.c.plan_id == plan_id,
+                    db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+                )
+                .values(status="SUPERSEDED")
+            )
         session.execute(
             insert(db.plan_versions).values(
                 id=version_id,
                 plan_id=plan_id,
-                version=1,
+                version=version_number,
                 run_id=run_id,
                 status="PENDING_APPROVAL",
                 snapshot=snapshot,
@@ -370,12 +647,87 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         .values(
             status="SUCCEEDED",
             outcome=body.outcome,
+            escalation_reason=body.escalation_reason,
+            snapshot={**run.snapshot, "completion": body.model_dump(mode="json")},
             plan_version_id=version_id,
             completed_at=datetime.now(UTC),
         )
     )
     session.commit()
     return get_run(session, run_id)
+
+
+def decide_plan(
+    session: Session, version_id: str, body: PlanDecision, actor: str
+) -> PurchasePlanVersion:
+    lock_inventory(session)
+    plan = read_plan(session, version_id)
+    if body.plan_id != plan.plan_id or body.plan_version != plan.version:
+        raise ApiError(
+            409,
+            "PLAN_VERSION_MISMATCH",
+            "Decision must name the exact displayed plan and version",
+        )
+    decision = body.decision
+    if plan.status == decision:
+        event = (
+            session.execute(
+                select(db.events).where(
+                    db.events.c.type
+                    == ("PLAN_APPROVED" if decision == "APPROVED" else "PLAN_REJECTED"),
+                    db.events.c.payload["version_id"].as_string() == version_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if event is None or event["payload"].get("instructions") != body.instructions:
+            raise ApiError(
+                409,
+                "DECISION_CONFLICT",
+                "This version already has a different recorded decision",
+            )
+        return plan
+    if plan.status != "PENDING_APPROVAL":
+        raise ApiError(
+            409,
+            "PLAN_NOT_PENDING",
+            "Only a pending exact version can receive a decision",
+        )
+    certified_revision = session.execute(
+        select(db.planning_runs.c.input_revision)
+        .where(
+            db.planning_runs.c.plan_version_id == version_id,
+            db.planning_runs.c.status == "SUCCEEDED",
+            db.planning_runs.c.outcome.in_(
+                ("REVISE_PLAN", "KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL")
+            ),
+        )
+        .order_by(db.planning_runs.c.completed_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if decision == "APPROVED" and _revision(session) != certified_revision:
+        raise ApiError(
+            409, "PLAN_STALE", "Operational inputs changed; reassess before approval"
+        )
+    session.execute(
+        update(db.plan_versions)
+        .where(db.plan_versions.c.id == version_id)
+        .values(status=decision)
+    )
+    record_event(
+        session,
+        "PLAN_APPROVED" if decision == "APPROVED" else "PLAN_REJECTED",
+        actor,
+        {
+            "plan_id": plan.plan_id,
+            "version_id": version_id,
+            "version": plan.version,
+            "instructions": body.instructions,
+        },
+    )
+    session.commit()
+    return read_plan(session, version_id)
 
 
 def read_plan(session: Session, version_id: str) -> PurchasePlanVersion:

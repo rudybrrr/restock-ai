@@ -72,6 +72,39 @@ def delivery_event(
 
 def create_delivery(session: Session, body: DeliveryCreate, actor: str) -> Delivery:
     lock_inventory(session)
+    if body.source_plan_line_id is not None:
+        source = (
+            session.execute(
+                select(db.purchase_plan_lines).where(
+                    db.purchase_plan_lines.c.id == body.source_plan_line_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if source is None or source["ingredient_id"] != body.ingredient_id:
+            raise ApiError(
+                422,
+                "INVALID_PLAN_SOURCE",
+                "Source line must exist and recommend this ingredient",
+            )
+    if body.cycle_date is not None:
+        ingredient = (
+            session.execute(
+                select(db.ingredients).where(db.ingredients.c.id == body.ingredient_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if ingredient is None:
+            raise ApiError(422, "INVALID_CYCLE", "Unknown ingredient")
+        offset = (body.cycle_date - ingredient["starting_date"]).days
+        if offset < 0 or offset % ingredient["interval_days"]:
+            raise ApiError(
+                422,
+                "INVALID_CYCLE",
+                "Cycle date must follow the ingredient's anchored interval",
+            )
     offer = session.execute(
         select(db.supplier_offers.c.id).where(
             db.supplier_offers.c.supplier_id == body.supplier_id,

@@ -16,6 +16,12 @@ Quantity = Annotated[
 ]
 
 EventType = Literal[
+    "PROMOTION_CREATED",
+    "PROMOTION_CHANGED",
+    "SUPPLIER_AVAILABILITY_CHANGED",
+    "SUPPLIER_PRICE_CHANGED",
+    "SUPPLIER_STATUS_CHANGED",
+    "SUPPLIER_RELIABILITY_UPDATED",
     "DAILY_UPDATE_SUBMITTED",
     "EXTERNAL_ORDER_RECORDED",
     "DELIVERY_UPDATED",
@@ -26,6 +32,9 @@ EventType = Literal[
     "SALES_UPDATED",
     "INVENTORY_LOT_EXPIRED",
     "MANUAL_REASSESSMENT_REQUESTED",
+    "PLAN_APPROVED",
+    "PLAN_REJECTED",
+    "ORDER_CYCLE_UPDATED",
 ]
 
 
@@ -87,7 +96,23 @@ class ManualAssessmentEvent(BaseModel):
     payload: dict
 
 
+class SalesComparison(BaseModel):
+    menu_item_id: str
+    daily_total: int
+    batch_total: int
+    difference: int | None
+
+
+class SalesReconciliation(BaseModel):
+    period_start: AwareDatetime
+    period_end: AwareDatetime
+    batch_ids: list[str]
+    status: Literal["MATCHED", "RECONCILIATION_DISCREPANCY", "INCOMPLETE_COVERAGE"]
+    dishes: list[SalesComparison]
+
+
 class DailyRevision(DailyDraft):
+    reconciliation: SalesReconciliation | None = None
     model_config = ConfigDict(extra="ignore")
     id: str
     day: date
@@ -128,6 +153,8 @@ class DeliveryCreate(BaseModel):
     expected_quantity: Annotated[Quantity, Field(gt=0)]
     expected_at: AwareDatetime
     ordered_at: AwareDatetime
+    source_plan_line_id: str | None = None
+    cycle_date: date | None = None
 
 
 class DeliveryUpdate(BaseModel):
@@ -259,8 +286,89 @@ class DeliveryEvent(BaseModel):
     payload: DeliveryEventPayload
 
 
+class PlanDecisionEventPayload(BaseModel):
+    plan_id: str
+    version_id: str
+    version: int
+    instructions: str | None = None
+
+
+class PlanDecisionEvent(BaseModel):
+    id: str
+    type: Literal["PLAN_APPROVED", "PLAN_REJECTED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: PlanDecisionEventPayload
+
+
+class CycleEventPayload(BaseModel):
+    ingredient_id: str
+    scheduled_date: date
+    status: Literal["ORDERED", "SKIPPED"]
+    note: str | None = None
+
+
+class CycleEvent(BaseModel):
+    id: str
+    type: Literal["ORDER_CYCLE_UPDATED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: CycleEventPayload
+
+
+class PromotionEventPayload(BaseModel):
+    promotion_id: str
+    revision: int
+    name: str
+    start_date: date
+    end_date: date
+    menu_item_ids: list[str]
+    demand_multiplier: Decimal
+    active: bool
+    effective_at: AwareDatetime
+
+
+class PromotionEvent(BaseModel):
+    id: str
+    type: Literal["PROMOTION_CREATED", "PROMOTION_CHANGED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: PromotionEventPayload
+
+
+class SupplierEventPayload(BaseModel):
+    offer_id: str
+    field: Literal[
+        "unit_price", "available_quantity", "current_status", "recent_on_time_rate"
+    ]
+    previous: str | None
+    value: str | None
+    effective_at: AwareDatetime
+
+
+class SupplierEvent(BaseModel):
+    id: str
+    type: Literal[
+        "SUPPLIER_AVAILABILITY_CHANGED",
+        "SUPPLIER_PRICE_CHANGED",
+        "SUPPLIER_STATUS_CHANGED",
+        "SUPPLIER_RELIABILITY_UPDATED",
+    ]
+    timestamp: AwareDatetime
+    source: str
+    payload: SupplierEventPayload
+
+
 Event = Annotated[
-    DailyEvent | DeliveryEvent | SalesBatchEvent | ExpiryEvent | ManualAssessmentEvent,
+    DailyEvent
+    | DeliveryEvent
+    | SalesBatchEvent
+    | ExpiryEvent
+    | ManualAssessmentEvent
+    | PlanDecisionEvent
+    | CycleEvent
+    | PromotionEvent
+    | SupplierEvent,
     Field(discriminator="type"),
 ]
 

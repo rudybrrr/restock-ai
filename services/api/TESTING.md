@@ -4,6 +4,10 @@ This guide uses the seeded local demo. It explains both credentials and provides
 available daily-update and delivery APIs. Start PostgreSQL, apply migrations, seed the database, and run the API
 as described in [README.md](README.md), then open [Swagger UI](http://localhost:8000/docs).
 
+For promotion/supplier changes, sales reconciliation, plan decisions and ordering occasions, see the
+[current backend handover](../../docs/BACKEND_HANDOVER.md). The ML/agent implementation is deferred to
+teammates. The optional development calculator is explicitly labelled and is not the final optimiser.
+
 ## Configure test credentials
 
 Set distinct values in your local `.env` and restart the API:

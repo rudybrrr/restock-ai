@@ -1,14 +1,16 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, insert, select, text
+from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from src import database as db
+from src.assessment_queue import EXPLICIT_TRIGGERS, enqueue_event
 from src.errors import ApiError
 from src.operations_schemas import DailyDraft, EventType
+from src.reconciliation import reconcile_sales
 
 
 def lock_inventory(session: Session) -> None:
@@ -18,7 +20,7 @@ def lock_inventory(session: Session) -> None:
 
 def record_event(
     session: Session, event_type: EventType, actor: str, payload: dict
-) -> None:
+) -> str:
     event_id = str(uuid4())
     now = datetime.now(UTC)
     session.execute(
@@ -39,6 +41,12 @@ def record_event(
             timestamp=now,
         )
     )
+    if event_type in EXPLICIT_TRIGGERS:
+        effective_at = datetime.fromisoformat(
+            payload.get("effective_at") or payload["cutoff"]
+        )
+        enqueue_event(session, event_id, event_type, effective_at)
+    return event_id
 
 
 def save_draft(session: Session, day: date, body: DailyDraft) -> DailyDraft:
@@ -133,6 +141,7 @@ def record_daily_revision(
     session: Session, day: date, body: DailyDraft, actor: str
 ) -> dict:
     """Append a validated observation inside the caller's inventory transaction."""
+    expire_lots(session, body.cutoff, actor)
     revision = len(read_day(session, day)["revisions"]) + 1
     row = {
         "id": str(uuid4()),
@@ -141,6 +150,7 @@ def record_daily_revision(
         "cutoff": body.cutoff,
         "recorded_at": datetime.now(UTC),
         "actor": actor,
+        "reconciliation": reconcile_sales(session, day, body.cutoff, body.sales),
         "payload": body.model_dump(mode="json"),
     }
     session.execute(insert(db.daily_revisions).values(**row))
@@ -172,3 +182,34 @@ def record_daily_revision(
         },
     )
     return {**row, **body.model_dump()}
+
+
+def expire_lots(session: Session, as_of: datetime, actor: str) -> None:
+    singapore = ZoneInfo("Asia/Singapore")
+    expired = (
+        session.execute(
+            select(db.inventory_lots).where(
+                db.inventory_lots.c.expiry_date < as_of.astimezone(singapore).date(),
+                db.inventory_lots.c.status == "ACTIVE",
+            )
+        )
+        .mappings()
+        .all()
+    )
+    for lot in expired:
+        session.execute(
+            update(db.inventory_lots)
+            .where(db.inventory_lots.c.id == lot["id"])
+            .values(status="EXPIRED")
+        )
+        record_event(
+            session,
+            "INVENTORY_LOT_EXPIRED",
+            actor,
+            {
+                "lot_id": lot["id"],
+                "effective_at": datetime.combine(
+                    lot["expiry_date"] + timedelta(days=1), time.min, singapore
+                ).isoformat(),
+            },
+        )

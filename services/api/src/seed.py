@@ -1,7 +1,7 @@
 """Insert the fixed, synthetic 2026-02-15 demo baseline without overwriting data."""
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -28,6 +28,7 @@ class IngredientSeed:
     unit: Literal["kg", "litres", "pieces"]
     opening_quantity: Decimal
     interval_days: int
+    shelf_life_days: int
 
 
 def seed() -> None:
@@ -41,14 +42,14 @@ def seed() -> None:
         ("vegetable-noodles", "Vegetable noodles"),
     ]
     ingredient_seeds = [
-        IngredientSeed("chicken", "Chicken", "kg", Decimal(12), 1),
-        IngredientSeed("rice", "Rice", "kg", Decimal(30), 14),
-        IngredientSeed("noodles", "Noodles", "kg", Decimal(15), 3),
-        IngredientSeed("eggs", "Eggs", "pieces", Decimal(120), 3),
-        IngredientSeed("tofu", "Tofu", "kg", Decimal(10), 2),
-        IngredientSeed("vegetables", "Vegetables", "kg", Decimal(18), 1),
-        IngredientSeed("oil", "Cooking oil", "litres", Decimal(8), 7),
-        IngredientSeed("soy-sauce", "Soy sauce", "litres", Decimal(6), 7),
+        IngredientSeed("chicken", "Chicken", "kg", Decimal(12), 1, 3),
+        IngredientSeed("rice", "Rice", "kg", Decimal(30), 14, 90),
+        IngredientSeed("noodles", "Noodles", "kg", Decimal(15), 3, 4),
+        IngredientSeed("eggs", "Eggs", "pieces", Decimal(120), 3, 14),
+        IngredientSeed("tofu", "Tofu", "kg", Decimal(10), 2, 3),
+        IngredientSeed("vegetables", "Vegetables", "kg", Decimal(18), 1, 2),
+        IngredientSeed("oil", "Cooking oil", "litres", Decimal(8), 7, 120),
+        IngredientSeed("soy-sauce", "Soy sauce", "litres", Decimal(6), 7, 90),
     ]
     recipe_data = {
         "chicken-rice": {"chicken": ".150", "rice": ".100", "soy-sauce": ".010"},
@@ -66,6 +67,18 @@ def seed() -> None:
         ("fresh", "Fresh Foods"),
         ("pantry", "Pantry Supply"),
         ("market", "Market Supply"),
+    ]
+    # Synthetic demo tradeoffs, not real supplier quotes or food-storage guidance.
+    # Fresh is the standard offer, Pantry is cheaper/bulk/slower, Market is urgent.
+    terms = {
+        "fresh": (Decimal("1.00"), 200, 1, 1, 480, ".9700", 5, 12),
+        "pantry": (Decimal("0.85"), 300, 10, 5, 1440, ".9400", 8, 20),
+        "market": (Decimal("1.25"), 80, 1, 1, 120, ".9900", 12, 25),
+    }
+    delivery_slots = [
+        (observed.replace(hour=hour) + timedelta(days=day)).isoformat()
+        for day in range(1, 30)
+        for hour in (8, 14, 18)
     ]
     source = "https://www.mom.gov.sg/newsroom/press-releases/2025/0616-public-holidays-for-2026"
     try:
@@ -112,26 +125,31 @@ def seed() -> None:
                         "id": f"{supplier}-{ingredient.id}",
                         "supplier_id": supplier,
                         "ingredient_id": ingredient.id,
-                        "unit_price": Decimal("4.50") + index,
-                        "available_quantity": Decimal(200),
-                        "moq": Decimal(1),
-                        "pack_size": Decimal(1),
-                        "lead_time_minutes": 480,
+                        "unit_price": ((Decimal("4.50") + index) * multiplier).quantize(
+                            Decimal(".01")
+                        ),
+                        "available_quantity": Decimal(capacity),
+                        "moq": Decimal(moq),
+                        "pack_size": Decimal(pack),
+                        "lead_time_minutes": lead_time,
                         "order_cutoff": {
                             "kind": "LOCAL_TIME",
                             "local_time": "23:00:00",
                             "timezone": "Asia/Singapore",
                         },
-                        "feasible_delivery_at": ["2026-02-16T08:00:00+08:00"],
+                        "feasible_delivery_at": delivery_slots,
                         "current_status": "AVAILABLE",
-                        "recent_on_time_rate": Decimal(".9500"),
-                        "shelf_life_days_on_arrival": 5,
-                        "delivery_fee_sgd": Decimal(5),
-                        "emergency_fee_sgd": Decimal(12),
+                        "recent_on_time_rate": Decimal(reliability),
+                        "shelf_life_days_on_arrival": ingredient.shelf_life_days,
+                        "delivery_fee_sgd": Decimal(delivery_fee),
+                        "emergency_fee_sgd": Decimal(emergency_fee),
                         "observed_at": observed,
                     }
                     for index, ingredient in enumerate(ingredient_seeds)
                     for supplier, _ in supplier_data
+                    for multiplier, capacity, moq, pack, lead_time, reliability, delivery_fee, emergency_fee in [
+                        terms[supplier]
+                    ]
                 ],
             )
             insert_if_absent(
@@ -150,7 +168,8 @@ def seed() -> None:
                     "id": f"{ingredient.id}-01",
                     "ingredient_id": ingredient.id,
                     "received_at": datetime.fromisoformat("2026-02-15T08:00:00+08:00"),
-                    "expiry_date": date(2026, 2, 18),
+                    "expiry_date": date(2026, 2, 15)
+                    + timedelta(days=ingredient.shelf_life_days),
                     "initial_quantity": ingredient.opening_quantity,
                 }
                 for ingredient in ingredient_seeds
