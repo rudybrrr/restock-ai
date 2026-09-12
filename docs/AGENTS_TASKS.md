@@ -239,19 +239,21 @@
 
 > Implement first because supplier disruption is the strongest early replanning route.
 
-- [ ] Create Procurement & Supply Agent
-  - [ ] Narrow instructions
-  - [ ] Strict input / output schema
-  - [ ] Hard tool allowlist
-  - [ ] No agent-spawn permission
+- [x] Create Procurement & Supply Agent foundation
+  - [x] Narrow instructions
+  - [x] Strict input / output schema
+  - [x] Hard tool allowlist
+  - [x] No agent-spawn permission
 
 - [ ] Connect procurement tools
+  - [x] Define injected canonical `ToolRequest` / `ToolResult` / backend-error port
   - [ ] `get_supplier_options`
   - [ ] `check_supplier_feasibility`
   - [ ] `enumerate_supplier_allocations`
   - [ ] `optimise_purchase_plan`
   - [ ] `validate_purchase_plan`
   - [ ] `get_approval_requirement`
+  - Blocked: production supplier, optimiser, validator, and policy adapters still await the shared deterministic kernels.
 
 - [ ] Support procurement constraints
   - [ ] Availability
@@ -263,22 +265,24 @@
   - [ ] Delivery state
   - [ ] Bounded 2–3 supplier allocation
 
-- [ ] Handle optimiser outcomes correctly
-  - [ ] Feasible result
-  - [ ] `NO_FEASIBLE_SUPPLIER`
-  - [ ] `CALCULATION_INCOMPLETE / SEARCH_LIMIT_REACHED`
-  - [ ] `TOOL_FAILURE`
-  - [ ] Never treat incomplete search as proven infeasibility
+- [x] Handle typed optimiser outcomes at the injected tool boundary
+  - [x] Feasible result requires trusted candidate and validation evidence
+  - [x] `NO_FEASIBLE_SUPPLIER`
+  - [x] `CALCULATION_INCOMPLETE / SEARCH_LIMIT_REACHED`
+  - [x] `TOOL_FAILURE`
+  - [x] Never treat incomplete search as proven infeasibility
 
 - [ ] Implement supplier-disruption route
   - [ ] Deterministic materiality evidence exists
-  - [ ] Coordinator routes Procurement only initially
+  - [x] Coordinator routes Procurement only initially
   - [ ] Shared kernels run
   - [ ] Candidate returned
   - [ ] Backend validates / publishes new plan if needed
 
 - [ ] Prove this specialist earns its existence
+  - [x] Add structural scripted coverage for context-sensitive tool sequencing
   - [ ] At least one scenario where contextual reasoning changes tool sequence or follow-up investigation
+  - Pending: final retention proof requires the real model/tool path or a shared evaluation scenario.
 
 - [ ] Review and commit Pass 3
 

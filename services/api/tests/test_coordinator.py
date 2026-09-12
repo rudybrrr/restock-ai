@@ -366,6 +366,25 @@ def test_trace_uses_canonical_audit_events_and_records_call_order() -> None:
     executor = FakeExecutor()
     result = Coordinator(control_plane, executor, clock=lambda: NOW).run(invocation())
     assert result.trace[0].specialist_call_id == "RUN-1-TASK-1"
-    assert result.trace[0].reason_codes == ["DEMAND", "CALL_ORDER_1"]
+    assert result.trace[0].specialist is SpecialistType.DEMAND
+    assert result.trace[0].call_sequence == 1
+    assert result.trace[0].reason_codes == []
     assert result.trace[-1].final_outcome is result.completion.outcome
     assert control_plane.recorded[0][0] == result.completion
+
+
+def test_specialist_escalation_detail_is_preserved_by_coordinator() -> None:
+    from src.agent_contracts import EscalationDetail
+
+    executor = FakeExecutor(
+        lambda delegation, count: completed(
+            delegation,
+            status=SpecialistStatus.ESCALATED,
+            recommended_next_step=RecommendedNextStep.ESCALATE,
+            escalation_reason=EscalationReason.CALCULATION_INCOMPLETE,
+            escalation_detail=EscalationDetail.SEARCH_LIMIT_REACHED,
+        )
+    )
+    result = Coordinator(FakeControlPlane(), executor, clock=lambda: NOW).run(invocation())
+    assert result.completion.escalation_reason is EscalationReason.CALCULATION_INCOMPLETE
+    assert result.completion.escalation_detail is EscalationDetail.SEARCH_LIMIT_REACHED

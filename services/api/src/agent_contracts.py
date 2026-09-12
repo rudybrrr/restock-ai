@@ -457,7 +457,10 @@ class AuditEvent(ContractModel):
     plan_version: PositiveInt | None = None
     run_id: Identifier | None = None
     specialist_call_id: Identifier | None = None
+    specialist: SpecialistType | None = None
+    call_sequence: PositiveInt | None = None
     tool_call_id: Identifier | None = None
+    attempt_number: PositiveInt | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     requested_outcome: AgentOutcome | None = None
     from_plan_status: PlanStatus | None = None
@@ -473,6 +476,12 @@ class AuditEvent(ContractModel):
             raise ValueError("plan id and version must be supplied together")
         if (self.from_plan_status is None) != (self.to_plan_status is None):
             raise ValueError("plan transition statuses must be supplied together")
+        if self.specialist is not None and self.specialist_call_id is None:
+            raise ValueError("specialist identity requires a specialist call id")
+        if self.call_sequence is not None and self.specialist_call_id is None:
+            raise ValueError("call sequence requires a specialist call id")
+        if self.attempt_number is not None and self.tool_call_id is None:
+            raise ValueError("attempt number requires a tool call id")
         return self
 
 

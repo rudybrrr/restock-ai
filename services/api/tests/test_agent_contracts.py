@@ -380,3 +380,33 @@ def test_audit_event_is_business_level_and_strict() -> None:
                 "chain_of_thought": "must not be accepted",
             }
         )
+
+
+def test_audit_event_has_backward_compatible_structural_agent_metadata() -> None:
+    event = AuditEvent(
+        audit_event_id="AUDIT-SPECIALIST-1",
+        timestamp=NOW,
+        actor="COORDINATOR",
+        action=AuditAction.SPECIALIST_CALLED,
+        state_revision="STATE-1",
+        run_id="RUN-1",
+        specialist_call_id="TASK-1",
+        specialist=SpecialistType.PROCUREMENT,
+        call_sequence=1,
+        summary="Called the Procurement specialist.",
+    )
+    assert event.specialist is SpecialistType.PROCUREMENT
+    assert event.call_sequence == 1
+    assert event.reason_codes == []
+
+    legacy = AuditEvent(
+        audit_event_id="AUDIT-LEGACY-1",
+        timestamp=NOW,
+        actor="backend",
+        action=AuditAction.RUN_COMPLETED,
+        state_revision="STATE-1",
+        summary="Legacy events remain valid without optional structural metadata.",
+    )
+    assert legacy.specialist is None
+    assert legacy.call_sequence is None
+    assert legacy.attempt_number is None

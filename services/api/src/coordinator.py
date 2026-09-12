@@ -15,6 +15,7 @@ from src.agent_contracts import (
     AgentOutcome,
     AuditAction,
     AuditEvent,
+    EscalationDetail,
     EscalationReason,
     EventType,
     EvidenceCategory,
@@ -253,6 +254,7 @@ class Coordinator:
                         trace,
                         result.summary,
                         result.escalation_reason,
+                        result.escalation_detail,
                     )
                 final_step = result.recommended_next_step
                 if result.candidate_result_ref is not None:
@@ -462,6 +464,7 @@ class Coordinator:
         trace: list[AuditEvent],
         summary: str,
         escalation_reason: EscalationReason | None = None,
+        escalation_detail: EscalationDetail | None = None,
         *,
         candidate_ref: EvidenceRef | None = None,
     ) -> CoordinatorExecution:
@@ -471,6 +474,7 @@ class Coordinator:
             refs,
             summary,
             escalation_reason,
+            escalation_detail,
             candidate_ref,
         )
         return self._record(invocation, completion, trace)
@@ -512,6 +516,7 @@ class Coordinator:
                     completion.evidence_refs,
                     "The Coordinator decision could not be recorded.",
                     EscalationReason.TOOL_FAILURE,
+                    None,
                 )
                 trace[-1] = trace[-1].model_copy(
                     update={
@@ -529,6 +534,7 @@ class Coordinator:
         refs: Sequence[EvidenceRef],
         summary: str,
         escalation_reason: EscalationReason | None = None,
+        escalation_detail: EscalationDetail | None = None,
         candidate_ref: EvidenceRef | None = None,
     ) -> AgentCompletionPublication:
         return AgentCompletionPublication(
@@ -536,6 +542,7 @@ class Coordinator:
             captured_state_revision=invocation.captured_state_revision,
             outcome=outcome,
             escalation_reason=escalation_reason,
+            escalation_detail=escalation_detail,
             candidate_result_ref=candidate_ref,
             affected_plan_id=invocation.affected_plan_id,
             affected_plan_version=invocation.affected_plan_version,
@@ -561,8 +568,9 @@ class Coordinator:
             plan_version=invocation.affected_plan_version,
             run_id=invocation.run_id,
             specialist_call_id=delegation.task_id,
+            specialist=delegation.specialist,
+            call_sequence=call_order,
             evidence_refs=delegation.context_refs,
-            reason_codes=[delegation.specialist.value, f"CALL_ORDER_{call_order}"],
             summary=f"Called {delegation.specialist.value} specialist.",
         )
 
