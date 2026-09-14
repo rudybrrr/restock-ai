@@ -2,12 +2,14 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.2, 14 September 2026<br>
+**Version:** 1.3, 14 September 2026<br>
 **Status:** Implemented numerical foundation, with live integration contracts awaiting confirmation.
 
 ## 1. Start here
 
-ReStock helps a restaurant maintain purchasing recommendations as demand, stock and supplier conditions change. Aniq's current implementation calculates daily baseline forecasts, timed dish demand, ingredient requirements and one-day projected inventory. It does not yet generate the final purchasing recommendation or connect to the live agent workflow.
+ReStock helps a restaurant maintain purchasing recommendations as demand, stock and supplier conditions change. This revision includes seasonal forecasting, timed dish demand, recipe conversion, one-day inventory projection, reproducible development history and a pure one-day cash procurement search with independent candidate validation. Live backend and agent adapters remain pending.
+
+Use the [feature branch](https://github.com/rudybrrr/restock-ai/tree/feat/forecasting) for the complete source, tests and this handover. The historical commit below covers the earlier foundation only. For a consistent review, use the same resolved feature-branch commit for source, tests and documentation.
 
 **What teammates need to do now:**
 
@@ -32,7 +34,7 @@ This handover establishes what is available for integration review. It does not 
 | Numerical and supporting source | [services/api/src](https://github.com/rudybrrr/restock-ai/tree/feat/forecasting/services/api/src) |
 | Tests and fixtures | [services/api/tests](https://github.com/rudybrrr/restock-ai/tree/feat/forecasting/services/api/tests) |
 
-**Publication record:** the reviewed numerical implementation is published on `origin/feat/forecasting` at [commit `e3c66b64f3bc53c7fc036c5d063222c02082d7ff`](https://github.com/rudybrrr/restock-ai/commit/e3c66b64f3bc53c7fc036c5d063222c02082d7ff). Its 15 implementation, test, fixture and documentation files were verified readable on GitHub. This handover is added in a subsequent documentation-only commit at `docs/ML_HANDOVER.md`; resolve the feature branch to that commit when reviewing the document and implementation together. Teammates can inspect the implementation, tests and handover directly on GitHub. Main remains separate, and source publication does not establish live integration or approval of #16 contracts.
+**Historical publication record:** [e3c66b64f3bc53c7fc036c5d063222c02082d7ff](https://github.com/rudybrrr/restock-ai/commit/e3c66b64f3bc53c7fc036c5d063222c02082d7ff) published the earlier 15-file numerical foundation. Documentation updates followed through `d298c658cae302c2aa19ea7ba53ecbd1c864ef00`. Neither commit contains the subsequent synthetic-history or procurement implementation. Use the feature-branch links above for this revision's modules and documentation. Source publication does not establish live integration or approval of #16 contracts.
 
 | Item | Historical inspection record |
 | --- | --- |
@@ -61,14 +63,48 @@ Paths below are relative to the repository root.
 | `services/api/src/requirements.py` | `calculate_requirements` and `sum_recipe_usage`: convert fractional served portions through the current recipes using exact Decimal arithmetic | No pack rounding, supplier allocation or implicit unit conversion |
 | `services/api/src/service_buckets.py` | `allocate_service_buckets`: allocates a complete daily forecast into explicit dated half-hour service intervals while preserving totals | Supplied service profile is an assumption, not observed consumption |
 | `services/api/src/inventory_projection.py` | `project_inventory`: consumes explicit opening stock, projected requirements and outstanding supply; calculates balances, expiry, unmet demand and first shortage intervals | One service day, fixture-based; no database reads, agent calls or purchasing decision |
+| [synthetic_history.py](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/services/api/src/synthetic_history.py) | Configurable deterministic fully supplied development history, independent random streams, CSV/JSON manifests and offline validation including configuration/service-interval consistency | No physical stockout simulator or agreed full training dataset; generated data stays outside Git/database paths |
+| [history_dataset.py](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/services/api/src/history_dataset.py) | Validates observations, loads issue-time-visible daily revisions/promotions, and selects chronological target partitions | Observation reader never loads evaluator truth/configuration; no model fitting or multi-horizon feature builder |
+| [procurement.py](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/services/api/src/procurement.py) | `search_procurement` and independently callable `validate_candidate`: finite one-day cash search, timed feasibility, shared capacity and explicit constraints | Fixture policies, opening-time order placement, no live adapter, multi-day or full economic objective |
 
 The earlier `planning.py` and `sales.py` edits reuse `sum_recipe_usage`. The projector task did not modify those files or backend historical replay. No shared FEFO helper was extracted.
 
 Tests are in `services/api/tests/test_forecasting.py`, `test_requirements.py`, `test_service_buckets.py`, `test_inventory_projection.py`, and the catalogue comparison in `test_seed_contract.py`. Fixtures are `seasonal_baseline_v3.json`, `service_profile_v2.json` and `inventory_projection_v1.json` under `services/api/tests/fixtures/`.
 
-Read `docs/ML_NUMERICAL_FUNCTIONS.md` for detailed local Python semantics and the mapping of all twelve #15 acceptance criteria.
+Additional tests are `test_synthetic_history.py` and `test_procurement.py`, with intentional small configurations `history_development_v1.json` and `procurement_v1.json`. Generated observations and evaluator outputs are reproducible artifacts excluded from Git.
 
-**Not completed by this handover:** full synthetic training dataset, trained/evaluated forecasting model, multi-day stock continuation, procurement optimiser, complete cost/policy evaluation, live input adapter, persisted projection evidence, agent business-tool integration or final application acceptance. Do not use the numerical test results as evidence that those features exist.
+Read `docs/ML_NUMERICAL_FUNCTIONS.md` for detailed Python semantics and the mapping of all twelve #15 acceptance criteria.
+
+**Not completed by this handover:** full synthetic training dataset, trained/evaluated forecasting model, multi-day stock continuation/procurement, complete economic cost/policy evaluation, live input adapter, persisted projection evidence, agent business-tool integration or final application acceptance. Do not use the numerical test results as evidence that those features exist.
+
+### Development historical dataset
+
+The tracked configuration defines **84 fully supplied synthetic days, 1 September–23 November 2025**, in Singapore time. All five dishes share these target-date partitions:
+
+| Partition | Inclusive dates | Days |
+|---|---|---:|
+| Warm-up | 1–28 September 2025 | 28 |
+| Train | 29 September–26 October 2025 | 28 |
+| Validation | 27 October–9 November 2025 | 14 |
+| Test | 10–23 November 2025 | 14 |
+
+The declared development simulation start is 25 November 2025 at 08:00 +08:00; no simulation is executed. Generation produces 840 daily-revision rows, 5,880 batch rows and two published promotion rows. Evaluator-only outputs contain 420 attempted-demand and 672 ingredient-usage rows. Those generated outputs are not committed. The configuration, generator, tests and reproduction commands are included.
+
+This **development dataset is not the final approved training/evaluation dataset**. The full historical calendar, simulation start, catalogue pins and generation assumptions still require explicit confirmation. Current catalogue/recipes are used counterfactually throughout development history. Separate demand/timing/error seeds, weekday effects, mild trend, BOGO atomic pairs and full supply are declared assumptions, not empirical restaurant estimates.
+
+Daily reports become available at 22:00; next-day corrections replace complete submissions. Missing observations remain missing and explicit zero remains zero. The reader filters effective and available times, exposes promotions only after publication, and never adds batches to final totals. It reads only the observation directory, not hidden parameters or attempted-demand truth. Offline validation additionally checks evaluator accounting and uses the existing dated allocator to compare normalized configuration service intervals with the observation manifest. Lunch-only/shifted mismatches are rejected even after hashes are refreshed; reordered equivalent periods pass. Sampled transaction shares need not exactly match profile weights.
+
+### Procurement interfaces and examples
+
+`search_procurement(ProcurementInputs)` enumerates all pack counts up to supplied new-capacity bounds for each declared opportunity. `validate_candidate(inputs, PurchaseCandidate)` checks supplied lines and claimed cash without invoking search. They reuse existing catalogue/offer models, recipe conversion and the inventory projector.
+
+Inputs explicitly supply issue/opening and one-day coverage, projected dish buckets plus cross-checked dated ingredient requirements, complete opening/commitment manifests, knowledge/revision evidence, approved offers, ordering opportunities, budget/storage/safety, fee/expiry/tie policies and search work limits. Outputs distinguish candidate feasibility, completed enumeration and optimality within the supplied finite domain. Missing evidence and unsupported timing/precision are incomplete; a search-limit incumbent is diagnostic only.
+
+The small reference domain supplies only Fresh chicken/noodles with capacities 8/3 and one arrival. All **36 combinations** are checked. Chicken need 24.6 minus opening 17 leaves 7.6 kg, rounded to 8 purchase packs; noodles need 18 minus 15 leaves 3 kg. Acquisition `8×4.50+3×6.50=55.50`, plus one supplier/arrival fee of S$5 gives **S$60.50**, with no unmet demand. This is not an optimum over omitted suppliers. Both lines emergency add one exclusive S$12 fee, giving S$72.50.
+
+A separate vegetable fixture needs 2.5 kg with 2 kg opening, capacity 2, pack size 1, price S$9.50 and fee S$5. Work limit 2 checks quantities 0 and 1 and finds a feasible S$14.50 incumbent, but returns **INCOMPLETE / SEARCH_LIMIT_REACHED (2/3)** with no actionable candidate. Budget-zero complete enumeration instead reports domain infeasibility with budget/shortage evidence, not a generic supplier failure.
+
+Fee grouping applies to new lines by supplier/arrival; it does not infer co-shipping discounts with fixed commitments. Fixture expiry is usable-through arrival date plus supplied shelf-life days; tie order is cash, fewer lines, stable IDs. New purchases use the existing Delivery model's 12-digit/3-decimal bounds without rounding finer projected demand. Only orders placed at opening/issue time are supported. These fixture policies are not shared production agreements; reliability remains context-only. Full semantics and executable checks are in the [numerical documentation](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/docs/ML_NUMERICAL_FUNCTIONS.md).
 
 ## 4. Shared calculation rules
 
@@ -212,12 +248,20 @@ Main and the inspected agent branch do not yet expose the same completion vocabu
 
 ## 9. Verification and how to review locally
 
+Fresh publication verification on 14 September 2026: **329 numerical tests passed**
+(193 foundation + 68 dataset + 68 procurement), two existing dependency warnings,
+10.97 seconds. API-wide Ruff and Pyright passed (zero type errors/warnings); all
+five new Python source/test files passed formatting. The portable development
+generation and offline-validation commands in the numerical documentation passed,
+producing the 84-day row counts above in a temporary directory outside the checkout.
+No database, Bedrock, frontend or end-to-end suite was run. Historical results follow.
+
 | Evidence | Result and limitation |
 | --- | --- |
-| Local Codex numerical suite | 193 passed, including 84 projector cases |
+| Historical projector suite | 193 passed, including 84 projector cases; predates dataset/procurement work |
 | Independent review execution | The same 193 numerical tests passed in an isolated review environment; this did not run PostgreSQL integration fixtures |
-| Local Codex full backend suite | Reported 241 passed with two existing dependency warnings; not independently rerun in this review |
-| Local Codex static checks | Reported Ruff, Pyright, formatting and diff checks passed |
+| Historical full backend suite | Reported 241 passed with two existing dependency warnings; not independently rerun in this review |
+| Historical projector static checks | Reported Ruff, Pyright, formatting and diff checks passed |
 | Reviewed source continuity | Earlier numerical source/tests were unchanged during the projector task; publication should preserve those reviewed changes or explicitly identify later differences |
 | Contract-proposal scratch checks | Local Codex reported three supply variants and two incomplete cases passed; no full application suite rerun for that task |
 
@@ -226,7 +270,7 @@ These checks establish supplied-input numerical behaviour, not real forecast qua
 After checking out the verified feature-branch revision in a compatible review environment, use the repository's documented dependency setup. From `services/api`:
 
 ```powershell
-uv run pytest -q tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py
+uv run pytest -q tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_synthetic_history.py tests/test_procurement.py
 uv run ruff check .
 uv run pyright
 ```
@@ -247,7 +291,7 @@ Record the teammate's accepted decisions explicitly in #16. An AI recommendation
 
 1. Chun Yang and Rudy review their sections and record accepted decisions or corrections in #16. No separate Ethan review is required to circulate this handover.
 2. Aniq reconciles those decisions into the interface mapping. Preserve which items are agreed, implemented and actually tested.
-3. Aniq implements the thin input adapter once its required input contract is settled. Chun Yang supplies the corresponding authoritative backend behaviour. Do not invent absent values to make the example pass.
+3. Chun Yang implements the backend input adapter once its required contract is settled; Aniq supplies the numerical semantics and validation. Include the explicit offer, ordering-opportunity and procurement-policy evidence. Do not invent absent values to make the example pass.
 4. Run the agreed backend-export-to-projector example and negative cases. Test actual state selection, receipt/cancellation handling, quantity preservation and incomplete output.
 5. Connect persisted projection evidence and Rudy's consumer/completion mapping when their contracts and implementations are ready.
 
@@ -263,7 +307,7 @@ This handover is based on the reviewed projector implementation, numerical docum
 
 Use current code for existing interfaces, approved plans for intended scope, and explicit later team decisions for resolved changes. Report conflicts. In particular, the old backend specification's claim that only health checking exists is stale, and older escalation lists must not silently override later contract discussions.
 
-At the original handover check on 14 September 2026, #16 contained the published proposal and no owner replies. This access-method revision does not establish whether further replies have since been added. No shared-contract approval is inferred. If newer replies or code exist when you read this, reconcile them and identify the new source/commit.
+At the original handover check on 14 September 2026, #16 contained the published proposal and no owner replies. This source-publication task does not establish whether further replies have since been added; GitHub issues were not refreshed or edited. No shared-contract approval is inferred. If newer replies or code exist when you read this, reconcile them and identify the new source/commit.
 
 Keep one shared document. For each subsequent revision, record date, affected interface, accepted decision and evidence link. The repository copy is `docs/ML_HANDOVER.md` on `feat/forecasting`; share its GitHub link and the verified implementation commit with teammates. Editing this document does not itself publish code, change issues, grant repository access or implement any adapter.
 
@@ -274,3 +318,5 @@ Keep one shared document. For each subsequent revision, record date, affected in
 | 1.0 | 14 September 2026 | Initial shared ML implementation and integration handover |
 | 1.1 | 14 September 2026 | Changed teammate/AI review access to GitHub `feat/forecasting`; added branch, source, test and handover links, commit verification and direct AI-review instructions. Numerical scope, test evidence and unresolved contracts are unchanged. |
 | 1.2 | 14 September 2026 | Added the repository handover and verified implementation commit permalink; corrected the pending-publication record. Numerical scope and unresolved contracts are unchanged. |
+
+| 1.3 | 14 September 2026 | Added development history/partitions, observation-only loading, service-profile validation and one-day cash procurement with independent validation; expanded verification commands and separated historical publication records from current feature-branch scope. Shared #16 decisions remain unresolved. |

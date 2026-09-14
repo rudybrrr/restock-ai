@@ -1,0 +1,114 @@
+{
+  "assumptions": "Fully supplied counterfactual history using current recipes throughout. No physical stock/loss simulator. SGD6 per paid transaction is synthetic, not a backend menu price. Monday-first weekday factors, linear mild trend, integer jitter, BOGO atomic pairs, two replacement daily revisions. Missingness and report error affect first daily revision only. Service profile weights sampled at the existing allocator 1e-6 precision; transaction counts remain integral.",
+  "catalogue_reference": "synthetic-current-catalogue@5827515ec48183ba908151fb0016b118cd801b1c",
+  "catalogue_sha256": "0704fa2f1658e140d9cc5fd1f090f64d094d14403d698da97d5ea22ea8e0e3da",
+  "configuration_source": "Local development choice under approved v2 sections 5-6 plus v3 sections 3.1-3.3; not an approved full dataset calendar.",
+  "correction_delay_days": 1,
+  "daily_trend": "0.001",
+  "dataset_id": "restock-history-development-v1",
+  "development_scenario_namespace": "restock/scenarios/development/v1",
+  "dishes": [
+    {
+      "base_transactions": "100",
+      "dish_id": "chicken-rice",
+      "unit_price_sgd": "6.00"
+    },
+    {
+      "base_transactions": "60",
+      "dish_id": "fried-rice",
+      "unit_price_sgd": "6.00"
+    },
+    {
+      "base_transactions": "80",
+      "dish_id": "chicken-noodles",
+      "unit_price_sgd": "6.00"
+    },
+    {
+      "base_transactions": "40",
+      "dish_id": "tofu-bowl",
+      "unit_price_sgd": "6.00"
+    },
+    {
+      "base_transactions": "40",
+      "dish_id": "vegetable-noodles",
+      "unit_price_sgd": "6.00"
+    }
+  ],
+  "heldout_scenario_namespace": "restock/scenarios/heldout/v1",
+  "history_end": "2025-11-23",
+  "history_namespace": "restock/history-development/v1",
+  "history_start": "2025-09-01",
+  "missing_basis_points": 500,
+  "partitions": [
+    {
+      "end": "2025-09-28",
+      "name": "warmup",
+      "start": "2025-09-01"
+    },
+    {
+      "end": "2025-10-26",
+      "name": "train",
+      "start": "2025-09-29"
+    },
+    {
+      "end": "2025-11-09",
+      "name": "validation",
+      "start": "2025-10-27"
+    },
+    {
+      "end": "2025-11-23",
+      "name": "test",
+      "start": "2025-11-10"
+    }
+  ],
+  "profile": [
+    {
+      "end": "14:00:00",
+      "start": "11:00:00",
+      "weight": "0.4"
+    },
+    {
+      "end": "21:00:00",
+      "start": "17:00:00",
+      "weight": "0.6"
+    }
+  ],
+  "promotions": [
+    {
+      "dish_id": "tofu-bowl",
+      "kind": "BOGO",
+      "publication_date": "2025-10-05",
+      "service_date": "2025-10-06",
+      "transaction_multiplier": "1.1"
+    },
+    {
+      "dish_id": "fried-rice",
+      "kind": "BOGO",
+      "publication_date": "2025-11-02",
+      "service_date": "2025-11-03",
+      "transaction_multiplier": "1.1"
+    }
+  ],
+  "purpose": "DEVELOPMENT_FIXTURE",
+  "recipe_reference": "synthetic-current-recipes@5827515ec48183ba908151fb0016b118cd801b1c",
+  "recipe_sha256": "12a039e95453255236a9d49f7514e42188c63811ebe032e111662a16168098af",
+  "reporting_error_transactions": 2,
+  "schema_version": "restock-synthetic-history/1",
+  "seeds": {
+    "demand": 17,
+    "event_timing": 23,
+    "observation_error": 31
+  },
+  "simulation_start": "2025-11-25T08:00:00+08:00",
+  "timezone": "Asia/Singapore",
+  "variation_transactions": 5,
+  "weekday_factors": [
+    "1.00",
+    "0.95",
+    "1.00",
+    "1.05",
+    "1.10",
+    "1.20",
+    "0.90"
+  ]
+}
