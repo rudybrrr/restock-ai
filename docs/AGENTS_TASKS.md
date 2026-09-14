@@ -169,24 +169,25 @@
   - [x] summary
 
 - [ ] Persist genuine `PLAN-v1`
-  - [ ] Backend checks state revision
-  - [ ] Backend validates candidate
-  - [ ] Backend creates immutable `PENDING_APPROVAL` version
-  - [ ] Audit entry written
-  - Blocked: Backend publication and Agent audit adapters are connected, but a genuine PLAN-v1 still requires Aniq's deterministic candidate/optimiser path. PostgreSQL integration tests are present but were not executable in this local environment.
+  - [x] Backend checks state revision
+  - [x] Backend validates candidate
+  - [x] Backend creates immutable `PENDING_APPROVAL` version
+  - [x] Audit entry written
+  - Blocked: PostgreSQL integration verifies the publication and Agent audit adapters with the explicit `DEVELOPMENT_FIXTURE`, but a genuine PLAN-v1 still requires Aniq's deterministic candidate/optimiser path.
 
-- [ ] Show first concise trace
-  - [ ] Trigger
-  - [ ] Agent run
-  - [ ] Tool call
-  - [ ] Validation
-  - [ ] Plan creation
+- [x] Show first concise trace
+  - [x] Trigger
+  - [x] Agent run
+  - [x] Tool call
+  - [x] Validation
+  - [x] Plan creation
+  - PostgreSQL-backed Agent/Backend integration verifies the persisted trace locally with scripted reasoning and the test-only `DEVELOPMENT_FIXTURE` candidate.
 
 - [ ] Test Pass 1
   - [ ] Happy path
   - [x] Invalid structured output
   - [ ] Tool exception
-  - [ ] Stale state revision
+  - [x] Stale state revision
   - [x] Missing required data
 
 - [ ] Review and commit Pass 1
@@ -514,7 +515,7 @@
 - [x] Keep audit history append-only
 - [ ] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed verification remains pending locally; `TEST_DATABASE_URL` is unset and neither Docker nor port 5432 is available. Canonical materiality, supersession-transition, approval, and termination-detail audit coverage remains incomplete.
+  - PostgreSQL-backed verification now covers the checked run, specialist-call, tool-call, validation, and final-outcome fields, including atomic rollback when Agent audit persistence fails. Canonical materiality, supersession-transition, approval, and termination-detail audit coverage remains incomplete.
 
 - [ ] Review and commit Pass 9
 

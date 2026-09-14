@@ -335,6 +335,7 @@ def test_exact_pending_version_cannot_be_approved_after_state_changes(
     )
     plan = client.get(f"/api/v1/plans/{completed.json()['plan_version_id']}").json()
 
+    client.headers.pop("Authorization", None)
     sign_in(client)
     changed = client.post(
         "/api/v1/assessments", json={"as_of": "2026-02-16T08:00:00+08:00"}

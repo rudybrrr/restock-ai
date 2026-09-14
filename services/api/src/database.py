@@ -8,12 +8,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     Numeric,
     String,
     Table,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Session
 
@@ -196,6 +198,12 @@ planning_runs = Table(
     Column("claimed_at", DateTime(timezone=True)),
     Column("deadline_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
+    Index(
+        "one_active_planning_run",
+        "status",
+        unique=True,
+        postgresql_where=text("status IN ('QUEUED', 'RUNNING')"),
+    ),
 )
 assessment_requests = Table(
     "assessment_requests",
