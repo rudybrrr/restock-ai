@@ -193,3 +193,16 @@ curl.exe -b cookies.txt http://localhost:8000/api/v1/auth/me
 The scenarios add facts to the configured database. For a clean run, use a separate local database, apply
 migrations, and seed it. Running `python -m src.seed` again preserves records; it does not remove deliveries,
 counts, events, or audit history.
+
+Audit regression coverage lives in `tests/test_audit_guards.py`,
+`tests/test_snapshot_history.py`, `tests/test_audit_upgrade.py`, and the planning
+tests. It checks complete sparse sales reports and correction identity, positive
+ordering intervals, cancellation closure, trustworthy purchase links, one
+actionable plan, historical supplier/promotion/receipt/cycle inputs, and replay
+after sales and closing-count corrections. Missing historical baselines cannot
+produce a certified candidate.
+
+The upgrade test creates its own disposable database, returns it to the audited
+schema, inserts overlapping plans and legacy links, then upgrades and checks data
+and audit preservation. It does not reset your shared or demo database. Run the
+full suite with `python -m pytest -q` and `TEST_DATABASE_URL` set as in the README.

@@ -64,7 +64,6 @@ def test_sales_correction_replaces_an_interval_and_overlaps_are_rejected(
     assert client.post("/api/v1/sales-batches", json=overlapping).status_code == 409
     correction = {
         **first,
-        "batch_id": "one-corrected",
         "sales": {"chicken-rice": 4},
         "replaces_id": original["id"],
     }
@@ -190,10 +189,15 @@ def test_same_identity_correction_retry_is_idempotent(client: TestClient) -> Non
 
 def test_batch_crossing_expiry_boundary_is_rejected(client: TestClient) -> None:
     sign_in(client)
-    response = client.post("/api/v1/sales-batches", json={
-        "source": "simulator", "batch_id": "expiry-split",
-        "period_start": "2026-02-17T22:00:00+08:00", "period_end": "2026-02-18T01:00:00+08:00",
-        "sales": {"chicken-rice": 10},
-    })
+    response = client.post(
+        "/api/v1/sales-batches",
+        json={
+            "source": "simulator",
+            "batch_id": "expiry-split",
+            "period_start": "2026-02-17T22:00:00+08:00",
+            "period_end": "2026-02-18T01:00:00+08:00",
+            "sales": {"chicken-rice": 10},
+        },
+    )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "UNSUPPORTED_EXPIRY_SPLIT"

@@ -63,6 +63,8 @@ class Candidate(BaseModel):
 class StoredPlanLine(PlanLine):
     id: str
     plan_version_id: str
+    linked_quantity: Decimal
+    uncommitted_quantity: Decimal
 
 
 class Completion(BaseModel):

@@ -1,6 +1,6 @@
 """Manager-supplied promotion and supplier facts with atomic reassessment requests."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
+from src.fact_history import record_offer_version
 from src.operations import lock_inventory, record_event
 from src.operations_schemas import EventType
 from src.schemas import SupplierOffer
@@ -65,6 +66,14 @@ def save_promotion(
             409,
             "PROMOTION_REVISION_CONFLICT",
             "Submit the next promotion revision; conflicting retries are rejected",
+        )
+    if existing and body.effective_at < datetime.fromisoformat(
+        existing["payload"]["effective_at"]
+    ):
+        raise ApiError(
+            409,
+            "STALE_PROMOTION_UPDATE",
+            "Promotion revisions must preserve effective-time order",
         )
     menu = set(session.execute(select(db.menu_items.c.id)).scalars())
     if not set(body.menu_item_ids) <= menu:
@@ -153,5 +162,6 @@ def change_supplier(
         .mappings()
         .one()
     )
+    record_offer_version(session, dict(result))
     session.commit()
     return SupplierOffer.model_validate(result)

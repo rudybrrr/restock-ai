@@ -20,7 +20,7 @@ class MenuItem(NamedRecord):
 
 class Ingredient(NamedRecord):
     unit: Literal["kg", "litres", "pieces"]
-    interval_days: int
+    interval_days: int = Field(gt=0)
     starting_date: date
 
 
