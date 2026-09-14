@@ -52,6 +52,17 @@ def test_agent_claims_a_frozen_run_and_publishes_a_calculated_plan(
     }
     assert client.post(decision_url, json=decision).status_code == 403
     del client.headers["Authorization"]
+    pending_source = client.get(f"/api/v1/plans/{version.json()['id']}/lines").json()[0]
+    pending_purchase = {
+        "supplier_id": pending_source["supplier_id"],
+        "ingredient_id": pending_source["ingredient_id"],
+        "kind": "NORMAL",
+        "expected_quantity": "1",
+        "expected_at": pending_source["arrival_at"],
+        "ordered_at": "2026-02-15T22:00:00+08:00",
+        "source_plan_line_id": pending_source["id"],
+    }
+    assert client.post("/api/v1/deliveries", json=pending_purchase).status_code == 409
     assert (
         client.post(decision_url, json={**decision, "plan_version": 999}).status_code
         == 409
@@ -88,9 +99,37 @@ def test_agent_claims_a_frozen_run_and_publishes_a_calculated_plan(
     assert purchase.status_code == 201, purchase.text
     assert purchase.json()["source_plan_line_id"] == source["id"]
     assert purchase.json()["outstanding_quantity"] == "2.000"
+    from decimal import Decimal
+
+    refreshed = client.get(f"/api/v1/plans/{version.json()['id']}/lines").json()[0]
+    assert refreshed["quantity"] == source["quantity"]
+    assert Decimal(refreshed["linked_quantity"]) == 2
+    assert Decimal(refreshed["uncommitted_quantity"]) == Decimal(source["quantity"]) - 2
+    assert purchase.json()["source_validation"] == "APPROVED_ALLOCATION"
     assert (
-        client.get(f"/api/v1/plans/{version.json()['id']}/lines").json() == lines.json()
+        client.post(
+            "/api/v1/deliveries",
+            json={**pending_purchase, "expected_quantity": source["quantity"]},
+        ).status_code
+        == 409
     )
+    other_supplier = "market" if source["supplier_id"] != "market" else "fresh"
+    assert (
+        client.post(
+            "/api/v1/deliveries",
+            json={**pending_purchase, "supplier_id": other_supplier},
+        ).status_code
+        == 422
+    )
+    manual = {
+        key: value
+        for key, value in pending_purchase.items()
+        if key != "source_plan_line_id"
+    }
+    manual["supplier_id"] = other_supplier
+    manual_result = client.post("/api/v1/deliveries", json=manual)
+    assert manual_result.status_code == 201, manual_result.text
+    assert manual_result.json()["source_validation"] == "MANUAL"
     cycles = client.get(
         "/api/v1/order-cycles", params={"start": "2026-02-15", "end": "2026-02-15"}
     )
@@ -234,6 +273,47 @@ def test_revisions_keep_identity_but_new_normal_plans_get_a_new_identity(
     third = publish()
     assert third["plan_id"] != first["plan_id"]
     assert third["version"] == 1
+    history = client.get("/api/v1/plan-history").json()
+    assert [
+        row["id"]
+        for row in history
+        if row["status"] in ("PENDING_APPROVAL", "APPROVED")
+    ] == [third["id"]]
+    assert client.get(f"/api/v1/plans/{second['id']}").json()["status"] == "SUPERSEDED"
+    events = client.get("/api/v1/events")
+    assert events.status_code == 200, events.text
+    assert (
+        len([event for event in events.json() if event["type"] == "PLAN_SUPERSEDED"])
+        == 2
+    )
+    client.headers.pop("Authorization", None)
+    old_line = client.get(f"/api/v1/plans/{first['id']}/lines").json()[0]
+    refused = client.post(
+        "/api/v1/deliveries",
+        json={
+            "supplier_id": old_line["supplier_id"],
+            "ingredient_id": old_line["ingredient_id"],
+            "source_plan_line_id": old_line["id"],
+            "kind": "NORMAL",
+            "expected_quantity": "1",
+            "ordered_at": "2026-02-15T22:00:00+08:00",
+            "expected_at": old_line["arrival_at"],
+        },
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "SOURCE_PLAN_NOT_APPROVED"
+    changed = client.patch(
+        "/api/v1/supplier-offers/fresh-chicken",
+        json={
+            "unit_price": "99",
+            "effective_at": "2026-02-16T08:00:00+08:00",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    reassessment = client.post("/api/v1/runs/claim")
+    assert reassessment.status_code == 200, reassessment.text
+    assert reassessment.json()["snapshot"]["revises_plan_id"] == third["plan_id"]
 
 
 def test_missing_engine_is_explicit_and_does_not_publish_a_fake_plan(

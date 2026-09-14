@@ -1,6 +1,6 @@
 """Compare equal business-day intervals without treating missing coverage as waste."""
 
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -9,12 +9,17 @@ from sqlalchemy.orm import Session
 from src import database as db
 
 
-def authoritative_daily_sales(session: Session, as_of: datetime) -> list[dict]:
+def authoritative_daily_sales(
+    session: Session, as_of: datetime, known_at: datetime | None = None
+) -> list[dict]:
     """Latest submitted totals once per day; intraday batches are never added to them."""
     latest = {}
     for row in session.execute(
         select(db.daily_revisions)
-        .where(db.daily_revisions.c.cutoff <= as_of)
+        .where(
+            db.daily_revisions.c.cutoff <= as_of,
+            db.daily_revisions.c.recorded_at <= (known_at or datetime.now(UTC)),
+        )
         .order_by(db.daily_revisions.c.day, db.daily_revisions.c.revision)
     ).mappings():
         latest[row["day"]] = {

@@ -28,9 +28,9 @@ The backend owner is the first contributor. On 2026-09-12 the owner explicitly d
 1. Manager submits physical closing counts and final dish sales. The revision, comparison evidence, event and assessment request commit together. Drafts do not queue a run.
 2. Sales batches retain timestamps and source identities. They update estimates without an LLM call. Closing counts remain unchanged. Sales-driven assessment awaits the ML-owned materiality integration.
 3. Promotion revisions and supplier facts request assessment immediately. Delivery delay, shortfall and cancellation events also request assessment. Ordinary receipts/orders/cycle decisions remain stored facts; their impact checks belong to the pending integration.
-4. One agent attempt can run while one follow-up request waits. New triggers coalesce into the waiting run and retain event links. Claims freeze the current inputs. The backend rejects completion based on newer inputs and releases expired/stale attempts.
-5. A new normal assessment creates a new plan identity. Pass `revises_plan_id` when changing an existing horizon. Purchase content is immutable; revisions do not inherit approval.
-6. A manager decides the exact version. Approval never creates a delivery or marks an ingredient ordering occasion. Actual purchases may differ and optionally reference a source line and cycle date.
+4. One agent attempt can run while one follow-up request waits. New triggers coalesce into the waiting run and retain event links. Claims freeze inputs effective by simulation as_of and recorded by real known_at. Supplier versions, event histories and recorded revisions prevent future facts from entering earlier snapshots. The backend rejects completion based on newer inputs and releases expired/stale attempts.
+5. A new normal assessment may create a new plan identity; pass `revises_plan_id` when changing an existing horizon. Only one actionable version exists across all identities. Publication atomically supersedes the prior actionable version, preserving its status-change audit and actual commitments. Revisions do not inherit approval.
+6. A manager decides the exact version. Approval never creates a delivery or marks an ingredient ordering occasion. New linked purchases match a current approved line's supplier and ingredient and stay within its cumulative allocation. Partial allocations expose an uncommitted remainder. Actual deviations use unlinked purchases; unchecked legacy links are labelled LEGACY_REFERENCE.
 
 ## API map
 
@@ -62,6 +62,7 @@ The calculator is disabled by default. Its tool returns `503 DECISION_ENGINE_NOT
 Integration points:
 
 - `planning._snapshot`: frozen inventory, recipes, offers, ingredient schedules, promotions, holidays, incoming commitments, cycle decisions, raw historical evidence and authoritative daily sales. Final sales appear once per day using the latest revision; never add its intraday batches again.
+- `fact_history.py`: select supplier versions and promotion/delivery histories at operational and recording cutoffs. Snapshot `known_at` and version IDs support deterministic replay. Delivery receipts include only effective/recorded receipts; future closing-count corrections are excluded. Historical views must not call the current-state `read_delivery` helper.
 - `planning.optimise` / `planning_schemas.py`: replace the limited calculator behind the HTTP adapter with the teammate's deterministic engine. Preserve artifact references, cost fields and typed candidate output. Store the exact engine result before completion.
 - `assessment_queue.enqueue_event`: queue a material event inside the same transaction that records it. `operations.record_event` already routes explicit triggers. Do not call the LLM from sales ingestion.
 - `planning.complete_run`: publication and outcome checks; `planning.decide_plan`: manager identity/version enforcement. Add real feasibility certification and material invalidation here using engine results, preserving original snapshots and historical approval events.
@@ -72,6 +73,12 @@ Until materiality is integrated, revision checks conservatively block approval/p
 ## Demo data and time
 
 Seed data is synthetic, anchored at 2026-02-15 22:00 Singapore time. Suppliers differ in price, capacity, packs, lead times, reliability and fees. Delivery slots span the demo month. A repeated seed does not overwrite existing data; use a fresh disposable database to inspect revised seed values.
+
+Apply `alembic upgrade head` before starting the updated API. Existing overlapping actionable versions are superseded with audit records; legacy purchase links retain reference-only provenance. Supplier values overwritten before this upgrade cannot be reconstructed: migration captures the existing offer as its baseline. Missing eligible history is explicit, not today's data substituted into a past assessment. Recording-time replay for previously untimestamped rows begins at migration. Old saved run artifacts remain preserved.
+
+Sales corrections retain source, batch ID and exact period. Cycle decisions should supply effective_at in simulation time; omission means real time. Promotion and delivery-term revisions cannot precede already recorded relevant activity. Late receipt reconciliation remains supported.
+
+The [shared contract proposal](SHARED_INTEGRATION_CONTRACT.md) covers CY-004, CY-006–008 and CY-014–015. It requires Aniq/Rudy review before freezing fees, cost/policy inputs, reliability and outcomes. CY-003, CY-009, CY-013 and full cost validation remain integration work. This backend is not yet the complete integrated demo.
 
 One review recommendation is deliberately not adopted: reported `AVAILABLE` status does not prove an offer is calculable. Partial supplier facts may retain unknown fields; the calculator rejects missing required inputs before using them. This follows the approved architecture's distinction between reported status and certified feasibility, rather than replacing unknown values with zero or discarding partial facts.
 
@@ -91,4 +98,4 @@ python -m pytest -q
 
 Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. Backend tests do not prove real ML/OpenClaw integration, a hosted deployment, or a second-machine connection.
 
-Verification on 2026-09-12: the full PostgreSQL suite passed 46 tests. After adding the explicit fixture label and a concurrency regression, all 9 planning tests passed. Ruff and Pyright also passed. Local PostgreSQL was used directly; Docker was not required for these checks.
+Verification on 2026-09-15: the full PostgreSQL suite passed 55 tests, including the legacy-database upgrade and cancellation invariants. After the final historical-baseline guard test and expanded purchase-link/active-plan assertions, all 13 planning and snapshot-history tests passed. Ruff and Pyright passed on the final code. Local PostgreSQL was used directly; Docker was not required. These results verify backend safeguards, not the real-engine integration gate.
