@@ -14,6 +14,8 @@ from src import database as db
 from src.errors import ApiError
 from src.operations import expire_lots, lock_inventory, record_event
 from src.operations_schemas import SalesBatch, SalesBatchCreate
+from src.requirements import sum_recipe_usage
+from src.schemas import RecipeItem
 
 SINGAPORE = ZoneInfo("Asia/Singapore")
 
@@ -212,7 +214,10 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
         .mappings()
         .all()
     )
-    recipes = session.execute(select(db.recipes)).mappings().all()
+    recipes = [
+        RecipeItem.model_validate(row)
+        for row in session.execute(select(db.recipes)).mappings()
+    ]
     remaining: dict[str, Decimal] = {}
     deficits: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     lot_by_id = {row["id"]: row for row in lots}
@@ -239,12 +244,10 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
             if current_lots <= counts_by_time[event_at]:
                 deficits[ingredient] = Decimal(0)
             continue
-        usage_by_ingredient: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-        for recipe in recipes:
-            usage_by_ingredient[recipe["ingredient_id"]] += (
-                Decimal(str(row["sales"].get(recipe["menu_item_id"], 0)))
-                * recipe["quantity"]
-            )
+        usage_by_ingredient = sum_recipe_usage(
+            {dish: Decimal(quantity) for dish, quantity in row["sales"].items()},
+            recipes,
+        )
         # Intervals are half-open: sales ending at midnight belong to the prior day.
         service_day = (
             (event_at - timedelta(microseconds=1)).astimezone(SINGAPORE).date()
