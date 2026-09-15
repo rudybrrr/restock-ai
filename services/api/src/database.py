@@ -259,9 +259,9 @@ plan_versions = Table(
 )
 Index(
     "one_actionable_plan",
-    plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+    text("(status IN ('PENDING_APPROVAL', 'APPROVED'))"),
     unique=True,
-    postgresql_where=plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+    postgresql_where=text("status IN ('PENDING_APPROVAL', 'APPROVED')"),
 )
 
 purchase_plan_lines = Table(
