@@ -15,11 +15,22 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Session
 
 metadata = MetaData()
+
+supplier_offer_versions = Table(
+    "supplier_offer_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("offer_id", ForeignKey("supplier_offers.id"), nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON, nullable=False),
+)
 
 promotions = Table(
     "promotions",
@@ -37,6 +48,7 @@ order_cycles = Table(
     Column("scheduled_date", Date, primary_key=True),
     Column("status", String, nullable=False),
     Column("decided_at", DateTime(timezone=True), nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
     Column("actor", String, nullable=False),
     Column("note", String),
     CheckConstraint("status IN ('ORDERED', 'SKIPPED')"),
@@ -56,6 +68,7 @@ ingredients = Table(
     Column("unit", String, nullable=False),
     Column("interval_days", Integer, nullable=False, server_default="1"),
     Column("starting_date", Date, nullable=False, server_default="2026-02-15"),
+    CheckConstraint("interval_days > 0", name="ingredients_positive_interval"),
     CheckConstraint("unit IN ('kg', 'litres', 'pieces')"),
 )
 recipes = Table(
@@ -125,6 +138,12 @@ stock_counts = Table(
     Column("lot_id", ForeignKey("inventory_lots.id"), nullable=False),
     Column("quantity", Numeric(12, 3), nullable=False),
     Column("counted_at", DateTime(timezone=True), nullable=False),
+    Column(
+        "recorded_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.clock_timestamp(),
+    ),
     Column("sequence", Integer, nullable=False, server_default="0"),
     UniqueConstraint("lot_id", "counted_at", "sequence"),
     CheckConstraint("quantity >= 0"),
@@ -172,6 +191,12 @@ sales_batches = Table(
     Column("source", String, nullable=False),
     Column("batch_id", String, nullable=False),
     Column("revision", Integer, nullable=False),
+    Column(
+        "recorded_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.clock_timestamp(),
+    ),
     Column("period_start", DateTime(timezone=True), nullable=False),
     Column("period_end", DateTime(timezone=True), nullable=False),
     Column("sales", JSON, nullable=False),
@@ -232,6 +257,13 @@ plan_versions = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("plan_id", "version"),
 )
+Index(
+    "one_actionable_plan",
+    plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+    unique=True,
+    postgresql_where=plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+)
+
 purchase_plan_lines = Table(
     "purchase_plan_lines",
     metadata,
@@ -261,6 +293,7 @@ deliveries = Table(
     metadata,
     Column("id", String, primary_key=True),
     Column("source_plan_line_id", ForeignKey("purchase_plan_lines.id")),
+    Column("source_validation", String, nullable=False, server_default="MANUAL"),
     Column("cycle_date", Date),
     Column("supplier_id", ForeignKey("suppliers.id"), nullable=False),
     Column("ingredient_id", ForeignKey("ingredients.id"), nullable=False),
@@ -269,6 +302,10 @@ deliveries = Table(
     Column("cancelled_quantity", Numeric(12, 3), nullable=False, server_default="0"),
     Column("expected_at", DateTime(timezone=True), nullable=False),
     Column("ordered_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "source_validation IN ('MANUAL', 'APPROVED_ALLOCATION', 'LEGACY_REFERENCE')",
+        name="delivery_source_validation",
+    ),
     CheckConstraint("expected_quantity > 0 AND cancelled_quantity >= 0"),
     CheckConstraint("kind IN ('NORMAL', 'EMERGENCY')"),
 )
@@ -281,6 +318,12 @@ delivery_receipts = Table(
     Column("request_id", String, nullable=False),
     Column("quantity", Numeric(12, 3), nullable=False),
     Column("received_at", DateTime(timezone=True), nullable=False),
+    Column(
+        "recorded_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.clock_timestamp(),
+    ),
     Column("expiry_date", Date, nullable=False),
     Column("remainder", String, nullable=False),
     Column("closing_counts", JSON, nullable=False),

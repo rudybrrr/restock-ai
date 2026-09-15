@@ -1,0 +1,50 @@
+{
+  "fixture_id": "v3-four-mondays-numerical-only",
+  "synthetic": true,
+  "catalogue_base": "5827515ec48183ba908151fb0016b118cd801b1c",
+  "issue_time": "2026-02-15T22:00:00+08:00",
+  "target_date": "2026-02-16",
+  "menu_items": [
+    {"id": "chicken-rice", "name": "Chicken rice"},
+    {"id": "fried-rice", "name": "Egg fried rice"},
+    {"id": "chicken-noodles", "name": "Chicken noodles"},
+    {"id": "tofu-bowl", "name": "Tofu vegetable bowl"},
+    {"id": "vegetable-noodles", "name": "Vegetable noodles"}
+  ],
+  "ingredients": [
+    {"id": "chicken", "name": "Chicken", "unit": "kg", "interval_days": 1, "starting_date": "2026-02-15"},
+    {"id": "rice", "name": "Rice", "unit": "kg", "interval_days": 14, "starting_date": "2026-02-15"},
+    {"id": "noodles", "name": "Noodles", "unit": "kg", "interval_days": 3, "starting_date": "2026-02-15"},
+    {"id": "eggs", "name": "Eggs", "unit": "pieces", "interval_days": 3, "starting_date": "2026-02-15"},
+    {"id": "tofu", "name": "Tofu", "unit": "kg", "interval_days": 2, "starting_date": "2026-02-15"},
+    {"id": "vegetables", "name": "Vegetables", "unit": "kg", "interval_days": 1, "starting_date": "2026-02-15"},
+    {"id": "oil", "name": "Cooking oil", "unit": "litres", "interval_days": 7, "starting_date": "2026-02-15"},
+    {"id": "soy-sauce", "name": "Soy sauce", "unit": "litres", "interval_days": 7, "starting_date": "2026-02-15"}
+  ],
+  "recipes": [
+    {"menu_item_id": "chicken-rice", "ingredient_id": "chicken", "quantity": "0.150"},
+    {"menu_item_id": "chicken-rice", "ingredient_id": "rice", "quantity": "0.100"},
+    {"menu_item_id": "chicken-rice", "ingredient_id": "soy-sauce", "quantity": "0.010"},
+    {"menu_item_id": "fried-rice", "ingredient_id": "rice", "quantity": "0.100"},
+    {"menu_item_id": "fried-rice", "ingredient_id": "eggs", "quantity": "1"},
+    {"menu_item_id": "fried-rice", "ingredient_id": "vegetables", "quantity": "0.050"},
+    {"menu_item_id": "fried-rice", "ingredient_id": "oil", "quantity": "0.010"},
+    {"menu_item_id": "chicken-noodles", "ingredient_id": "chicken", "quantity": "0.120"},
+    {"menu_item_id": "chicken-noodles", "ingredient_id": "noodles", "quantity": "0.150"},
+    {"menu_item_id": "chicken-noodles", "ingredient_id": "soy-sauce", "quantity": "0.010"},
+    {"menu_item_id": "tofu-bowl", "ingredient_id": "tofu", "quantity": "0.150"},
+    {"menu_item_id": "tofu-bowl", "ingredient_id": "rice", "quantity": "0.100"},
+    {"menu_item_id": "tofu-bowl", "ingredient_id": "vegetables", "quantity": "0.100"},
+    {"menu_item_id": "vegetable-noodles", "ingredient_id": "noodles", "quantity": "0.150"},
+    {"menu_item_id": "vegetable-noodles", "ingredient_id": "vegetables", "quantity": "0.120"},
+    {"menu_item_id": "vegetable-noodles", "ingredient_id": "oil", "quantity": "0.010"}
+  ],
+  "history": [
+    {"service_date": "2026-01-19", "available_at": "2026-01-19T22:00:00+08:00", "revision": 1, "promotion": false, "censored": false, "portions": {"chicken-rice": 100, "fried-rice": 60, "chicken-noodles": 80, "tofu-bowl": 40, "vegetable-noodles": 40}},
+    {"service_date": "2026-01-26", "available_at": "2026-01-26T22:00:00+08:00", "revision": 1, "promotion": false, "censored": false, "portions": {"chicken-rice": 100, "fried-rice": 60, "chicken-noodles": 80, "tofu-bowl": 40, "vegetable-noodles": 40}},
+    {"service_date": "2026-02-02", "available_at": "2026-02-02T22:00:00+08:00", "revision": 1, "promotion": false, "censored": false, "portions": {"chicken-rice": 100, "fried-rice": 60, "chicken-noodles": 80, "tofu-bowl": 40, "vegetable-noodles": 40}},
+    {"service_date": "2026-02-09", "available_at": "2026-02-09T22:00:00+08:00", "revision": 1, "promotion": false, "censored": false, "portions": {"chicken-rice": 100, "fried-rice": 60, "chicken-noodles": 80, "tofu-bowl": 40, "vegetable-noodles": 40}}
+  ],
+  "expected_forecast": {"chicken-rice": "100", "fried-rice": "60", "chicken-noodles": "80", "tofu-bowl": "40", "vegetable-noodles": "40"},
+  "expected_requirements": {"chicken": "24.600", "rice": "20.000", "noodles": "18.000", "eggs": "60", "tofu": "6.000", "vegetables": "11.800", "oil": "1.000", "soy-sauce": "1.800"}
+}

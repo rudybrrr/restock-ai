@@ -1,11 +1,12 @@
 """Insert the fixed, synthetic 2026-02-15 demo baseline without overwriting data."""
 
+import json
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.config import Settings
@@ -16,6 +17,7 @@ from src.database import (
     menu_items,
     recipes,
     stock_counts,
+    supplier_offer_versions,
     supplier_offers,
     suppliers,
 )
@@ -161,6 +163,19 @@ def seed() -> None:
                         "source_url": source,
                     }
                     for day in (17, 18)
+                ],
+            )
+            insert_if_absent(
+                supplier_offer_versions,
+                [
+                    {
+                        "id": "baseline:" + row["id"],
+                        "offer_id": row["id"],
+                        "effective_at": row["observed_at"],
+                        "recorded_at": datetime.now(UTC),
+                        "payload": json.loads(json.dumps(dict(row), default=str)),
+                    }
+                    for row in conn.execute(select(supplier_offers)).mappings()
                 ],
             )
             lots = [

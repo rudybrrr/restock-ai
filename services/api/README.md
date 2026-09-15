@@ -164,7 +164,9 @@ and audit entries. Daily submissions now queue a durable assessment; drafts emit
 Each batch has a `source`, `batch_id`, timezone-aware period bounds, and dish
 quantities; omitted dishes are zero. Identical retries have no second effect,
 while conflicting identities and overlapping intervals return `409`. Submit a
-new identity with `replaces_id` to correct a batch without double deduction.
+replacement with the **same source, batch_id and exact interval**, plus `replaces_id`,
+to correct the active revision without double deduction. Empty complete reports
+assert zero sales; partial reports are unsupported.
 
 `GET /api/v1/inventory/estimated?as_of=<timestamp>` reports recipe-derived
 earliest-expiry balances separately from physical observations, with coverage metadata.
@@ -222,3 +224,34 @@ The command returns either a validated `AgentCompletionPublication` JSON object
 or the existing backend error envelope. It never falls back to another provider.
 The runtime-only smoke outcome is `ESCALATE / MISSING_REQUIRED_DATA`; it does not
 claim that a purchasing calculation or plan publication occurred.
+
+## Audit safeguards and database upgrade
+
+Pull the current code, then run `python -m alembic upgrade head` before starting
+the API. The new migrations preserve data, supersede older overlapping actionable
+plans with audit records, label pre-existing plan links `LEGACY_REFERENCE`, and
+add supplier-history and recording-time fields. An invalid existing ordering
+interval causes upgrade to fail; correct that schedule explicitly before retrying.
+Re-running seed does not replace existing offers or reconstruct overwritten history.
+
+Each claimed snapshot records simulation `as_of`, real `known_at`, and the selected
+`offer_version_ids`. Later-effective offers, promotions, cycle decisions, purchases
+and receipts do not enter earlier inputs. Same-cutoff replay uses the saved
+`known_at`; a fresh assessment deliberately includes newly recorded corrections.
+Pre-migration overwritten offer history is unavailable and appears in
+`missing_offer_history`, which blocks calculation with `MISSING_REQUIRED_DATA`.
+
+Cycle decisions accept `effective_at`; supply the simulation clock during demos.
+Omitting it uses real recording time. Promotion revisions and delivery term changes
+must preserve effective-time order. Late receipts remain supported; a backdated
+cancellation cannot precede already recorded delivery activity.
+
+Only one actionable purchase-plan version may exist. A new version supersedes the
+previous one and needs its own approval. New linked purchases require that current
+approved version, matching supplier/ingredient, and cumulative quantity within the
+line. `GET /plans/{version_id}/lines` exposes `linked_quantity` and
+`uncommitted_quantity`; record actual deviations with no `source_plan_line_id`.
+
+See the [shared contract proposal](../../docs/SHARED_INTEGRATION_CONTRACT.md) before
+connecting the real engine or agent. Fee grouping, full cost validation, materiality
+and contingency acceptance still need teammate integration.

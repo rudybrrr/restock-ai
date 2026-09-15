@@ -251,7 +251,7 @@ def read_plan(version_id: str, session: SessionDep):
 @router.get("/plans/{version_id}/lines", response_model=list[StoredPlanLine])
 def read_plan_lines(version_id: str, session: SessionDep):
     planning.read_plan(session, version_id)
-    return (
+    lines = (
         session.execute(
             select(db.purchase_plan_lines)
             .where(db.purchase_plan_lines.c.plan_version_id == version_id)
@@ -260,6 +260,17 @@ def read_plan_lines(version_id: str, session: SessionDep):
         .mappings()
         .all()
     )
+    result = []
+    for line in lines:
+        linked = deliveries.linked_quantity(session, line["id"])
+        result.append(
+            {
+                **line,
+                "linked_quantity": linked,
+                "uncommitted_quantity": max(line["quantity"] - linked, 0),
+            }
+        )
+    return result
 
 
 @router.post(

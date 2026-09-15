@@ -1,7 +1,7 @@
 """Durable simulator sales input and recipe-derived inventory estimates."""
 
 from collections import defaultdict
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
+from src.fact_history import sales_at
 from src.operations import expire_lots, lock_inventory, record_event
 from src.operations_schemas import SalesBatch, SalesBatchCreate
+from src.requirements import sum_recipe_usage
+from src.schemas import RecipeItem
 
 SINGAPORE = ZoneInfo("Asia/Singapore")
 
@@ -77,6 +80,15 @@ def create_sales_batch(
                 409,
                 "INVALID_SALES_CORRECTION",
                 "Correction must replace an active batch",
+            )
+        if any(
+            replaced[field] != getattr(body, field)
+            for field in ("source", "batch_id", "period_start", "period_end")
+        ):
+            raise ApiError(
+                409,
+                "SALES_CORRECTION_IDENTITY",
+                "Corrections must retain source, batch identity and exact interval",
             )
     active = (
         session.execute(select(db.sales_batches).where(db.sales_batches.c.active == 1))
@@ -153,11 +165,17 @@ def create_sales_batch(
     return result
 
 
-def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
+def estimated_inventory(
+    session: Session, as_of: datetime, known_at: datetime | None = None
+) -> list[dict]:
     """Calculate from the latest physical observations without mutating them."""
+    known_at = known_at or datetime.now(UTC)
     latest = (
         select(db.stock_counts)
-        .where(db.stock_counts.c.counted_at <= as_of)
+        .where(
+            db.stock_counts.c.counted_at <= as_of,
+            db.stock_counts.c.recorded_at <= known_at,
+        )
         .distinct(db.stock_counts.c.lot_id)
         .order_by(
             db.stock_counts.c.lot_id,
@@ -178,6 +196,7 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
             .join(
                 db.ingredients, db.ingredients.c.id == db.inventory_lots.c.ingredient_id
             )
+            .where(db.inventory_lots.c.received_at <= as_of)
             .order_by(db.inventory_lots.c.expiry_date, db.inventory_lots.c.id)
         )
         .mappings()
@@ -192,6 +211,7 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
             select(db.stock_counts)
             .where(
                 db.stock_counts.c.counted_at <= as_of,
+                db.stock_counts.c.recorded_at <= known_at,
             )
             .order_by(db.stock_counts.c.counted_at, db.stock_counts.c.sequence)
         )
@@ -199,20 +219,15 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
         .all()
     )
     baseline = min(row["counted_at"] for row in observations)
-    batches = (
-        session.execute(
-            select(db.sales_batches)
-            .where(
-                db.sales_batches.c.active == 1,
-                db.sales_batches.c.period_start >= baseline,
-                db.sales_batches.c.period_end <= as_of,
-            )
-            .order_by(db.sales_batches.c.period_start)
-        )
-        .mappings()
-        .all()
-    )
-    recipes = session.execute(select(db.recipes)).mappings().all()
+    batches = [
+        row
+        for row in sales_at(session, as_of, known_at)
+        if row["period_start"] >= baseline
+    ]
+    recipes = [
+        RecipeItem.model_validate(row)
+        for row in session.execute(select(db.recipes)).mappings()
+    ]
     remaining: dict[str, Decimal] = {}
     deficits: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     lot_by_id = {row["id"]: row for row in lots}
@@ -239,12 +254,10 @@ def estimated_inventory(session: Session, as_of: datetime) -> list[dict]:
             if current_lots <= counts_by_time[event_at]:
                 deficits[ingredient] = Decimal(0)
             continue
-        usage_by_ingredient: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-        for recipe in recipes:
-            usage_by_ingredient[recipe["ingredient_id"]] += (
-                Decimal(str(row["sales"].get(recipe["menu_item_id"], 0)))
-                * recipe["quantity"]
-            )
+        usage_by_ingredient = sum_recipe_usage(
+            {dish: Decimal(quantity) for dish, quantity in row["sales"].items()},
+            recipes,
+        )
         # Intervals are half-open: sales ending at midnight belong to the prior day.
         service_day = (
             (event_at - timedelta(microseconds=1)).astimezone(SINGAPORE).date()
