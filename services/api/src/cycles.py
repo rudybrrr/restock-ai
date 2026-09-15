@@ -16,6 +16,7 @@ class CycleDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["ORDERED", "SKIPPED"]
     note: str | None = Field(default=None, max_length=500)
+    effective_at: AwareDatetime | None = None
 
 
 class OrderCycle(BaseModel):
@@ -23,6 +24,7 @@ class OrderCycle(BaseModel):
     scheduled_date: date
     status: Literal["OPEN", "ORDERED", "SKIPPED"]
     decided_at: AwareDatetime | None = None
+    effective_at: AwareDatetime | None = None
     actor: str | None = None
     note: str | None = None
 
@@ -96,7 +98,14 @@ def decide_cycle(
         .one_or_none()
     )
     if existing:
-        if existing["status"] != body.status or existing["note"] != body.note:
+        if (
+            existing["status"] != body.status
+            or existing["note"] != body.note
+            or (
+                body.effective_at is not None
+                and existing["effective_at"] != body.effective_at
+            )
+        ):
             raise ApiError(
                 409,
                 "CYCLE_ALREADY_DECIDED",
@@ -107,6 +116,7 @@ def decide_cycle(
         "ingredient_id": ingredient_id,
         "scheduled_date": day,
         **body.model_dump(),
+        "effective_at": body.effective_at or datetime.now(UTC),
         "decided_at": datetime.now(UTC),
         "actor": actor,
     }
@@ -124,7 +134,8 @@ def decide_cycle(
         {
             "ingredient_id": ingredient_id,
             "scheduled_date": day.isoformat(),
-            **body.model_dump(),
+            **body.model_dump(mode="json"),
+            "effective_at": row["effective_at"].isoformat(),
         },
     )
     session.commit()

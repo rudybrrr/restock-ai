@@ -34,6 +34,7 @@ EventType = Literal[
     "MANUAL_REASSESSMENT_REQUESTED",
     "PLAN_APPROVED",
     "PLAN_REJECTED",
+    "PLAN_SUPERSEDED",
     "ORDER_CYCLE_UPDATED",
 ]
 
@@ -48,7 +49,11 @@ class DailyDraft(BaseModel):
 
 
 class SalesBatchCreate(BaseModel):
-    """A complete, incremental simulator report for one non-overlapping interval."""
+    """Complete interval report: omitted dishes explicitly mean zero, never partial coverage.
+
+    Corrections keep source, batch_id and both interval bounds, using replaces_id
+    to identify the active revision. Partial sales reports are not supported.
+    """
 
     model_config = ConfigDict(extra="forbid")
     source: Annotated[str, Field(min_length=1, max_length=128)]
@@ -220,6 +225,9 @@ class Receipt(ReceiptCreate):
 
 
 class Delivery(DeliveryCreate):
+    source_validation: Literal["MANUAL", "APPROVED_ALLOCATION", "LEGACY_REFERENCE"] = (
+        "LEGACY_REFERENCE"
+    )
     model_config = ConfigDict(
         extra="ignore",
         json_schema_extra={
@@ -291,17 +299,21 @@ class PlanDecisionEventPayload(BaseModel):
     version_id: str
     version: int
     instructions: str | None = None
+    reason: str | None = None
+    replacement_version_id: str | None = None
+    previous_status: str | None = None
 
 
 class PlanDecisionEvent(BaseModel):
     id: str
-    type: Literal["PLAN_APPROVED", "PLAN_REJECTED"]
+    type: Literal["PLAN_APPROVED", "PLAN_REJECTED", "PLAN_SUPERSEDED"]
     timestamp: AwareDatetime
     source: str
     payload: PlanDecisionEventPayload
 
 
 class CycleEventPayload(BaseModel):
+    effective_at: AwareDatetime | None = None
     ingredient_id: str
     scheduled_date: date
     status: Literal["ORDERED", "SKIPPED"]

@@ -9,8 +9,8 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
 from src import database as db
-from src.deliveries import read_delivery
 from src.errors import ApiError
+from src.fact_history import commitments_at, offers_at, promotions_at, sales_at
 from src.operations import lock_inventory, record_event
 from src.planning_schemas import (
     Candidate,
@@ -40,57 +40,87 @@ def _json(value):
 
 
 def _revision(session: Session) -> int:
-    return session.execute(select(func.count()).select_from(db.events)).scalar_one()
+    return session.execute(
+        select(func.count())
+        .select_from(db.events)
+        .where(
+            db.events.c.type.not_in(
+                ("PLAN_APPROVED", "PLAN_REJECTED", "PLAN_SUPERSEDED")
+            )
+        )
+    ).scalar_one()
 
 
-def _snapshot(session: Session, as_of: datetime, run_id: str) -> dict:
+def _snapshot(
+    session: Session, as_of: datetime, run_id: str, known_at: datetime | None = None
+) -> dict:
+    known_at = known_at or datetime.now(UTC)
+    offers, offer_versions = offers_at(session, as_of, known_at)
+    missing_offer_history = sorted(
+        set(session.execute(select(db.supplier_offers.c.id)).scalars())
+        - {offer["id"] for offer in offers}
+    )
     return {
         "as_of": as_of.isoformat(),
-        "authoritative_daily_sales": authoritative_daily_sales(session, as_of),
+        "known_at": known_at.isoformat(),
+        "offer_version_ids": offer_versions,
+        "missing_offer_history": missing_offer_history,
+        "authoritative_daily_sales": authoritative_daily_sales(
+            session, as_of, known_at
+        ),
         "forecast_id": f"{run_id}:forecast",
         "inventory_snapshot_id": f"{run_id}:inventory",
-        "inventory": [_json(row) for row in estimated_inventory(session, as_of)],
-        "commitments": [
-            read_delivery(session, key).model_dump(mode="json")
-            for key in session.execute(select(db.deliveries.c.id)).scalars()
+        "inventory": [
+            _json(row) for row in estimated_inventory(session, as_of, known_at)
         ],
+        "commitments": commitments_at(session, as_of, known_at),
         "ingredients": [
             _json(dict(row))
-            for row in session.execute(select(db.ingredients)).mappings()
+            for row in session.execute(
+                select(db.ingredients).order_by(db.ingredients.c.id)
+            ).mappings()
         ],
         "cycle_decisions": [
             _json(dict(row))
-            for row in session.execute(select(db.order_cycles)).mappings()
-        ],
-        "holidays": [
-            _json(dict(row)) for row in session.execute(select(db.holidays)).mappings()
-        ],
-        "promotions": [
-            {"id": row["id"], **row["payload"]}
-            for row in session.execute(select(db.promotions)).mappings()
-        ],
-        "daily_history": [
-            _json(dict(row))
             for row in session.execute(
-                select(db.daily_revisions).where(db.daily_revisions.c.cutoff <= as_of)
-            ).mappings()
-        ],
-        "sales_batches": [
-            _json(dict(row))
-            for row in session.execute(
-                select(db.sales_batches).where(
-                    db.sales_batches.c.active == 1,
-                    db.sales_batches.c.period_end <= as_of,
+                select(db.order_cycles)
+                .where(
+                    db.order_cycles.c.effective_at <= as_of,
+                    db.order_cycles.c.decided_at <= known_at,
+                )
+                .order_by(
+                    db.order_cycles.c.ingredient_id, db.order_cycles.c.scheduled_date
                 )
             ).mappings()
         ],
-        "recipes": [
-            _json(dict(row)) for row in session.execute(select(db.recipes)).mappings()
-        ],
-        "offers": [
+        "holidays": [
             _json(dict(row))
-            for row in session.execute(select(db.supplier_offers)).mappings()
+            for row in session.execute(
+                select(db.holidays).order_by(db.holidays.c.date)
+            ).mappings()
         ],
+        "promotions": promotions_at(session, as_of, known_at),
+        "daily_history": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.daily_revisions)
+                .where(
+                    db.daily_revisions.c.cutoff <= as_of,
+                    db.daily_revisions.c.recorded_at <= known_at,
+                )
+                .order_by(db.daily_revisions.c.day, db.daily_revisions.c.revision)
+            ).mappings()
+        ],
+        "sales_batches": [_json(row) for row in sales_at(session, as_of, known_at)],
+        "recipes": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.recipes).order_by(
+                    db.recipes.c.menu_item_id, db.recipes.c.ingredient_id
+                )
+            ).mappings()
+        ],
+        "offers": offers,
     }
 
 
@@ -264,6 +294,12 @@ def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
             409, "RUN_NOT_CLAIMED", "Claim the assessment before using its tools"
         )
     snapshot = run.snapshot
+    if snapshot.get("missing_offer_history") or not snapshot["inventory"]:
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "Historical supplier or inventory observations are unavailable at this cutoff",
+        )
     if any(
         not lot["coverage_complete"]
         for lot in snapshot["inventory"]
@@ -606,14 +642,33 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
             session.execute(
                 insert(db.purchase_plans).values(id=plan_id, created_at=now)
             )
-        else:
+        active_versions = (
+            session.execute(
+                select(db.plan_versions).where(
+                    db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED"))
+                )
+            )
+            .mappings()
+            .all()
+        )
+        for old in active_versions:
             session.execute(
                 update(db.plan_versions)
-                .where(
-                    db.plan_versions.c.plan_id == plan_id,
-                    db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
-                )
+                .where(db.plan_versions.c.id == old["id"])
                 .values(status="SUPERSEDED")
+            )
+            record_event(
+                session,
+                "PLAN_SUPERSEDED",
+                "backend",
+                {
+                    "plan_id": old["plan_id"],
+                    "version_id": old["id"],
+                    "version": old["version"],
+                    "replacement_version_id": version_id,
+                    "previous_status": old["status"],
+                    "reason": "New recommendation replaces the restaurant's actionable plan",
+                },
             )
         session.execute(
             insert(db.plan_versions).values(

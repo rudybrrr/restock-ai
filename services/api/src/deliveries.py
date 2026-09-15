@@ -2,11 +2,12 @@ from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
+from src.fact_history import delivery_activity_at
 from src.operations import lock_inventory, record_daily_revision, record_event
 from src.operations_schemas import (
     DailyDraft,
@@ -82,11 +83,34 @@ def create_delivery(session: Session, body: DeliveryCreate, actor: str) -> Deliv
             .mappings()
             .one_or_none()
         )
-        if source is None or source["ingredient_id"] != body.ingredient_id:
+        if (
+            source is None
+            or source["ingredient_id"] != body.ingredient_id
+            or source["supplier_id"] != body.supplier_id
+        ):
             raise ApiError(
                 422,
                 "INVALID_PLAN_SOURCE",
-                "Source line must exist and recommend this ingredient",
+                "Source line must match ingredient and supplier; record deviations as unlinked purchases",
+            )
+        status = session.execute(
+            select(db.plan_versions.c.status).where(
+                db.plan_versions.c.id == source["plan_version_id"]
+            )
+        ).scalar_one()
+        if status != "APPROVED":
+            raise ApiError(
+                409,
+                "SOURCE_PLAN_NOT_APPROVED",
+                "Only the current approved version can allocate new purchases; record other actual purchases unlinked",
+            )
+        if body.expected_quantity > source["quantity"] - linked_quantity(
+            session, source["id"]
+        ):
+            raise ApiError(
+                409,
+                "SOURCE_QUANTITY_EXCEEDED",
+                "Linked purchases would exceed this line; record any deviation as an unlinked purchase",
             )
     if body.cycle_date is not None:
         ingredient = (
@@ -120,11 +144,33 @@ def create_delivery(session: Session, body: DeliveryCreate, actor: str) -> Deliv
             422, "INVALID_ARRIVAL", "Expected arrival cannot precede the purchase"
         )
     delivery_id = str(uuid4())
-    session.execute(insert(db.deliveries).values(id=delivery_id, **body.model_dump()))
+    session.execute(
+        insert(db.deliveries).values(
+            id=delivery_id,
+            source_validation="APPROVED_ALLOCATION"
+            if body.source_plan_line_id
+            else "MANUAL",
+            **body.model_dump(),
+        )
+    )
     result = read_delivery(session, delivery_id)
     delivery_event(session, "EXTERNAL_ORDER_RECORDED", actor, result, body.ordered_at)
     session.commit()
     return result
+
+
+def linked_quantity(session: Session, line_id: str) -> Decimal:
+    return session.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    db.deliveries.c.expected_quantity
+                    - db.deliveries.c.cancelled_quantity
+                ),
+                0,
+            )
+        ).where(db.deliveries.c.source_plan_line_id == line_id)
+    ).scalar_one()
 
 
 def update_delivery(
@@ -148,11 +194,41 @@ def update_delivery(
             "DELIVERY_CLOSED",
             "A completed or cancelled delivery cannot be reopened",
         )
+    if body.effective_at < delivery_activity_at(session, delivery_id):
+        raise ApiError(
+            409,
+            "STALE_DELIVERY_UPDATE",
+            "Terms cannot precede already recorded delivery activity",
+        )
     cancelled = (
         body.expected_quantity - previous.received_quantity
         if body.cancel_remainder
-        else Decimal(0)
+        else previous.cancelled_quantity
     )
+    if body.expected_quantity < previous.received_quantity + cancelled:
+        raise ApiError(
+            422,
+            "INVALID_DELIVERY_UPDATE",
+            "Expected total cannot erase received or cancelled quantities",
+        )
+    if (
+        previous.source_validation == "APPROVED_ALLOCATION"
+        and previous.source_plan_line_id
+    ):
+        quantity = session.execute(
+            select(db.purchase_plan_lines.c.quantity).where(
+                db.purchase_plan_lines.c.id == previous.source_plan_line_id
+            )
+        ).scalar_one()
+        other = linked_quantity(session, previous.source_plan_line_id) - (
+            previous.expected_quantity - previous.cancelled_quantity
+        )
+        if other + body.expected_quantity - cancelled > quantity:
+            raise ApiError(
+                409,
+                "SOURCE_QUANTITY_EXCEEDED",
+                "Record additional actual purchases unlinked instead of exceeding the source allocation",
+            )
     session.execute(
         update(db.deliveries)
         .where(db.deliveries.c.id == delivery_id)
@@ -196,6 +272,14 @@ def receive_delivery(
     if body.quantity > previous.outstanding_quantity:
         raise ApiError(
             409, "RECEIPT_EXCEEDS_REMAINDER", "Receipt exceeds outstanding quantity"
+        )
+    if body.remainder == "CANCELLED" and body.received_at < delivery_activity_at(
+        session, delivery_id
+    ):
+        raise ApiError(
+            409,
+            "STALE_DELIVERY_CANCELLATION",
+            "Cancellation cannot precede already recorded delivery activity",
         )
     if (
         body.received_at < previous.ordered_at

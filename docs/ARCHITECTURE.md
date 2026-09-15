@@ -140,6 +140,7 @@ MANUAL_REASSESSMENT_REQUESTED
 MANAGER_INSTRUCTION
 PLAN_APPROVED
 PLAN_REJECTED
+PLAN_SUPERSEDED
 ```
 
 ## 6. Agent tools
@@ -290,15 +291,20 @@ The backend-owner planning session refined the larger proposal as follows:
 
 - One restaurant, 5 dishes, 8 ingredients, and 3 approved suppliers. One FastAPI service, PostgreSQL database, and agent process.
 - Revised Q42: timestamped simulated sales batches deterministically update estimated inventory after the latest physical count without invoking Claude for every batch. Daily submission, promotions, supplier disruptions, material demand/stockout thresholds, and manual requests trigger agent assessment. No real POS integration is required; estimates describe only supplied activity with explicit coverage.
-- Ingredients use interval_days and starting_date only. No weekday calendars, category inheritance, or reorder-point scheduling.
+- Ingredients use positive interval_days and starting_date only. No weekday calendars, category inheritance, or reorder-point scheduling. Cycle decisions accept effective_at in simulation time, separate from real decided_at; omitted effective_at means real time.
 - One bounded agent run executes at a time. Administrative edits may be blocked, but sales batches must remain ingestible. Proposed backend coordination uses state revisions and one coalesced pending assessment; publication/approval must revalidate against newer relevant state. Snapshots remain frozen; timeouts release restrictions and late results are rejected.
 - Closing batch counts are authoritative. Timestamped post-count activity supports ESTIMATED inventory; forecast balances are PROJECTED. Partial sales and final daily totals must not be summed twice. Optional recorded waste is distinct from discrepancies and forecast waste.
 - Agent-selected deterministic tools may produce emergency/contingency recommendations using approved suppliers. Existing external commitments are fixed inputs, not new purchase lines. A disruption can invalidate current operational reliance on an ordered version without deleting its approval or changing its purchase history.
 - Every new recommendation requires manager approval and must be feasible. Approval does not execute purchases. The owner records actual external orders and receipts separately.
 - Batches remain stored as EXPIRED starting the day after expiry in Singapore simulation time. The intraday scenario requires explicit event/arrival times; daily delivery defaults must not backdate emergency arrivals.
 - PurchasePlan.id is stable across revisions and distinct from ingredient order cycles. Approvals carry plan_id and plan_version. Snapshot IDs resolve to preserved artifacts even if stored as typed JSON.
+- One actionable version (PENDING_APPROVAL or APPROVED) is allowed across all plan identities. Publishing a replacement atomically supersedes the prior actionable version and emits PLAN_SUPERSEDED with previous status and replacement version ID. Existing external commitments survive.
+- Frozen inputs use operational as_of and real known_at cutoffs. Immutable supplier observations and promotion/delivery event history preserve earlier facts; counts, receipts and sales corrections have recording timestamps. Do not read today's mutable rows when rebuilding a historical assessment. Legacy missing history is explicit missing data, not inferred historical values.
+- Complete simulator sales batches may omit zero dishes. Corrections preserve source, batch_id and exact bounds. New source_plan_line_id purchase links require the current approved version, matching supplier/ingredient and a cumulative allocation within its quantity; deviations are unlinked actual purchases. Existing unchecked links remain labelled LEGACY_REFERENCE.
 
 The approved scope is in BACKEND_SPEC.md. Current implementation and teammate integration gaps are recorded in BACKEND_HANDOVER.md. These contracts describe the target behaviour; consult the handover before assuming every integration is implemented. The outcome/reason split and lifecycle table below supersede the older ESCALATE_INSUFFICIENT_INFORMATION and VALID names.
+
+Shared fee grouping, full cost/policy inputs, reliability and additional escalation reasons are proposed in SHARED_INTEGRATION_CONTRACT.md. Those proposals are not frozen until Aniq and Rudy agree; current development fixtures do not establish the real-engine acceptance results.
 
 
 ## 13. MVP lifecycle and supplier schema

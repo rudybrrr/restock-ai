@@ -2,12 +2,16 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.3, 14 September 2026<br>
+**Version:** 1.4, 15 September 2026<br>
 **Status:** Implemented numerical foundation, with live integration contracts awaiting confirmation.
 
 ## 1. Start here
 
 ReStock helps a restaurant maintain purchasing recommendations as demand, stock and supplier conditions change. This revision includes seasonal forecasting, timed dish demand, recipe conversion, one-day inventory projection, reproducible development history and a pure one-day cash procurement search with independent candidate validation. Live backend and agent adapters remain pending.
+
+**15 September update for Rudy's integration request:** this branch incorporates main's audit-safeguard commit `411527d327114f29cf1dd5a46e6e76faeae2024b` into the published ML implementation at `4f1d4c3de8c80d50c6c90012cb81ce5b3a2533ac`. The sales merge retains `sales_at(session, as_of, known_at)` and recording-time filtering alongside the ML recipe helper. Historical snapshot selection, correction identity, supersession and audit logic remain backend-owned. This is a merge update, not rewritten feature-branch history.
+
+`search_procurement()` is the real deterministic **one-day cash-stage** optimiser for the first bounded MVP connection. It is not the disabled backend development calculator or the final multi-day economic scorer. `validate_candidate()` is the numerical validator to call before backend freshness/publication checks. The [15 September integration boundary](ML_NUMERICAL_FUNCTIONS.md#15-september-integration-boundary) specifies supported policies, result handling and the remaining transport decisions. The shared contract is still a proposal; Aniq's numerical confirmation does not assert Chun Yang's or Rudy's agreement.
 
 Use the [feature branch](https://github.com/rudybrrr/restock-ai/tree/feat/forecasting) for the complete source, tests and this handover. The historical commit below covers the earlier foundation only. For a consistent review, use the same resolved feature-branch commit for source, tests and documentation.
 
@@ -67,11 +71,13 @@ Paths below are relative to the repository root.
 | [history_dataset.py](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/services/api/src/history_dataset.py) | Validates observations, loads issue-time-visible daily revisions/promotions, and selects chronological target partitions | Observation reader never loads evaluator truth/configuration; no model fitting or multi-horizon feature builder |
 | [procurement.py](https://github.com/rudybrrr/restock-ai/blob/feat/forecasting/services/api/src/procurement.py) | `search_procurement` and independently callable `validate_candidate`: finite one-day cash search, timed feasibility, shared capacity and explicit constraints | Fixture policies, opening-time order placement, no live adapter, multi-day or full economic objective |
 
-The earlier `planning.py` and `sales.py` edits reuse `sum_recipe_usage`. The projector task did not modify those files or backend historical replay. No shared FEFO helper was extracted.
+The `planning.py` and `sales.py` edits reuse `sum_recipe_usage`. The 15 September merge preserves main's newer historical replay and audit semantics while retaining that arithmetic reuse. No shared FEFO helper was extracted; existing backend tie ordering remains unchanged.
 
 Tests are in `services/api/tests/test_forecasting.py`, `test_requirements.py`, `test_service_buckets.py`, `test_inventory_projection.py`, and the catalogue comparison in `test_seed_contract.py`. Fixtures are `seasonal_baseline_v3.json`, `service_profile_v2.json` and `inventory_projection_v1.json` under `services/api/tests/fixtures/`.
 
 Additional tests are `test_synthetic_history.py` and `test_procurement.py`, with intentional small configurations `history_development_v1.json` and `procurement_v1.json`. Generated observations and evaluator outputs are reproducible artifacts excluded from Git.
+
+`test_procurement.py` now also declares explicit two- and three-supplier domains over the same five dishes, eight ingredients and fourteen service buckets. These capacity/pack overrides are synthetic test inputs, not pruning or replacement of current seed offers. Their complete domains contain 36 and 216 combinations respectively; expected cash is S$68 and S$81.50. Both force split sourcing, retain independent candidate validation, and test incomplete search despite a feasible incumbent.
 
 Read `docs/ML_NUMERICAL_FUNCTIONS.md` for detailed Python semantics and the mapping of all twelve #15 acceptance criteria.
 
@@ -201,20 +207,20 @@ The local Codex reported scratch execution of all three alternatives and these t
 
 ## 7. Chun Yang: requested backend confirmations
 
-Use your [backend handover](https://github.com/rudybrrr/restock-ai/blob/5827515ec48183ba908151fb0016b118cd801b1c/docs/BACKEND_HANDOVER.md) and current code as the integration starting point. These are the concrete gaps to resolve, not a request to implement Aniq's engine again.
+Use the [backend handover](BACKEND_HANDOVER.md), [shared integration proposal](SHARED_INTEGRATION_CONTRACT.md) and current code as the integration starting point. Main's PR #17 is included in this branch. These are the remaining mapping questions, not a request to implement Aniq's engine or repeat the merged backend fixes.
 
 | Area | Existing seam | Confirmation or required change |
 | --- | --- | --- |
-| Opening state | `sales.estimated_inventory(session, as_of)`; `GET /api/v1/inventory/estimated?as_of=...`; `planning._snapshot["inventory"]` | Supply a common cutoff, complete expected lot/ingredient coverage, explicit zero-stock evidence and unchanged coverage/deficit findings |
-| Time and revisions | Run `as_of`, `claimed_at`, integer `input_revision`; currently selected records | Define operational scope, knowledge cutoff and revision membership. An event count or frozen JSON alone does not establish historical selection correctness |
+| Opening state | `sales.estimated_inventory(session, as_of, known_at)`; frozen `planning._snapshot["inventory"]` | Use the frozen result, with complete expected lot/ingredient coverage, explicit zero-stock evidence and unchanged coverage/deficit findings |
+| Time and revisions | Snapshot `as_of`, `known_at`, `offer_version_ids`, integer run `input_revision` | Preserve operational and recording cutoffs; bind the integer-to-string numerical revision to this exact saved bundle and its resolvable source versions |
 | Catalogue and recipes | Current catalogue models and snapshot ingredients/recipes | Capture the menu too; provide one resolved complete recipe/catalogue artifact and authoritative manifest/version, without another live read during calculation |
-| Commitments | `deliveries.read_delivery`, `Delivery` and `Receipt` | Export the 10/6/4 and cancellation cases at the same capture; preserve receipt links and select only the applicable versions |
+| Commitments | `fact_history.commitments_at`, frozen snapshot commitments, `Delivery` and `Receipt` | Export the 10/6/4 and cancellation cases from the same capture; do not replace them with a current-state `read_delivery` call |
 | Expected expiry | Actual receipt expiry and supplier offer shelf-life fields exist | Establish commitment-specific expected expiry and its captured source/assumption; unknown stays unknown |
 | Projection dates/profile | Local explicit target/horizon/profile inputs | Agree their request/capture mapping. Do not infer a purchasing horizon from the one-day example |
 | Precision | Observed quantities use `Numeric(12,3)`; projected outputs can be finer | Agree lossless Decimal-string transport and range handling separately from observed storage |
 | FEFO | Backend uses expiry then lot ID; v2 specifies expiry, receipt time, ID | Confirm non-tied first-example compatibility. Agree tied ordering and identity mapping before claiming shared parity or changing historical replay |
 
-**CY-001 remains an unresolved audit finding in the inspected code.** Current readers combine operational cutoffs with current active records and mutable supply/offer state. A caller can therefore supply a frozen set that already contains incorrectly selected history. The projector cannot fix that.
+**The old unqualified CY-001 finding is superseded by PR #17's backend changes.** Main now contains historical offer/promotion/delivery selection, recording-time filters, explicit missing-history handling and replay regressions. This update retains those changes. It does not independently certify the entire live export or claim the combined PostgreSQL suite passed. Required coverage/provenance mapping and pre-migration missing-history limitations remain. Never substitute current mutable rows when an earlier snapshot lacks evidence.
 
 Required live evidence includes a captured bundle that remains stable after later backdated counts, sales corrections, receipts or cancellations, and a new capture that selects the correct eligible versions. Include explicit-zero, missing-lot, missing-interval, positive-deficit and receipt-retry cases. A byte-stable bundle alone is insufficient unless its original membership was correct.
 
@@ -223,6 +229,8 @@ Required live evidence includes a captured bundle that remains stable after late
 ## 8. Rudy: requested agent confirmations
 
 The projector provides inventory evidence. It does not return a purchase Candidate, select suppliers or approve anything. Connect it through thin tools/adapters and preserve the same result for expiry and shortage investigations.
+
+For purchasing, call `src.procurement.search_procurement` and then `src.procurement.validate_candidate` on the same resolved `ProcurementInputs`. The returned `PurchaseCandidate` is an internal numerical value, distinct from the backend's persisted `Candidate` schema. Use the documented opportunity-to-offer mapping; do not reconstruct quantities or infer absent policy values. Search completion is required even when a diagnostic incumbent independently validates. The numerical documentation's integration boundary gives the exact existing fields and proposed artifact metadata for backend-owned transport.
 
 | Area | Required decision |
 | --- | --- |
@@ -248,7 +256,28 @@ Main and the inspected agent branch do not yet expose the same completion vocabu
 
 ## 9. Verification and how to review locally
 
-Fresh publication verification on 14 September 2026: **329 numerical tests passed**
+**15 September combined-tree verification:** `uv sync --locked` succeeded with the
+unchanged lockfile. All **333 numerical tests passed** (193 foundation, 68 dataset,
+72 procurement), including the four new two-/three-supplier cases, in 13.16 seconds.
+Ruff passed API-wide; Pyright reported zero errors/warnings; formatting passed for
+`planning.py`, `sales.py` and `test_procurement.py`; Git diff checks passed. Full
+suite collection succeeded with **390 tests**, which is collection only, not 390
+executed tests. The two existing dependency deprecation warnings remain.
+
+The combined PostgreSQL suite was **not executed**: this environment has no
+PostgreSQL service/binaries, and package-manager setup failed on environment
+permissions. No shared database was used. Preserve the new main audit/replay tests
+and run `uv run --locked pytest -q` with the README's disposable test database
+before merging to main. Bedrock, frontend, real engine publication and deployment
+were not tested. Numerical checks alone do not establish merge readiness.
+
+The merge resolution was reviewed against main: the only retained differences in
+`planning.py` and `sales.py` are the existing recipe-helper reuse and typed recipe
+conversion. All seven existing numerical source modules are unchanged from
+`4f1d4c3`; no backend migrations, publication logic, historical fact selectors,
+agent modules or frontend files were newly edited in this update.
+
+Historical publication verification on 14 September 2026: **329 numerical tests passed**
 (193 foundation + 68 dataset + 68 procurement), two existing dependency warnings,
 10.97 seconds. API-wide Ruff and Pyright passed (zero type errors/warnings); all
 five new Python source/test files passed formatting. The portable development
@@ -307,7 +336,7 @@ This handover is based on the reviewed projector implementation, numerical docum
 
 Use current code for existing interfaces, approved plans for intended scope, and explicit later team decisions for resolved changes. Report conflicts. In particular, the old backend specification's claim that only health checking exists is stale, and older escalation lists must not silently override later contract discussions.
 
-At the original handover check on 14 September 2026, #16 contained the published proposal and no owner replies. This source-publication task does not establish whether further replies have since been added; GitHub issues were not refreshed or edited. No shared-contract approval is inferred. If newer replies or code exist when you read this, reconcile them and identify the new source/commit.
+On the 15 September check, #16 still contained the original proposal comment and no Chun Yang/Rudy confirmation replies. Main now also contains `docs/SHARED_INTEGRATION_CONTRACT.md`, explicitly proposed rather than frozen. The supplied 15 September WhatsApp request authorizes preparing this branch for integration and records Ethan's approval to proceed in principle. It does not settle fee grouping, canonical artifact transport or final economic policies. Record subsequent agreements explicitly; do not infer them from silence.
 
 Keep one shared document. For each subsequent revision, record date, affected interface, accepted decision and evidence link. The repository copy is `docs/ML_HANDOVER.md` on `feat/forecasting`; share its GitHub link and the verified implementation commit with teammates. Editing this document does not itself publish code, change issues, grant repository access or implement any adapter.
 
@@ -318,5 +347,5 @@ Keep one shared document. For each subsequent revision, record date, affected in
 | 1.0 | 14 September 2026 | Initial shared ML implementation and integration handover |
 | 1.1 | 14 September 2026 | Changed teammate/AI review access to GitHub `feat/forecasting`; added branch, source, test and handover links, commit verification and direct AI-review instructions. Numerical scope, test evidence and unresolved contracts are unchanged. |
 | 1.2 | 14 September 2026 | Added the repository handover and verified implementation commit permalink; corrected the pending-publication record. Numerical scope and unresolved contracts are unchanged. |
-
 | 1.3 | 14 September 2026 | Added development history/partitions, observation-only loading, service-profile validation and one-day cash procurement with independent validation; expanded verification commands and separated historical publication records from current feature-branch scope. Shared #16 decisions remain unresolved. |
+| 1.4 | 15 September 2026 | Incorporated main's historical replay/audit safeguards, retained the recipe helper, added two-/three-supplier numerical acceptance, confirmed callable optimiser/validator scope and documented policy/artifact mapping for teammate integration. Shared agreement and combined PostgreSQL verification remain separate. |

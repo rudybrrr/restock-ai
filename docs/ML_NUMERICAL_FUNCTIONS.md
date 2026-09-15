@@ -9,6 +9,13 @@ dataset/procurement additions. Neither historical commit contains these addition
 Implementation is based on approved v2 plus v3; production policies and #16 live
 contracts remain unresolved. Verification records below identify their task scope.
 
+The 15 September update incorporates main `411527d327114f29cf1dd5a46e6e76faeae2024b`
+into feature revision `4f1d4c3de8c80d50c6c90012cb81ce5b3a2533ac`, preserving historical
+selection and audit code. Read the [current integration boundary](#15-september-integration-boundary)
+before using historical readiness statements below. In particular, PR #17 added
+the backend corrections previously tracked as CY-001; the live ML export and
+combined PostgreSQL verification remain separate acceptance work.
+
 Fresh publication verification, 14 September 2026: **329 numerical tests passed**
 (193 foundation + 68 dataset + 68 procurement), two existing dependency warnings,
 10.97 seconds. API-wide Ruff and Pyright passed; all five added Python files passed
@@ -491,7 +498,8 @@ unchanged and this task prohibits database mutation. No services were started.
 This verifies synthetic accounting, reproduction and leakage boundaries, not real
 restaurant forecast accuracy. Physical fulfilment/replay, hidden losses, multi-horizon
 features, XGBoost, procurement within the dataset generator, the forty-scenario benchmark and backend/agent
-integration remain outside scope. Issue #16/CY-001 remain unresolved. The smallest
+integration remain outside scope. Issue #16 mapping remains unresolved; PR #17's
+historical-selection fixes supersede the former blanket CY-001 statement. The smallest
 dataset follow-up is to confirm the full calendar/catalogue/assumption proposal;
 the next live numerical connection still needs the agreed frozen opening/commitment
 example and thin input adapter described above, with separate authorization.
@@ -693,7 +701,7 @@ restaurant forecast accuracy, full economic optimality or live purchasing readin
 - **Chun Yang:** supply provenance-correct frozen opening, complete catalogue and
   manifests, reconciled commitments/expiry, approved offers and applicable ordering
   opportunities; capture budget/storage/safety and accepted policy versions. Own
-  CY-001 corrections, database adapters, immutable evidence persistence, freshness,
+  preservation/verification of PR #17 historical selection, database adapters, immutable evidence persistence, freshness,
   completion/lifecycle and approval enforcement. Agree fee grouping/co-shipping,
   expiry day count, physical purchase precision and FEFO parity before live use.
 - **Rudy:** consume referenced numerical results without recalculating them. Map
@@ -708,3 +716,149 @@ backend-owned adapter. The supplied #16 proposal remains a proposal; this task d
 not refresh or edit GitHub issue comments and infers no new teammate approval.
 Live result publication still needs agreed evidence/precision/completion contracts
 and backend/agent acceptance. No procurement optimiser is wired to the application.
+
+## 15 September integration boundary
+
+### Authority, merge and callable scope
+
+The approved sources were read completely for this update, without editing them:
+
+| Source | SHA-256 | Applicable direction |
+| --- | --- | --- |
+| `ReStock_ML_Decision_Engine_Plan_v2_Review_Reconciled.md` | `3e326b5e77d4feba6a14ed7ce410ddee3a3c023754a0fe3c79a4a62add4deeed` | Numerical ownership, independent validation, exact quantities, temporal coverage and interface semantics |
+| `ReStock_ML_Decision_Engine_Plan_v3_Integration_Amendment.md` | `bcc2bc7548bace736facbc3775d4ef2f46ad7078262b82f50436526dbba62714` | Current catalogue; first one-day cash stage; context-only reliability; diagnostic incumbents; backend-owned canonical transport |
+
+V3 overrides conflicting v2 examples and policies. The user's supplied approval
+and 15 September integration request authorize this implementation update; dated
+"planning only" text records the earlier document task. Full economic scoring,
+continuation and held-out evaluation are not made complete or approved by this update.
+
+`src.procurement.search_procurement(inputs: ProcurementInputs) -> ProcurementResult`
+is the real bounded deterministic optimiser for the **first one-day cash stage**.
+`src.procurement.validate_candidate(inputs: ProcurementInputs,
+candidate: PurchaseCandidate) -> CandidateValidation` is the numerical validator
+before backend freshness, publication and approval checks. No second optimiser,
+backend route, persisted schema or agent adapter is introduced here.
+
+Main's newer `sales_at(session, as_of, known_at)` replay is retained with
+`RecipeItem` conversion and `sum_recipe_usage`. The main snapshot, historical fact
+readers, recording-time filters, one-actionable-plan rule and audit tests are
+preserved. `planning.optimise` remains the opt-in development calculator until
+Chun Yang and Rudy connect the real engine; importing the helper does not wire it.
+
+### Exact inputs and version support
+
+The existing `ProcurementInputs` table above is the callable contract. Every call
+uses one resolved immutable bundle, not separate live catalogue/offer queries.
+Main's snapshot now supplies `as_of`, `known_at` and `offer_version_ids`; use those
+facts and its frozen commitments rather than current-state fallback reads.
+Complete menu/recipe/stock coverage, forecast/profile evidence, expected outstanding
+supply expiry and manager policy still need the agreed backend export mapping.
+
+| Version/context | Existing numerical support | Backend/agent responsibility |
+| --- | --- | --- |
+| Operational and knowledge time | `inventory.as_of`, `issue_time`, `target_date`, `horizon_end`, `inventory.known_at` | Bind to the same saved run and coverage; do not replace operational time with wall-clock time |
+| Captured state | `inventory.captured_revision`; each `SourceEvidence.captured_revision` | Map integer `input_revision` losslessly to a string and resolve the actual frozen bundle; matching strings alone do not prove provenance |
+| Recipe/catalogue/forecast/profile | Complete typed inputs and respective `inventory.evidence` entries | Resolve immutable versions and manifests; original source versions belong in the referenced artifact |
+| Supplier revisions | `offer_evidence[offer_id]`, offer `observed_at` and approved-offer manifest | Retain main's selected `offer_version_ids` and all required evidence; no newer mutable offer substitution |
+| Cash policy | `cash_policy=CASH_SLICE_V1_EXACT_SGD` plus `policy_evidence["cash_policy"]` | Mark the result as immediate cash, not projected operating cost or profit |
+| Fee policy | `fee_policy=SUPPLIER_ARRIVAL_ONCE_PLUS_EMERGENCY_ONCE` plus its evidence | Freeze the explicit shipment mapping below; do not silently rename it `PER_LINE_V1` |
+| Expiry and tie policies | Explicit supported strings plus their evidence | Preserve the day-count convention and stable opportunity IDs; unsupported versions return incomplete |
+| Safety/storage/budget/domain | Explicit values and corresponding `policy_evidence` | Retain scope, version and source; no missing-to-zero or unlimited-capacity defaults |
+| FEFO/reliability | Explicit `fixture_fefo`; reliability is context-only in this cash stage | Preserve backend historical tie semantics; do not claim tied FEFO parity. Rate-only changes cannot affect selection |
+| Algorithm | Module and exact Git commit identify this implementation | Persist the producing revision with the result; there is no existing numerical `algorithm_version` field to pretend is echoed |
+
+The four supported policy identifiers select semantics; their `SourceEvidence`
+references identify the exact captured configuration. An unknown version is not
+accepted simply because an adapter discards the version field. The engine supports
+neither the full six-term economic ledger nor valuation/continuation policies yet.
+For this cash stage, mark those terms unsupported/not applicable in the agreed
+backend representation. Do not insert zero costs and claim they were evaluated.
+
+### Artifact mapping for Chun Yang and Rudy
+
+This table defines required information for the **proposed backend-owned mapping**,
+not a second ML wire schema or new endpoint. Use existing run/artifact storage.
+
+| Artifact or field | Mapping and consumer rule |
+| --- | --- |
+| Calculation request | Persist the resolved `ProcurementInputs`, run/snapshot identity, captured revision, exact algorithm revision and all referenced data/policy versions. Preserve manifests and declared search domain, not only selected lines |
+| Calculation result | Persist the exact `ProcurementResult` alongside that request. It does not itself echo all request metadata, allocate a persistent ID or verify a resolver |
+| Purchase lines | Resolve each `PurchaseLine.opportunity_id` through the captured `OrderingOpportunity` to its `offer_id`, supplier/ingredient, order/arrival times, kind and expiry. Preserve exact quantity/unit. Reject unknown/stale references |
+| Money | Preserve `Cash.acquisition`, `delivery`, `emergency`, `total` separately. The ordinary and exclusive emergency fees are not duplicated per ingredient line |
+| Validation | Persist the independently returned `CandidateValidation`: `complete`, nullable `feasible`, findings, violations, cash, projected balances and `proposed_supply_ids`. Keep hypothetical additions distinct from external commitments |
+| References | Backend allocates a resolvable result reference; Rudy's `candidate_result_ref` must resolve to this saved calculation and its exact request. An in-memory string or generated run suffix is not proof of persistence |
+| Decimal/time transport | JSON Decimal strings, aware ISO timestamps, nulls retained, integer counters retained. Do not round through JavaScript numbers or the physical-count scale. Tuple-keyed Python values need explicit canonical serialization, not guessed JSON object keys |
+
+Only `OPTIMAL_IN_DOMAIN` with completed search, a returned candidate and a complete,
+feasible independent validation can proceed to backend checks in this implementation.
+An empty candidate is a no-purchase calculation, not a fictitious pending order.
+`INFEASIBLE_IN_DOMAIN` requires full enumeration and cause-specific evidence;
+budget/storage infeasibility must not automatically become `NO_FEASIBLE_SUPPLIER`.
+For `INCOMPLETE`, preserve null candidate/validation and all findings. A
+`diagnostic_incumbent` remains non-actionable even if `validate_candidate` passes.
+Map search exhaustion to `ESCALATE / CALCULATION_INCOMPLETE`, detail
+`SEARCH_LIMIT_REACHED`. Missing data, unsupported scope, genuine execution failure
+and the coordinator's `CALL_LIMIT_REACHED` remain distinct as required by v3.
+Main's completion schema still needs the backend/agent-owned vocabulary mapping.
+
+### Fee proposal disposition
+
+Chun Yang's `SHARED_INTEGRATION_CONTRACT.md` proposes explicit `shipment_group_id`
+and `fee_policy_version` under `PER_SHIPMENT_V1`. The current kernel groups new
+lines by **supplier and normalized arrival instant** and has no
+`shipment_group_id` argument. These contracts are not interchangeable by renaming.
+
+For the first connection, Aniq proposes accepting the existing kernel only where
+the caller supplies and validates an explicit one-to-one mapping between each
+`(supplier, arrival)` pair and one new shipment group. Every line in that group
+must have the same ordinary/emergency fee terms. Persist this mapping and the
+selected kernel fee-policy identifier with the request/result. Fees are charged
+once per group, with one additional emergency charge when any line is emergency.
+Fixed commitments are not included in these new groups and imply no fee waiver.
+
+Two separately charged groups with the same supplier/arrival, fee consolidation
+with old commitments, per-line fees or incompatible group terms are unsupported
+by this kernel. The adapter must reject/return an explicit unsupported calculation
+instead of silently coalescing those groups. A broader grouping policy requires
+an agreed version and a subsequent numerical change with tests. This proposal
+needs Chun Yang/Rudy confirmation in #16; publication of this branch is not agreement.
+
+### Two- and three-supplier acceptance
+
+`test_procurement.py::bounded_supplier_domain` retains the reference's five dishes,
+eight ingredients and fourteen dated service buckets. Only chicken/noodles have
+new offers in this explicitly supplied test domain. Their fixed needs are 7.6 kg
+and 3 kg after opening stock; the other six ingredients are already covered.
+Every supplied opportunity is enumerated without dropping any of its pack choices.
+
+| Explicit fixture | Full combinations | Independently expected selection and cash |
+| --- | ---: | --- |
+| Two suppliers, Fresh/Pantry; chicken pack/capacity 4 kg each; noodles pack 1/capacity 2 kg each | `2*3*2*3 = 36` | Chicken 4 kg each at 4.50/5 gives 38; noodles Fresh 2 at 6.50 and Pantry 1 at 7 gives 20; two fees of 5. Total **S$68**, chicken closing 0.4 kg |
+| Three suppliers, Fresh/Pantry/Market; chicken pack/capacity 3 kg each; noodles pack 1/capacity 2 kg each | `2*3*2*3*2*3 = 216` | Chicken 3 kg each at 4.50/5/6 gives 46.50; noodles Fresh 2 and Pantry 1 gives 20; three fees of 5. Total **S$81.50**, chicken closing 1.4 kg |
+
+Both close noodles at zero and cover every supplied expected ingredient demand.
+Tests also reverse input ordering and stop each search one combination early;
+incomplete searches expose only diagnostic incumbents. These are explicit
+synthetic capacities/prices, not changes to the backend seed or arbitrary pruning
+of its larger domain. The earlier single-supplier S$60.50 oracle is retained.
+
+**Three suppliers alone does not bound runtime.** Domain size is the product of
+all opportunity pack counts plus one. Many offers, large capacities or multiple
+arrivals can exceed the work limit, even with only three supplier identities.
+These tests establish the named finite domains, not a performance guarantee for
+all 24 seed offers or the full seven-day MVP. Do not remove real offer/quantity
+choices without an agreed scope or sound exclusion proof to make a run pass.
+The current implementation returns incomplete when its supplied domain cannot
+finish within the work limit; it does not publish a heuristic incumbent.
+
+### Update verification and remaining acceptance
+
+Verification for the combined tree is recorded in `ML_HANDOVER.md` section 9.
+Run the complete backend suite with its documented disposable PostgreSQL instance
+before merging this contribution into main. In particular retain and execute
+`test_snapshot_history.py`, `test_audit_guards.py`, `test_audit_upgrade.py`,
+`test_sales.py`, `test_planning.py` and `test_seed_contract.py`. They test the
+historical selection/audit behaviour crossed by the recipe-helper merge.
+No database schema, backend publication logic, agent code or frontend behaviour
+was newly implemented by this ML update.

@@ -300,6 +300,98 @@ def test_reference_cash_and_all_ingredient_conservation(reference):
         assert row.unmet == 0
 
 
+@pytest.fixture(params=[2, 3], ids=["two-suppliers", "three-suppliers"])
+def bounded_supplier_domain(reference, request):
+    """Explicit capacity/pack overrides, never pruning real seed availability.
+
+    All five dishes, eight ingredients and fourteen service buckets are retained.
+    Chicken needs 7.6 kg: two 4-kg offers force both suppliers; three 3-kg offers
+    force all three. Noodles need 3 kg, with at most 2 kg per supplier.
+    """
+    count = request.param
+    chicken_pack = D(4 if count == 2 else 3)
+    prices = (("fresh", "4.50", "6.50"), ("pantry", "5", "7"), ("market", "6", "8"))
+    offers = []
+    for supplier, chicken_price, noodles_price in prices[:count]:
+        for original, price in zip(
+            reference.offers, (chicken_price, noodles_price), strict=True
+        ):
+            chicken = original.ingredient_id == "chicken"
+            offers.append(
+                original.model_copy(
+                    update={
+                        "id": f"{supplier}-{original.ingredient_id}",
+                        "supplier_id": supplier,
+                        "unit_price": D(price),
+                        "pack_size": chicken_pack if chicken else D(1),
+                        "moq": chicken_pack if chicken else D(1),
+                        "available_quantity": chicken_pack if chicken else D(2),
+                    }
+                )
+            )
+    return with_offers(reference, offers)
+
+
+def test_full_service_two_and_three_supplier_domains(bounded_supplier_domain):
+    p = bounded_supplier_domain
+    r = search_procurement(p)
+    count = len(p.suppliers)
+    assert len(p.inventory["menu_items"]) == 5
+    assert len(p.inventory["ingredients"]) == 8
+    assert len(p.inventory["buckets"]) == 14
+    assert r.status == "OPTIMAL_IN_DOMAIN" and r.search_complete
+    assert r.evaluated == r.domain_size == (36 if count == 2 else 216)
+    assert r.candidate is not None
+    lines = {line.opportunity_id: line.quantity for line in r.candidate.lines}
+    if count == 2:
+        assert lines == {
+            "fresh-chicken": D(4),
+            "pantry-chicken": D(4),
+            "fresh-noodles": D(2),
+            "pantry-noodles": D(1),
+        }
+        # Chicken 4*4.5+4*5=38; noodles 2*6.5+1*7=20; two S$5 fees.
+        assert r.candidate.claimed_cash == Cash(D(58), D(10), D(0), D(68))
+    else:
+        assert lines == {
+            "fresh-chicken": D(3),
+            "pantry-chicken": D(3),
+            "market-chicken": D(3),
+            "fresh-noodles": D(2),
+            "pantry-noodles": D(1),
+        }
+        # Chicken 3*(4.5+5+6)=46.5; noodles 20; three S$5 fees.
+        assert r.candidate.claimed_cash == Cash(D("66.5"), D(15), D(0), D("81.5"))
+    checked = validate_candidate(p, r.candidate)
+    assert checked.complete and checked.feasible
+    assert checked.projection is not None and checked.projection.ingredients is not None
+    totals = {row.ingredient_id: row for row in checked.projection.ingredients}
+    assert totals["chicken"].closing == D(".4" if count == 2 else "1.4")
+    assert totals["noodles"].closing == 0
+    assert all(row.unmet == 0 for row in totals.values())
+    # Input ordering cannot choose a different supplier or change the cash evidence.
+    reordered = replace(
+        p,
+        offers=list(reversed(p.offers)),
+        opportunities=list(reversed(p.opportunities)),
+    )
+    assert search_procurement(reordered) == r
+
+
+def test_multisupplier_search_exhaustion_is_not_publishable(bounded_supplier_domain):
+    p = bounded_supplier_domain
+    # The final combination buys surplus noodles; feasible lower-cash candidates
+    # occur before it. Even one unvisited combination means no complete proof.
+    limit = 35 if len(p.suppliers) == 2 else 215
+    r = search_procurement(replace(p, work_limit=limit))
+    assert r.status == "INCOMPLETE" and not r.search_complete
+    assert r.evaluated == limit and r.domain_size == limit + 1
+    assert r.candidate is None and r.validation is None
+    assert "SEARCH_LIMIT_REACHED" in codes(r)
+    assert r.diagnostic_incumbent is not None
+    assert validate_candidate(p, r.diagnostic_incumbent).feasible
+
+
 def test_no_purchase_and_no_offer_domain(small):
     p = with_offers(stock(small, "2.5"), [])
     r = search_procurement(p)
