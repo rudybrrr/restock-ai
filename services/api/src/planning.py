@@ -22,7 +22,9 @@ from src.planning_schemas import (
     PurchasePlanVersion,
 )
 from src.reconciliation import authoritative_daily_sales
+from src.requirements import sum_recipe_usage
 from src.sales import estimated_inventory
+from src.schemas import RecipeItem
 
 
 def _json(value):
@@ -308,11 +310,10 @@ def optimise(session: Session, run_id: str, body: OptimiseRequest) -> Candidate:
             "MISSING_REQUIRED_DATA",
             "Complete sales coverage or a current stocktake is required to certify inventory",
         )
-    quantities: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-    for recipe in snapshot["recipes"]:
-        quantities[recipe["ingredient_id"]] += Decimal(
-            str(body.dish_quantities.get(recipe["menu_item_id"], 0))
-        ) * Decimal(str(recipe["quantity"]))
+    quantities = sum_recipe_usage(
+        {dish: Decimal(quantity) for dish, quantity in body.dish_quantities.items()},
+        [RecipeItem.model_validate(row) for row in snapshot["recipes"]],
+    )
     inventory: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     for lot in snapshot["inventory"]:
         if lot["status"] == "ACTIVE":

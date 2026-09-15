@@ -1,7 +1,37 @@
 """Synthetic catalog has usable tradeoffs for the demo's supplier decisions."""
 
+import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
+
+from src.schemas import Ingredient, MenuItem, RecipeItem
+
+
+def test_ml_fixture_catalogue_matches_current_seed(client):
+    """A seed change requires reviewing the numerical fixture, not forcing seed values."""
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "seasonal_baseline_v3.json").read_text()
+    )
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    for key, endpoint, model in (
+        ("menu_items", "menu-items", MenuItem),
+        ("ingredients", "ingredients", Ingredient),
+        ("recipes", "recipes", RecipeItem),
+    ):
+        response = client.get(f"/api/v1/{endpoint}")
+        assert response.status_code == 200, response.text
+        actual = [
+            model.model_validate(row).model_dump(mode="json") for row in response.json()
+        ]
+        expected = [
+            model.model_validate(row).model_dump(mode="json") for row in fixture[key]
+        ]
+        # Decimal strings can retain different scales (1 vs 1.000).
+        if key == "recipes":
+            for row in actual + expected:
+                row["quantity"] = str(Decimal(row["quantity"]).normalize())
+        assert sorted(actual, key=str) == sorted(expected, key=str)
 
 
 def test_seed_offers_support_alternatives_and_future_deliveries(client):
