@@ -225,6 +225,29 @@ or the existing backend error envelope. It never falls back to another provider.
 The runtime-only smoke outcome is `ESCALATE / MISSING_REQUIRED_DATA`; it does not
 claim that a purchasing calculation or plan publication occurred.
 
+## Pass 3E Agent procurement contract
+
+For the first connected cash slice, Backend seeds a versioned, read-only policy
+and complete approved supplier domain. An Agent bearer can first verify it with:
+
+```text
+GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1
+```
+
+After claiming a run at `2026-02-15T22:00:00+08:00`, the Agent must read the
+exact frozen artifact from:
+
+```text
+GET /api/v1/runs/{run_id}/procurement-contract
+```
+
+It carries `as_of`, `known_at`, `captured_state_revision`, policy version,
+approved domain, all 24 frozen offer/opportunity revisions, fee grouping and the
+frozen baseline state. The endpoint fails closed with `409 MISSING_REQUIRED_DATA`
+when the domain is incomplete or the run cannot use the deliberately empty
+first-slice baseline. The adapter must pass this artifact unchanged to the
+deterministic engine; it must not fetch current supplier facts or invent defaults.
+
 ## Audit safeguards and database upgrade
 
 Pull the current code, then run `python -m alembic upgrade head` before starting
@@ -252,6 +275,7 @@ approved version, matching supplier/ingredient, and cumulative quantity within t
 line. `GET /plans/{version_id}/lines` exposes `linked_quantity` and
 `uncommitted_quantity`; record actual deviations with no `source_plan_line_id`.
 
-See the [shared contract proposal](../../docs/SHARED_INTEGRATION_CONTRACT.md) before
-connecting the real engine or agent. Fee grouping, full cost validation, materiality
-and contingency acceptance still need teammate integration.
+See the [shared integration contract](../../docs/SHARED_INTEGRATION_CONTRACT.md)
+before connecting the real engine or Agent. The first-slice policy, domain and fee
+grouping are frozen; engine result publication, materiality and contingency
+acceptance still need teammate integration.

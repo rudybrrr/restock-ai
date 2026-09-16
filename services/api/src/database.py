@@ -32,6 +32,69 @@ supplier_offer_versions = Table(
     Column("payload", JSON, nullable=False),
 )
 
+procurement_policy_versions = Table(
+    "procurement_policy_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("policy_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("policy_id", "version"),
+)
+
+procurement_policy_domains = Table(
+    "procurement_policy_domains",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "policy_version_id",
+        ForeignKey("procurement_policy_versions.id"),
+        nullable=False,
+    ),
+    Column("domain_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("domain_id", "version"),
+)
+
+procurement_domain_offer_revisions = Table(
+    "procurement_domain_offer_revisions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "domain_version_id", ForeignKey("procurement_policy_domains.id"), nullable=False
+    ),
+    Column("offer_id", String, nullable=False),
+    Column("supplier_id", String, nullable=False),
+    Column("ingredient_id", String, nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("domain_version_id", "offer_id"),
+    UniqueConstraint("domain_version_id", "source_revision"),
+)
+
+procurement_domain_opportunities = Table(
+    "procurement_domain_opportunities",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "domain_version_id", ForeignKey("procurement_policy_domains.id"), nullable=False
+    ),
+    Column("opportunity_id", String, nullable=False),
+    Column("offer_id", String, nullable=False),
+    Column("ordered_at", DateTime(timezone=True), nullable=False),
+    Column("arrival_at", DateTime(timezone=True), nullable=False),
+    Column("kind", String, nullable=False),
+    Column("expiry_date", Date, nullable=False),
+    Column("source_revision", String, nullable=False),
+    UniqueConstraint("domain_version_id", "opportunity_id"),
+    CheckConstraint("kind IN ('NORMAL', 'EMERGENCY')"),
+)
+
 promotions = Table(
     "promotions",
     metadata,
