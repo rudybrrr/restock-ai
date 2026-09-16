@@ -68,8 +68,10 @@ def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
     assert all(row["source_revision"] for row in domain["offers"])
     assert all(
         row["kind"] == "NORMAL"
-        and row["ordered_at"] == ISSUE_TIME
-        and row["arrival_at"] == "2026-02-16T08:00:00+08:00"
+        and datetime.fromisoformat(row["ordered_at"])
+        == datetime.fromisoformat(ISSUE_TIME)
+        and datetime.fromisoformat(row["arrival_at"])
+        == datetime.fromisoformat("2026-02-16T08:00:00+08:00")
         and row["expiry_date"] == "2026-02-20"
         for row in domain["opportunities"]
     )
@@ -91,7 +93,9 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     assert response.status_code == 200, response.text
     contract = response.json()
     assert contract["run_id"] == run_id
-    assert contract["as_of"] == ISSUE_TIME
+    assert datetime.fromisoformat(contract["as_of"]) == datetime.fromisoformat(
+        ISSUE_TIME
+    )
     assert datetime.fromisoformat(contract["known_at"]) == datetime.fromisoformat(
         run["snapshot"]["known_at"]
     )
