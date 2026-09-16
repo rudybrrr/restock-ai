@@ -5,7 +5,15 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import AwareDatetime
 from sqlalchemy import select
 
-from src import changes, cycles, deliveries, operations, planning, sales
+from src import (
+    changes,
+    cycles,
+    deliveries,
+    operations,
+    planning,
+    procurement_contracts,
+    sales,
+)
 from src import database as db
 from src.auth import (
     SessionDep,
@@ -39,6 +47,7 @@ from src.planning_schemas import (
     PurchasePlanVersion,
     StoredPlanLine,
 )
+from src.procurement_contract_schemas import ProcurementContract
 from src.schemas import EstimatedInventoryLot, Identity, SupplierOffer
 
 router = APIRouter(
@@ -161,6 +170,33 @@ def request_assessment(body: AssessmentRequest, session: SessionDep, manager: Ma
 @router.get("/runs/{run_id}", response_model=PlanningRun)
 def read_run(run_id: str, session: SessionDep):
     return planning.get_run(session, run_id)
+
+
+@router.get(
+    "/procurement-policies/{policy_id}/versions/{version}",
+    response_model=ProcurementContract,
+)
+def read_procurement_policy(
+    policy_id: str, version: int, session: SessionDep, agent: Agent
+):
+    """Canonical policy/domain source; no current operational state is inferred."""
+    return procurement_contracts.read_policy_contract(session, policy_id, version)
+
+
+@router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)
+def read_frozen_procurement_contract(run_id: str, session: SessionDep, agent: Agent):
+    """Agent adapter boundary: return exactly the contract frozen at claim time."""
+    run = planning.get_run(session, run_id)
+    contract = run.snapshot.get("procurement_contract")
+    if contract is None:
+        reason = run.snapshot.get("procurement_contract_unavailable_reason")
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "First-slice procurement contract is unavailable"
+            + (f": {reason}" if reason else ""),
+        )
+    return ProcurementContract.model_validate(contract)
 
 
 @router.get("/runs", response_model=list[PlanningRun])

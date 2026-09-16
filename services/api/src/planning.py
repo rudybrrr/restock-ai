@@ -21,6 +21,7 @@ from src.planning_schemas import (
     PlanningRun,
     PurchasePlanVersion,
 )
+from src.procurement_contracts import freeze_first_slice_contract
 from src.reconciliation import authoritative_daily_sales
 from src.requirements import sum_recipe_usage
 from src.sales import estimated_inventory
@@ -52,15 +53,24 @@ def _revision(session: Session) -> int:
 
 
 def _snapshot(
-    session: Session, as_of: datetime, run_id: str, known_at: datetime | None = None
+    session: Session,
+    as_of: datetime,
+    run_id: str,
+    known_at: datetime | None = None,
+    captured_state_revision: int | None = None,
 ) -> dict:
     known_at = known_at or datetime.now(UTC)
+    captured_state_revision = (
+        _revision(session)
+        if captured_state_revision is None
+        else captured_state_revision
+    )
     offers, offer_versions = offers_at(session, as_of, known_at)
     missing_offer_history = sorted(
         set(session.execute(select(db.supplier_offers.c.id)).scalars())
         - {offer["id"] for offer in offers}
     )
-    return {
+    snapshot = {
         "as_of": as_of.isoformat(),
         "known_at": known_at.isoformat(),
         "offer_version_ids": offer_versions,
@@ -78,6 +88,18 @@ def _snapshot(
             _json(dict(row))
             for row in session.execute(
                 select(db.ingredients).order_by(db.ingredients.c.id)
+            ).mappings()
+        ],
+        "menu_items": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.menu_items).order_by(db.menu_items.c.id)
+            ).mappings()
+        ],
+        "suppliers": [
+            _json(dict(row))
+            for row in session.execute(
+                select(db.suppliers).order_by(db.suppliers.c.id)
             ).mappings()
         ],
         "cycle_decisions": [
@@ -122,6 +144,36 @@ def _snapshot(
         ],
         "offers": offers,
     }
+    contract = freeze_first_slice_contract(
+        session, as_of, known_at, captured_state_revision
+    )
+    if contract is not None:
+        contract["run_id"] = run_id
+        required_empty = (
+            snapshot["commitments"],
+            snapshot["daily_history"],
+            snapshot["sales_batches"],
+        )
+        if any(required_empty):
+            snapshot["procurement_contract_unavailable_reason"] = (
+                "FIRST_SLICE_ACTIVITY_NOT_EMPTY"
+            )
+        else:
+            contract["frozen_state"] = {
+                key: snapshot[key]
+                for key in (
+                    "inventory",
+                    "ingredients",
+                    "menu_items",
+                    "recipes",
+                    "suppliers",
+                    "commitments",
+                    "daily_history",
+                    "sales_batches",
+                )
+            }
+            snapshot["procurement_contract"] = contract
+    return snapshot
 
 
 def request_run(
@@ -270,7 +322,17 @@ def claim_run(session: Session) -> PlanningRun:
         session.commit()
         raise ApiError(409, "NO_QUEUED_RUN", "There is no queued assessment")
     now = datetime.now(UTC)
-    snapshot = {**row["snapshot"], **_snapshot(session, row["as_of"], row["id"])}
+    captured_state_revision = _revision(session)
+    snapshot = {
+        **row["snapshot"],
+        **_snapshot(
+            session,
+            row["as_of"],
+            row["id"],
+            now,
+            captured_state_revision,
+        ),
+    }
     session.execute(
         update(db.planning_runs)
         .where(db.planning_runs.c.id == row["id"])
@@ -278,7 +340,7 @@ def claim_run(session: Session) -> PlanningRun:
             status="RUNNING",
             claimed_at=now,
             deadline_at=now + timedelta(minutes=10),
-            input_revision=_revision(session),
+            input_revision=captured_state_revision,
             snapshot=snapshot,
         )
     )

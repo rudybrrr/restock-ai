@@ -1,6 +1,6 @@
 # Backend / Aniq / Rudy integration contract proposal
 
-Status: proposed for teammate review, not a claim of agreement or completed integration. The backend-owned safeguards are implemented separately. Aniq and Rudy should confirm the items marked **agree before integration** before treating this as a frozen v1 contract.
+Status: the Pass 3E cash slice below is an implemented, Backend-owned frozen input contract. The remaining CY items are still proposals for teammate review; they do not claim a completed engine or agent integration.
 
 ## Facts and ownership
 
@@ -9,6 +9,20 @@ Backend owns versioned operational inputs, time-correct frozen snapshots, public
 Use the backend's frozen `as_of` (operational time), `known_at` (real recording cutoff), supplier version IDs and historical facts. Do not fetch current mutable offers or deliveries to fill an earlier snapshot. `missing_offer_history` means required history is unavailable, not zero supply or proven infeasibility. Existing saved snapshots are the replay artifacts; recording history cannot restore facts already overwritten before the migration.
 
 Sales batches are explicitly complete incremental interval reports. Omitted dishes mean zero. Empty reports explicitly assert no sales during the interval. Partial reports are unsupported. Corrections retain source, batch ID and exact bounds; a replacement increments the revision. This resolves CY-002 and CY-011 without introducing a new POS integration.
+
+## Pass 3E first-slice Backend contract — implemented
+
+Backend persists and seeds immutable policy `CASH_SLICE_V1`, version `1`, with approved domain `CASH_SLICE_20260216_DOMAIN_V1`, version `1`. This is the authoritative integration fixture for the one-day cash slice, separate from mutable live supplier offers.
+
+- Service coverage is 16 February 2026, 11:00–14:00 at 0.4 and 17:00–21:00 at 0.6, in 30-minute Singapore-time buckets. The issue time is 15 February 2026 22:00 and the normal arrival is 16 February 2026 08:00.
+- The policy sets a S$100 new-order budget, zero safety stock, the agreed eight storage limits, `CONTEXT_ONLY` reliability, and `NORMAL_ONLY` opportunities.
+- Fees use `SUPPLIER_ARRIVAL_ONCE_V1`: one S$5 ordinary fee for each `(supplier_id, arrival_at)` group. Emergency fees exist in the fixture terms but are excluded from this slice.
+- FEFO is `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`. New supply expiry is `EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1`, so the five-day-arrival fixture expires on 20 February. Search and tie-break tags are `COMPLETE_PRUNED_DOMAIN_V1` and `SUPPLIER_ID_THEN_INGREDIENT_ID_V1`.
+- The approved domain contains all 24 frozen offer revisions: each of `fresh`, `pantry`, and `market` has one normal opportunity for every seeded ingredient. Each opportunity has its source revision, order time, arrival time and expiry date. A missing or mismatched entry returns `409 MISSING_REQUIRED_DATA`; the adapter must not invent a replacement.
+
+The Agent bearer can read the policy and domain from `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1`. Once it claims an exact eligible run, it reads `GET /api/v1/runs/{run_id}/procurement-contract`. That artifact includes the exact policy and domain, `as_of`, `known_at`, `captured_state_revision`, frozen inventory/recipes/catalog, and explicit empty commitments, daily history and sales batches. A run with activity outside this baseline receives `409 MISSING_REQUIRED_DATA` rather than a partly inferred cash-slice contract.
+
+The Agent adapter passes this artifact to the deterministic engine unchanged. It does not select current offers, create a policy, construct a domain, or supply defaults. The engine must honour the declared tags before this slice is used for an integrated recommendation.
 
 ## CY-004: linked purchases
 

@@ -61,3 +61,12 @@ A timestamped report of dish quantities sold during a defined interval. Successi
 
 **Contingency recommendation**:
 A proposed additional purchase addressing a disruption while accounting for purchases already arranged. It does not change existing external commitments.
+
+**Procurement policy version**:
+An immutable, dated set of rules that defines the purchasing objective, service coverage, safety stock, storage limits, budget, fee treatment, emergency mode and deterministic policy versions for one planning slice. A run uses the exact version frozen when it is claimed.
+
+**Approved procurement domain**:
+The complete set of frozen supplier-offer revisions and dated purchasing opportunities a procurement search may consider under a procurement policy version. It is distinct from the subset of lines eventually recommended.
+
+**Procurement contract**:
+The Backend-owned read artifact that combines a frozen procurement policy version, its approved procurement domain, the run's operational and knowledge cutoffs, and captured state revision. The agent passes it to deterministic tools; it does not create or alter it.
