@@ -304,7 +304,7 @@ The backend-owner planning session refined the larger proposal as follows:
 
 The approved scope is in BACKEND_SPEC.md. Current implementation and teammate integration gaps are recorded in BACKEND_HANDOVER.md. These contracts describe the target behaviour; consult the handover before assuming every integration is implemented. The outcome/reason split and lifecycle table below supersede the older ESCALATE_INSUFFICIENT_INFORMATION and VALID names.
 
-Shared fee grouping, full cost/policy inputs, reliability and additional escalation reasons are proposed in SHARED_INTEGRATION_CONTRACT.md. Those proposals are not frozen until Aniq and Rudy agree; current development fixtures do not establish the real-engine acceptance results.
+The frozen first-slice policy, supplier domain, fee grouping, and Agent read boundary are defined in SHARED_INTEGRATION_CONTRACT.md. Broader economic scoring, result publication, materiality, and contingency acceptance remain integration work; development fixtures do not establish those results.
 
 
 ## 13. MVP lifecycle and supplier schema

@@ -1,71 +1,52 @@
-# Backend / Aniq / Rudy integration contract proposal
+# Backend and Agent integration contract
 
-Status: the Pass 3E cash slice below is an implemented, Backend-owned frozen input contract. The remaining CY items are still proposals for teammate review; they do not claim a completed engine or agent integration.
+The first Pass 3E procurement input is implemented and frozen. This contract defines the Backend-owned input that the Agent adapter may send to the deterministic engine. It does not claim that the adapter, result publication, materiality checks, or contingency flow are complete.
 
-## Facts and ownership
+## Ownership
 
-Backend owns versioned operational inputs, time-correct frozen snapshots, publication, permissions and audit. Aniq owns deterministic forecast, inventory projection, supplier feasibility, materiality and optimisation. Rudy owns investigation and tool orchestration. No component may silently default a missing decision-policy input or call a development fixture an engine result.
+- Backend persists operational facts, policy versions, approved supplier domains, frozen run snapshots, plan versions, permissions, and audit history.
+- The deterministic engine owns forecasting, inventory projection, supplier feasibility, candidate search, and numerical validation.
+- The Agent owns investigation and tool orchestration. It must not create policy values or replace missing evidence with defaults.
 
-Use the backend's frozen `as_of` (operational time), `known_at` (real recording cutoff), supplier version IDs and historical facts. Do not fetch current mutable offers or deliveries to fill an earlier snapshot. `missing_offer_history` means required history is unavailable, not zero supply or proven infeasibility. Existing saved snapshots are the replay artifacts; recording history cannot restore facts already overwritten before the migration.
+`as_of` is the operational simulation time. `known_at` is the real recording cutoff. Historical calculations use facts effective by `as_of` and recorded by `known_at`; current mutable rows cannot replace missing historical evidence.
 
-Sales batches are explicitly complete incremental interval reports. Omitted dishes mean zero. Empty reports explicitly assert no sales during the interval. Partial reports are unsupported. Corrections retain source, batch ID and exact bounds; a replacement increments the revision. This resolves CY-002 and CY-011 without introducing a new POS integration.
+## Frozen first slice
 
-## Pass 3E first-slice Backend contract — implemented
+| Field | Frozen value |
+| --- | --- |
+| Policy | `CASH_SLICE_V1`, version `1` |
+| Approved domain | `CASH_SLICE_20260216_DOMAIN_V1`, version `1` |
+| Issue time | `2026-02-15T22:00:00+08:00` |
+| Service date and horizon | 16 February 2026, ending `21:00 +08:00` |
+| Service periods | 11:00–14:00 at 0.4; 17:00–21:00 at 0.6; 30-minute buckets |
+| New-order budget | S$100 |
+| Safety stock | Zero for all eight seeded ingredients |
+| Reliability | `CONTEXT_ONLY` |
+| Order mode | `NORMAL_ONLY` |
+| Fee policy | `SUPPLIER_ARRIVAL_ONCE_V1`, grouped by `(supplier_id, arrival_at)` |
+| FEFO | `FEFO_EXPIRY_RECEIVED_LOT_ID_V1` |
+| New-supply expiry | `EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1` |
+| Search and tie break | `COMPLETE_PRUNED_DOMAIN_V1`; `SUPPLIER_ID_THEN_INGREDIENT_ID_V1` |
 
-Backend persists and seeds immutable policy `CASH_SLICE_V1`, version `1`, with approved domain `CASH_SLICE_20260216_DOMAIN_V1`, version `1`. This is the authoritative integration fixture for the one-day cash slice, separate from mutable live supplier offers.
+The approved domain contains 24 frozen offer revisions and 24 dated normal-order opportunities: one for each combination of the three approved suppliers and eight seeded ingredients. Every entry carries a source revision. Missing or inconsistent entries fail with `409 MISSING_REQUIRED_DATA`.
 
-- Service coverage is 16 February 2026, 11:00–14:00 at 0.4 and 17:00–21:00 at 0.6, in 30-minute Singapore-time buckets. The issue time is 15 February 2026 22:00 and the normal arrival is 16 February 2026 08:00.
-- The policy sets a S$100 new-order budget, zero safety stock, the agreed eight storage limits, `CONTEXT_ONLY` reliability, and `NORMAL_ONLY` opportunities.
-- Fees use `SUPPLIER_ARRIVAL_ONCE_V1`: one S$5 ordinary fee for each `(supplier_id, arrival_at)` group. Emergency fees exist in the fixture terms but are excluded from this slice.
-- FEFO is `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`. New supply expiry is `EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1`, so the five-day-arrival fixture expires on 20 February. Search and tie-break tags are `COMPLETE_PRUNED_DOMAIN_V1` and `SUPPLIER_ID_THEN_INGREDIENT_ID_V1`.
-- The approved domain contains all 24 frozen offer revisions: each of `fresh`, `pantry`, and `market` has one normal opportunity for every seeded ingredient. Each opportunity has its source revision, order time, arrival time and expiry date. A missing or mismatched entry returns `409 MISSING_REQUIRED_DATA`; the adapter must not invent a replacement.
+## Agent reads
 
-The Agent bearer can read the policy and domain from `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1`. Once it claims an exact eligible run, it reads `GET /api/v1/runs/{run_id}/procurement-contract`. That artifact includes the exact policy and domain, `as_of`, `known_at`, `captured_state_revision`, frozen inventory/recipes/catalog, and explicit empty commitments, daily history and sales batches. A run with activity outside this baseline receives `409 MISSING_REQUIRED_DATA` rather than a partly inferred cash-slice contract.
+Both routes require the Agent bearer credential.
 
-The Agent adapter passes this artifact to the deterministic engine unchanged. It does not select current offers, create a policy, construct a domain, or supply defaults. The engine must honour the declared tags before this slice is used for an integrated recommendation.
+| Purpose | Route |
+| --- | --- |
+| Inspect the policy and complete approved domain | `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1` |
+| Read the exact input frozen for a claimed run | `GET /api/v1/runs/{run_id}/procurement-contract` |
 
-## CY-004: linked purchases
+The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, and sales batches.
 
-New linked purchases use `source_plan_line_id` only for the current APPROVED version, matching ingredient and supplier. Cumulative linked quantities, including receipts but excluding cancellations, must not exceed that line. Partial allocation is permitted and the line-read API exposes linked and uncommitted quantities. Approval remains separate from actual purchases.
+This first fixture is available only at its declared issue time and with its explicit empty commitments and post-count activity. Other activity returns `409 MISSING_REQUIRED_DATA` instead of producing a partially inferred contract.
 
-Actual deviations remain recordable as **unlinked manual purchases**. They must not claim approved allocation provenance. Existing pre-fix links are labelled `LEGACY_REFERENCE`; they are not retroactively certified. New checked links are `APPROVED_ALLOCATION`; unlinked facts are `MANUAL`. Later operational changes remain audited facts and do not transfer approval to a replacement version.
+## Adapter rules
 
-## CY-006: fee charging unit — agree before integration
+The Agent adapter may translate the persisted transport into the engine's typed input, but every mapped value must come from this contract or another explicitly versioned artifact. Policy identifier differences must be handled explicitly and tested; an adapter must not silently rename a policy, fetch newer supplier facts, or invent a fallback.
 
-Current development-fixture policy: `PER_LINE_V1`, consistent with the existing architecture. Do not infer consolidation from equal supplier and arrival values.
+Only a completed search with a complete, feasible independent validation may proceed to Backend freshness and publication checks. Incomplete calculations retain their findings and null results. Existing external purchases remain fixed commitments and are never recreated as recommendation lines.
 
-Proposed real-engine policy if Aniq's first fixture needs S$60.50: `PER_SHIPMENT_V1`. Every line references an explicit `shipment_group_id`; each group records supplier, arrival, one ordinary delivery charge and a distinct emergency charge. Different arrivals or suppliers require different groups. S$55.50 acquisition plus one S$5 group fee equals S$60.50 only under this agreed grouping. Reject inconsistent group terms; do not silently select the largest or smallest fee.
-
-The request and result must carry `fee_policy_version`. Choose one policy for the integrated demo and update both fixtures and validators together. Current fixture results remain labelled DEVELOPMENT_FIXTURE until replaced.
-
-## CY-007 / CY-015: objective and policy — agree before integration
-
-Inputs must include explicit versions of objective, valuation, continuation, feasibility and fee policies; currency and units; budget and its cash/time scope; per-ingredient safety quantity, storage limit and coverage window; frozen supplier constraints; dated outstanding commitments; and the planning horizon. A required missing value is missing data, not zero or unlimited capacity.
-
-Output separates immediate cash from the optimisation score. Preserve the six existing cost fields, plus a versioned ledger assigning each term a unique ID, value, unit and whether it contributes to cash, the objective, or context only. Do not add acquisition-valued inventory loss to acquisition cost again unless the agreed valuation policy specifically defines a separate incremental cost. Continuation/end-of-horizon stock valuation must be explicit.
-
-Aniq supplies the ledger definition and hand-calculated expected fixtures before the backend expands its validator. Backend checks each declared included term exactly once, non-finite/invalid values, ledger/version consistency and all relevant feasibility constraints. A complete projected score is not automatically purchase plus delivery. Legitimate waste, disposal or emergency terms cannot simply be discarded to make that equality pass.
-
-## CY-008 / CY-009 / CY-013: reliability and materiality — agree before integration
-
-Proposed v1 reliability policy: `CONTEXT_ONLY`. Historical on-time rate may be displayed as context but must not affect supplier ranking, costs or trigger reassessment by itself. The current backend still triggers rate-only updates under its old policy; change this with the agreed engine policy, not silently in only one component.
-
-Every accepted sale updates deterministic inventory. A cheap deterministic impact result evaluates sales, receipts, external commitments, expiry and adjustments against current certified inputs. Results distinguish harmless/certified, material-invalid, and incomplete/uncertified, and carry event IDs, input/policy versions, concise reasons and affected version IDs. Only certified harmless changes preserve approval eligibility. Missing certification blocks approval; it is not automatically a proven invalidation. Material invalidation preserves historical approvals and fixed external commitments.
-
-## CY-014: outcomes — agree before integration
-
-Keep top-level outcomes KEEP_CURRENT_PLAN, REVISE_PLAN, REQUEST_HUMAN_APPROVAL and ESCALATE. Rudy's agent branch additionally declares CALCULATION_INCOMPLETE and CALL_LIMIT_REACHED alongside the existing escalation reasons. Adopt that vocabulary in both schemas together:
-
-- CALCULATION_INCOMPLETE: no certified answer within the engine's computation/search bound; optional detail SEARCH_LIMIT_REACHED.
-- CALL_LIMIT_REACHED: coordinator exhausted its tool-call budget.
-- TOOL_FAILURE: an actual tool execution failure.
-- NO_FEASIBLE_SUPPLIER / UNRESOLVED_SHORTAGE: proven infeasibility under complete stated inputs, not a timeout.
-- MISSING_REQUIRED_DATA / POLICY_VIOLATION: explicit missing inputs or failed policy.
-
-Only ESCALATE has escalation fields. A completed business escalation is distinct from a crashed/expired run. Only certified feasible actionable results create pending versions; no-purchase results create no fictitious order.
-
-## Integration gate
-
-CY-003, CY-009, CY-013 and complete cost validation remain open until the real engine and agent are connected. Minimum shared fixtures: timely versus late outstanding supply; partial receipts; no double-ordering under contingency; agreed fee groups; emergency and valuation costs; harmless versus material changes; search exhaustion versus proven infeasibility; exact-version approval and historical replay. Then run the full normal plan → approval → external purchase → disruption → contingency story.
-
-Passing backend tests or freezing this proposal does not establish that the backend or integrated product is complete.
+The remaining integration gate is the real adapter and result path: connect this input to the deterministic engine, persist the exact request/result evidence, map outcomes consistently, then replay the normal-plan and contingency scenarios end to end.

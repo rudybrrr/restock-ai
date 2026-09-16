@@ -1,12 +1,12 @@
 # ReStock backend: inventory estimates, adaptive purchase plans, and version-bound approval
 
-Published as [GitHub specification #3](https://github.com/rudybrrr/restock-ai/issues/3), labelled ready-for-agent. The implementation breakdown contains nine approved tickets with native blocking relationships. The spec and testing boundary are approved; implementation has not started.
+Published as [GitHub specification #3](https://github.com/rudybrrr/restock-ai/issues/3), with nine implementation tickets and their blocking relationships. This document records the approved target behaviour; [BACKEND_HANDOVER.md](BACKEND_HANDOVER.md) records what is implemented and what still needs integration.
 
 ## Problem Statement
 
 Restaurant managers need to decide which ingredients to buy, how much, from which approved suppliers, and when. Their latest physical count can become outdated as sales occur, and a promotion, supplier shortage, or delayed delivery can make an earlier purchasing recommendation unsuitable.
 
-The hackathon team currently has a FastAPI health endpoint, a PostgreSQL development container, an echo-only agent plugin, and a frontend starter. It needs a small, dependable backend that teammates can integrate with and take over. The backend must preserve trustworthy inputs, expose deterministic tools to the agent, maintain auditable purchase-plan versions, and prevent approval of stale or infeasible recommendations.
+The hackathon team needs a small, dependable backend that teammates can integrate with and take over. The backend must preserve trustworthy inputs, expose deterministic tools to the agent, maintain auditable purchase-plan versions, and prevent approval of stale or infeasible recommendations.
 
 ## Solution
 
@@ -185,10 +185,10 @@ Integrated acceptance story: create and approve a normal plan; submit a promotio
 
 ## Further Notes
 
-The repository currently implements only health checking on the backend. This specification describes work to build, not verified existing behaviour. Database migrations, seeds, HTTP examples, focused tests, and teammate handover are deliverables.
+This specification defines intended behaviour rather than certifying current implementation. Use the backend handover and executable tests for current status and verification evidence.
 
 Build in vertical slices: canonical contracts and seedable persistence; counts/sales/receipts; snapshots, agent runs and plan approval; ML/agent integration; then minimal test UI and a shared hosted smoke test. Real calculations must replace clearly labelled integration fixtures before the final demo.
 
 Keep existing catalog and policy configuration seeded and readable. The backend owns consistency and permissions; the ML engine owns numerical decisions; the agent owns investigation. Preserve this separation so the team can change one area without rewriting the others.
 
-The user approved the testing boundary, GitHub tracker, and nine-ticket breakdown. Publish the spec and implementation tickets with the ready-for-agent label; blocked tickets become actionable only when their declared dependencies are complete. Publication does not start implementation or assign teammates.
+The testing boundary, GitHub tracker, and nine-ticket breakdown were approved and published. GitHub Issues remain the source for current ticket state and dependencies.
