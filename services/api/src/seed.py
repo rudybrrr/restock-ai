@@ -15,12 +15,17 @@ from src.database import (
     ingredients,
     inventory_lots,
     menu_items,
+    procurement_domain_offer_revisions,
+    procurement_domain_opportunities,
+    procurement_policy_domains,
+    procurement_policy_versions,
     recipes,
     stock_counts,
     supplier_offer_versions,
     supplier_offers,
     suppliers,
 )
+from src.procurement_contracts import first_slice_seed_rows
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,7 @@ class IngredientSeed:
 def seed() -> None:
     engine = create_engine(Settings().database_url)
     observed = datetime.fromisoformat("2026-02-15T22:00:00+08:00")
+    policy_recorded_at = datetime.now(UTC)
     dishes = [
         ("chicken-rice", "Chicken rice"),
         ("fried-rice", "Egg fried rice"),
@@ -119,6 +125,13 @@ def seed() -> None:
             )
             insert_if_absent(
                 suppliers, [{"id": key, "name": name} for key, name in supplier_data]
+            )
+            first_slice = first_slice_seed_rows(policy_recorded_at)
+            insert_if_absent(procurement_policy_versions, first_slice["policies"])
+            insert_if_absent(procurement_policy_domains, first_slice["domains"])
+            insert_if_absent(procurement_domain_offer_revisions, first_slice["offers"])
+            insert_if_absent(
+                procurement_domain_opportunities, first_slice["opportunities"]
             )
             insert_if_absent(
                 supplier_offers,

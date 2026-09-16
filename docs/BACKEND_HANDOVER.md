@@ -46,7 +46,8 @@ All operational routes below have `/api/v1` prefixes. Manager mutations require 
 | Delivery create/update/receive | `POST /deliveries`, `POST /deliveries/{id}/update`, `POST /deliveries/{id}/receive` |
 | Ordering occasions | `GET /order-cycles?start=...&end=...`, `POST /order-cycles/{ingredient_id}/{date}/decision` |
 | Assessment | `POST /assessments`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/retry` |
-| Agent attempt | `POST /runs/claim`, `POST /runs/{id}/tools/optimise`, `POST /runs/{id}/complete` |
+| Agent attempt | `POST /runs/claim`, `GET /runs/{id}/procurement-contract`, `POST /runs/{id}/tools/optimise`, `POST /runs/{id}/complete` |
+| Frozen Pass 3E policy/domain | `GET /procurement-policies/CASH_SLICE_V1/versions/1` |
 | Plans and source-line IDs | `GET /plan-history`, `GET /plans/{version_id}`, `GET /plans/{version_id}/lines` |
 | Exact decision | `POST /plans/{version_id}/decision` with `plan_id`, `plan_version`, `decision`, optional `instructions` |
 | Audit and trigger trail | `GET /events`, `GET /audit`, `GET /runs/{id}/triggers` |
@@ -62,6 +63,7 @@ The calculator is disabled by default. Its tool returns `503 DECISION_ENGINE_NOT
 Integration points:
 
 - `planning._snapshot`: frozen inventory, recipes, offers, ingredient schedules, promotions, holidays, incoming commitments, cycle decisions, raw historical evidence and authoritative daily sales. Final sales appear once per day using the latest revision; never add its intraday batches again.
+- `GET /runs/{id}/procurement-contract`: Agent-only exact first-slice input after claim. It contains `CASH_SLICE_V1` policy version 1, all 24 frozen offer/opportunity revisions, fee grouping, state revision, `as_of`, `known_at`, and the frozen operational baseline. Do not replace any of it with current facts or adapter defaults. The companion policy route is useful for validating a policy/domain before a run exists.
 - `fact_history.py`: select supplier versions and promotion/delivery histories at operational and recording cutoffs. Snapshot `known_at` and version IDs support deterministic replay. Delivery receipts include only effective/recorded receipts; future closing-count corrections are excluded. Historical views must not call the current-state `read_delivery` helper.
 - `planning.optimise` / `planning_schemas.py`: replace the limited calculator behind the HTTP adapter with the teammate's deterministic engine. Preserve artifact references, cost fields and typed candidate output. Store the exact engine result before completion.
 - `assessment_queue.enqueue_event`: queue a material event inside the same transaction that records it. `operations.record_event` already routes explicit triggers. Do not call the LLM from sales ingestion.
@@ -72,7 +74,7 @@ Until materiality is integrated, revision checks conservatively block approval/p
 
 ## Demo data and time
 
-Seed data is synthetic, anchored at 2026-02-15 22:00 Singapore time. Suppliers differ in price, capacity, packs, lead times, reliability and fees. Delivery slots span the demo month. A repeated seed does not overwrite existing data; use a fresh disposable database to inspect revised seed values.
+Seed data is synthetic, anchored at 2026-02-15 22:00 Singapore time. Suppliers differ in price, capacity, packs, lead times, reliability and fees. Delivery slots span the demo month. The Pass 3E policy domain is a separate immutable 24-offer fixture so it does not silently reinterpret those mutable live supplier terms. A repeated seed does not overwrite existing data; use a fresh disposable database to inspect revised seed values.
 
 Apply `alembic upgrade head` before starting the updated API. Existing overlapping actionable versions are superseded with audit records; legacy purchase links retain reference-only provenance. Supplier values overwritten before this upgrade cannot be reconstructed: migration captures the existing offer as its baseline. Missing eligible history is explicit, not today's data substituted into a past assessment. Recording-time replay for previously untimestamped rows begins at migration. Old saved run artifacts remain preserved.
 

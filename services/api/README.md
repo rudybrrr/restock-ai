@@ -193,6 +193,29 @@ The current [backend handover](../../docs/BACKEND_HANDOVER.md) lists all new rou
 ownership boundaries, exact-version approval payloads, cycle decisions, promotion
 and supplier triggers, reconciliation assumptions, and outstanding integration.
 
+## Pass 3E Agent procurement contract
+
+For the first connected cash slice, Backend seeds a versioned, read-only policy
+and complete approved supplier domain. An Agent bearer can first verify it with:
+
+```text
+GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1
+```
+
+After claiming a run at `2026-02-15T22:00:00+08:00`, the Agent must read the
+exact frozen artifact from:
+
+```text
+GET /api/v1/runs/{run_id}/procurement-contract
+```
+
+It carries `as_of`, `known_at`, `captured_state_revision`, policy version,
+approved domain, all 24 frozen offer/opportunity revisions, fee grouping and the
+frozen baseline state. The endpoint fails closed with `409 MISSING_REQUIRED_DATA`
+when the domain is incomplete or the run cannot use the deliberately empty
+first-slice baseline. The adapter must pass this artifact unchanged to the
+deterministic engine; it must not fetch current supplier facts or invent defaults.
+
 ## Audit safeguards and database upgrade
 
 Pull the current code, then run `python -m alembic upgrade head` before starting
