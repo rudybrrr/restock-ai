@@ -243,6 +243,7 @@ approved version, matching supplier/ingredient, and cumulative quantity within t
 line. `GET /plans/{version_id}/lines` exposes `linked_quantity` and
 `uncommitted_quantity`; record actual deviations with no `source_plan_line_id`.
 
-See the [shared contract proposal](../../docs/SHARED_INTEGRATION_CONTRACT.md) before
-connecting the real engine or agent. Fee grouping, full cost validation, materiality
-and contingency acceptance still need teammate integration.
+See the [shared integration contract](../../docs/SHARED_INTEGRATION_CONTRACT.md)
+before connecting the real engine or Agent. The first-slice policy, domain and fee
+grouping are frozen; engine result publication, materiality and contingency
+acceptance still need teammate integration.

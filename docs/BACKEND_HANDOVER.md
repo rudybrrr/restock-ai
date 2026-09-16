@@ -17,8 +17,8 @@ The backend owner is the first contributor. On 2026-09-12 the owner explicitly d
 | 1 | Auth, seeded catalog, supplier terms, expiry-dated batches, migration/setup, connection page | Verify an actual second-machine connection when a teammate is available |
 | 2 | Atomic closing revisions, complete counts/sales, authoritative physical baseline, reconciliation | None for basic daily entry |
 | 3 | Actual external purchases, delay/cancellation, partial receipts, retry protection and count corrections | None for basic delivery entry |
-| 4 | Timestamped sales/corrections, chronological lot estimates, expiry history, missing coverage and uncovered consumption | ML-owned materiality/projections and optional explicit waste/adjustment tools |
-| 5 | Durable queue, claim/status/retry, frozen inputs, trigger links, candidate persistence, outcome checks | Real forecasting, dated-horizon optimisation, supplier/cutoff/expiry feasibility, cost evaluation and agent investigation |
+| 4 | Timestamped sales/corrections, chronological lot estimates, expiry history, missing coverage and uncovered consumption | Connect the merged projection functions to materiality decisions; optional explicit waste/adjustment tools |
+| 5 | Durable queue, claim/status/retry, frozen inputs, Pass 3E policy/domain, trigger links, candidate persistence, outcome checks | Connect the merged forecasting/procurement functions through the Agent adapter and real publication path |
 | 6 | Exact plan/version decisions with instructions and actor/time, ordering occasions, actual-purchase source links | Deterministic latest-state certification/invalidation for real calculated plans |
 | 7 | Daily, promotion, supplier and explicit delivery-disruption triggers; coalescing; stale-result rejection | Sales/ordinary-event materiality, harmless-change certification and material invalidation |
 | 8 | Immutable recommendation history and separate fixed external commitments in run inputs | Residual-horizon contingency calculation, split suppliers, emergency fees and integrated no-double-ordering acceptance |
@@ -58,6 +58,8 @@ The OpenClaw package still contains the original echo tool. It has deliberately 
 
 `planning.py` contains a **limited development calculator**, not the final optimiser. It accepts aggregate dish quantities, converts recipes, checks basic stock/offer constraints and chooses one supplier per ingredient. It does not implement daily forecasting, lead-time stockout projections, all cutoff/shelf-life rules, supplier splitting, residual commitment subtraction or full economic costs. Do not use it to demonstrate those claims.
 
+The pure numerical modules in `forecasting.py`, `inventory_projection.py`, and `procurement.py` are present on `main`, but they are not connected to the run/tool/publication path. The Agent adapter owns that connection and must consume the frozen procurement contract rather than rebuilding Backend inputs.
+
 The calculator is disabled by default. Its tool returns `503 DECISION_ENGINE_NOT_CONNECTED` until the teammate connects the engine or a developer explicitly sets `ENABLE_DEVELOPMENT_CALCULATOR=true` for backend workflow tests. Tests opt in deliberately. Candidates and stored plans include `calculation_mode: DEVELOPMENT_FIXTURE`; the connected engine must explicitly label its own results `ENGINE`. Development results must not be presented as real first-plan or contingency acceptance.
 
 Integration points:
@@ -80,7 +82,7 @@ Apply `alembic upgrade head` before starting the updated API. Existing overlappi
 
 Sales corrections retain source, batch ID and exact period. Cycle decisions should supply effective_at in simulation time; omission means real time. Promotion and delivery-term revisions cannot precede already recorded relevant activity. Late receipt reconciliation remains supported.
 
-The [shared contract proposal](SHARED_INTEGRATION_CONTRACT.md) covers CY-004, CY-006–008 and CY-014–015. It requires Aniq/Rudy review before freezing fees, cost/policy inputs, reliability and outcomes. CY-003, CY-009, CY-013 and full cost validation remain integration work. This backend is not yet the complete integrated demo.
+The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, fee grouping, and Agent read boundary. The real engine adapter, result persistence/publication, materiality certification, and contingency acceptance remain integration work. This backend is not yet the complete integrated demo.
 
 One review recommendation is deliberately not adopted: reported `AVAILABLE` status does not prove an offer is calculable. Partial supplier facts may retain unknown fields; the calculator rejects missing required inputs before using them. This follows the approved architecture's distinction between reported status and certified feasibility, rather than replacing unknown values with zero or discarding partial facts.
 
@@ -100,4 +102,4 @@ python -m pytest -q
 
 Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. Backend tests do not prove real ML/OpenClaw integration, a hosted deployment, or a second-machine connection.
 
-Verification on 2026-09-15: the full PostgreSQL suite passed 55 tests, including the legacy-database upgrade and cancellation invariants. After the final historical-baseline guard test and expanded purchase-link/active-plan assertions, all 13 planning and snapshot-history tests passed. Ruff and Pyright passed on the final code. Local PostgreSQL was used directly; Docker was not required. These results verify backend safeguards, not the real-engine integration gate.
+Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 394 tests on the merged Pass 3E contract tree. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
