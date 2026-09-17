@@ -8,7 +8,7 @@ The first Pass 3E procurement input is implemented and frozen. This contract def
 - The deterministic engine owns forecasting, inventory projection, supplier feasibility, candidate search, and numerical validation.
 - The Agent owns investigation and tool orchestration. It must not create policy values or replace missing evidence with defaults.
 
-`as_of` is the operational simulation time. `known_at` is the real recording cutoff. Historical calculations use facts effective by `as_of` and recorded by `known_at`; current mutable rows cannot replace missing historical evidence.
+`as_of` is the operational simulation time. `known_at` is the real recording cutoff. Historical calculations use facts effective by `as_of` and recorded by `known_at`; current mutable rows cannot replace missing historical evidence. API timestamps are timezone-aware ISO 8601 instants. Clients must accept equivalent representations such as `2026-02-15T22:00:00+08:00` and `2026-02-15T14:00:00Z`; the PostgreSQL session timezone may change the serialized offset.
 
 ## Frozen first slice
 
