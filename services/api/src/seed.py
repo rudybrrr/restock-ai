@@ -17,6 +17,7 @@ from src.database import (
     menu_items,
     procurement_domain_offer_revisions,
     procurement_domain_opportunities,
+    procurement_forecast_inputs,
     procurement_policy_domains,
     procurement_policy_versions,
     recipes,
@@ -129,6 +130,9 @@ def seed() -> None:
             first_slice = first_slice_seed_rows(policy_recorded_at)
             insert_if_absent(procurement_policy_versions, first_slice["policies"])
             insert_if_absent(procurement_policy_domains, first_slice["domains"])
+            insert_if_absent(
+                procurement_forecast_inputs, first_slice["forecast_inputs"]
+            )
             insert_if_absent(procurement_domain_offer_revisions, first_slice["offers"])
             insert_if_absent(
                 procurement_domain_opportunities, first_slice["opportunities"]

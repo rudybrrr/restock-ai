@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, delete
+from sqlalchemy import create_engine, delete, update
 
 from src import database as db
 
@@ -80,6 +80,31 @@ def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
         and row["expiry_date"] == "2026-02-20"
         for row in domain["opportunities"]
     )
+    forecast_input = contract["forecast_input"]
+    assert forecast_input["artifact_id"] == "CASH_SLICE_20260216_HISTORY_V1"
+    assert forecast_input["version"] == 1
+    assert forecast_input["policy_version_id"] == contract["policy"]["id"]
+    assert instant(forecast_input["recorded_at"]) <= instant(contract["known_at"])
+    assert forecast_input["payload"]["forecast_method"] == "SEASONAL_BASELINE_V1"
+    assert forecast_input["payload"]["target_date"] == "2026-02-16"
+    assert len(forecast_input["payload"]["history"]) == 4
+    assert {row["service_date"] for row in forecast_input["payload"]["history"]} == {
+        "2026-01-19",
+        "2026-01-26",
+        "2026-02-02",
+        "2026-02-09",
+    }
+    assert all(
+        row["portions"]
+        == {
+            "chicken-rice": 100,
+            "fried-rice": 60,
+            "chicken-noodles": 80,
+            "tofu-bowl": 40,
+            "vegetable-noodles": 40,
+        }
+        for row in forecast_input["payload"]["history"]
+    )
 
 
 def test_agent_reads_the_exact_contract_frozen_with_run_context(
@@ -103,6 +128,13 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     assert contract["captured_state_revision"] == str(run["input_revision"])
     assert contract["policy"]["version"] == 1
     assert contract["domain"]["version"] == 1
+    assert contract["forecast_input"]["version"] == 1
+    assert instant(contract["forecast_input"]["effective_at"]) <= instant(
+        contract["as_of"]
+    )
+    assert instant(contract["forecast_input"]["recorded_at"]) <= instant(
+        contract["known_at"]
+    )
     assert contract["frozen_state"]["commitments"] == []
     assert contract["frozen_state"]["sales_batches"] == []
     assert len(contract["frozen_state"]["inventory"]) == 9
@@ -124,6 +156,46 @@ def test_incomplete_domain_fails_closed_at_canonical_read_boundary(
         engine.dispose()
     agent(client)
     response = client.get("/api/v1/procurement-policies/CASH_SLICE_V1/versions/1")
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
+
+
+def test_missing_forecast_input_fails_closed_at_canonical_read_boundary(
+    client: TestClient, database_url: str
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(delete(db.procurement_forecast_inputs))
+    finally:
+        engine.dispose()
+    agent(client)
+    response = client.get("/api/v1/procurement-policies/CASH_SLICE_V1/versions/1")
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
+
+
+def test_run_does_not_capture_forecast_input_recorded_after_its_known_at(
+    client: TestClient, database_url: str
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(db.procurement_forecast_inputs).values(
+                    recorded_at=datetime.now(UTC) + timedelta(days=1)
+                )
+            )
+    finally:
+        engine.dispose()
+
+    sign_in(client)
+    requested = client.post("/api/v1/assessments", json={"as_of": ISSUE_TIME})
+    assert requested.status_code == 202, requested.text
+    agent(client)
+    claimed = client.post("/api/v1/runs/claim")
+    assert claimed.status_code == 200, claimed.text
+    response = client.get(f"/api/v1/runs/{claimed.json()['id']}/procurement-contract")
     assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
 

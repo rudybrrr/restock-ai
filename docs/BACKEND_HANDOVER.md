@@ -47,7 +47,7 @@ All operational routes below have `/api/v1` prefixes. Manager mutations require 
 | Ordering occasions | `GET /order-cycles?start=...&end=...`, `POST /order-cycles/{ingredient_id}/{date}/decision` |
 | Assessment | `POST /assessments`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/retry` |
 | Agent attempt | `POST /runs/claim`, `GET /runs/{id}/procurement-contract`, `POST /runs/{id}/tools/optimise`, `POST /runs/{id}/complete` |
-| Frozen Pass 3E policy/domain | `GET /procurement-policies/CASH_SLICE_V1/versions/1` |
+| Frozen Pass 3E policy/domain/forecast input | `GET /procurement-policies/CASH_SLICE_V1/versions/1` |
 | Plans and source-line IDs | `GET /plan-history`, `GET /plans/{version_id}`, `GET /plans/{version_id}/lines` |
 | Exact decision | `POST /plans/{version_id}/decision` with `plan_id`, `plan_version`, `decision`, optional `instructions` |
 | Audit and trigger trail | `GET /events`, `GET /audit`, `GET /runs/{id}/triggers` |
@@ -65,7 +65,7 @@ The calculator is disabled by default. Its tool returns `503 DECISION_ENGINE_NOT
 Integration points:
 
 - `planning._snapshot`: frozen inventory, recipes, offers, ingredient schedules, promotions, holidays, incoming commitments, cycle decisions, raw historical evidence and authoritative daily sales. Final sales appear once per day using the latest revision; never add its intraday batches again.
-- `GET /runs/{id}/procurement-contract`: Agent-only exact first-slice input after claim. It contains `CASH_SLICE_V1` policy version 1, all 24 frozen offer/opportunity revisions, fee grouping, state revision, `as_of`, `known_at`, and the frozen operational baseline. Do not replace any of it with current facts or adapter defaults. The companion policy route is useful for validating a policy/domain before a run exists.
+- `GET /runs/{id}/procurement-contract`: Agent-only exact first-slice input after claim. It contains `CASH_SLICE_V1` policy version 1, all 24 frozen offer/opportunity revisions, the versioned four-Monday `forecast_input`, fee grouping, state revision, `as_of`, `known_at`, and the frozen operational baseline. Feed `forecast_input.payload.history` to the deterministic forecaster; do not inject test history or replace any contract value with current facts or adapter defaults. The companion policy route is useful for validating the policy, domain, and forecast input before a run exists.
 - `fact_history.py`: select supplier versions and promotion/delivery histories at operational and recording cutoffs. Snapshot `known_at` and version IDs support deterministic replay. Delivery receipts include only effective/recorded receipts; future closing-count corrections are excluded. Historical views must not call the current-state `read_delivery` helper.
 - `planning.optimise` / `planning_schemas.py`: replace the limited calculator behind the HTTP adapter with the teammate's deterministic engine. Preserve artifact references, cost fields and typed candidate output. Store the exact engine result before completion.
 - `assessment_queue.enqueue_event`: queue a material event inside the same transaction that records it. `operations.record_event` already routes explicit triggers. Do not call the LLM from sales ingestion.
@@ -83,7 +83,7 @@ Apply `alembic upgrade head` before starting the updated API. Existing overlappi
 
 Sales corrections retain source, batch ID and exact period. Cycle decisions should supply effective_at in simulation time; omission means real time. Promotion and delivery-term revisions cannot precede already recorded relevant activity. Late receipt reconciliation remains supported.
 
-The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, fee grouping, and Agent read boundary. The real engine adapter, result persistence/publication, materiality certification, and contingency acceptance remain integration work. This backend is not yet the complete integrated demo.
+The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, forecast input, fee grouping, and Agent read boundary. The real engine adapter, result persistence/publication, materiality certification, and contingency acceptance remain integration work. This backend is not yet the complete integrated demo.
 
 One review recommendation is deliberately not adopted: reported `AVAILABLE` status does not prove an offer is calculable. Partial supplier facts may retain unknown fields; the calculator rejects missing required inputs before using them. This follows the approved architecture's distinction between reported status and certified feasibility, rather than replacing unknown values with zero or discarding partial facts.
 
@@ -103,4 +103,4 @@ python -m pytest -q
 
 Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. Backend tests do not prove real ML/OpenClaw integration, a hosted deployment, or a second-machine connection.
 
-Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 429 tests after the Pass 3E numerical merge, timezone-agnostic contract-test correction, and FEFO replay alignment. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
+Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 431 tests after the Pass 3E numerical merge, timezone-agnostic contract-test correction, FEFO replay alignment, and versioned forecast-input addition. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
