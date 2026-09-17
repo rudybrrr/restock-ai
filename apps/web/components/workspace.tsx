@@ -27,6 +27,7 @@ const links = [
   ["overview", "Overview", LayoutDashboard],
   ["inventory", "Inventory", Package],
   ["daily", "Daily update", ClipboardList],
+  ["sales", "Intraday sales", History],
   ["recommendations", "Recommendations", FileCheck2],
   ["deliveries", "Deliveries", Truck],
   ["suppliers", "Suppliers & promotions", Store],

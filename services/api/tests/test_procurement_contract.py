@@ -30,6 +30,35 @@ def agent(client: TestClient) -> None:
     client.headers["Authorization"] = "Bearer test-agent-token"
 
 
+def test_manager_policy_display_preserves_role_boundaries(client: TestClient) -> None:
+    listing = "/api/v1/manager/procurement-policies"
+    display = listing + "/CASH_SLICE_V1/versions/1"
+    assert client.get(listing).status_code == 401
+    assert client.get(display).status_code == 401
+    agent(client)
+    assert client.get(listing).status_code == 403
+    assert client.get(display).status_code == 403
+    canonical = client.get(
+        "/api/v1/procurement-policies/CASH_SLICE_V1/versions/1"
+    ).json()
+    del client.headers["Authorization"]
+    sign_in(client)
+    assert (
+        client.get("/api/v1/procurement-policies/CASH_SLICE_V1/versions/1").status_code
+        == 403
+    )
+    versions = client.get(listing)
+    assert versions.status_code == 200
+    assert versions.json()[0]["id"] == canonical["policy"]["id"]
+    response = client.get(display)
+    assert response.status_code == 200
+    assert response.json() == {
+        key: canonical[key] for key in ("policy", "domain", "forecast_input")
+    }
+    assert "frozen_state" not in response.json()
+    assert client.get(listing + "/MISSING/versions/1").status_code == 409
+
+
 def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
     client: TestClient,
 ) -> None:
@@ -114,7 +143,10 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     requested = client.post("/api/v1/assessments", json={"as_of": ISSUE_TIME})
     assert requested.status_code == 202, requested.text
     run_id = requested.json()["id"]
+    manager_endpoint = f"/api/v1/manager/runs/{run_id}/procurement-evidence"
+    assert client.get(manager_endpoint).status_code == 409
     agent(client)
+    assert client.get(manager_endpoint).status_code == 403
     assert client.get(f"/api/v1/runs/{run_id}/procurement-contract").status_code == 409
     claimed = client.post("/api/v1/runs/claim")
     assert claimed.status_code == 200, claimed.text
@@ -139,6 +171,12 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     assert contract["frozen_state"]["sales_batches"] == []
     assert len(contract["frozen_state"]["inventory"]) == 9
     assert run["snapshot"]["procurement_contract"] == contract
+    del client.headers["Authorization"]
+    display = client.get(manager_endpoint)
+    assert display.status_code == 200
+    assert display.json() == {
+        key: contract[key] for key in ("policy", "domain", "forecast_input")
+    }
 
 
 def test_incomplete_domain_fails_closed_at_canonical_read_boundary(

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { RunEvidence } from "@/components/run-evidence";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Run } from "@/lib/api";
@@ -204,11 +205,12 @@ export default function Activity() {
                       </p>
                     )}
                     <p className="quiet">Run reference: {r.id}</p>
+                    <RunEvidence run={r} />
                     <div className="form-actions">
                       {r.plan_version_id && (
                         <Link
                           className="button button-secondary"
-                          href="/workspace/recommendations"
+                          href={`/workspace/recommendations?version=${encodeURIComponent(r.plan_version_id)}`}
                         >
                           View recommendation
                         </Link>

@@ -1015,6 +1015,24 @@ html {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+.restock-app .refresh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.restock-app .refresh-toggle input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.evidence-display h3 { margin: 24px 0 12px; font-weight: 600; }
+.evidence-display p { margin: 10px 0; overflow-wrap: anywhere; }
+.evidence-display dl { margin: 18px 0; }
+.evidence-display dt { color: var(--muted); font-size: 13px; margin-top: 14px; }
+.evidence-display dd { margin: 4px 0 12px; overflow-wrap: anywhere; }
+.evidence-display label { display: grid; gap: 8px; margin: 16px 0; }
+.evidence-display select { max-width: 100%; }
+.evidence-display summary { overflow-wrap: anywhere; }
 @keyframes restock-menu-enter {
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
