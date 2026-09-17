@@ -180,7 +180,7 @@ def with_offers(p, offers, opportunities=None):
                 o.feasible_delivery_at[0],
                 "NORMAL",
                 o.feasible_delivery_at[0].date()
-                + timedelta(days=o.shelf_life_days_on_arrival),
+                + timedelta(days=o.shelf_life_days_on_arrival - 1),
                 ev,
             )
             for o in offers
@@ -496,7 +496,7 @@ def test_expiry_before_service_and_explicit_expiry_policy(small):
         update={
             "feasible_delivery_at": [dt("2026-02-15T23:00+08:00")],
             "lead_time_minutes": 0,
-            "shelf_life_days_on_arrival": 0,
+            "shelf_life_days_on_arrival": 1,
         }
     )
     p = with_offers(p, [o])

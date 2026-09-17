@@ -197,7 +197,11 @@ def estimated_inventory(
                 db.ingredients, db.ingredients.c.id == db.inventory_lots.c.ingredient_id
             )
             .where(db.inventory_lots.c.received_at <= as_of)
-            .order_by(db.inventory_lots.c.expiry_date, db.inventory_lots.c.id)
+            .order_by(
+                db.inventory_lots.c.expiry_date,
+                db.inventory_lots.c.received_at,
+                db.inventory_lots.c.id,
+            )
         )
         .mappings()
         .all()

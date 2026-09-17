@@ -1,4 +1,9 @@
+from datetime import date, datetime
+
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, update
+
+from src import database as db
 
 
 def sign_in(client: TestClient) -> None:
@@ -42,6 +47,57 @@ def test_sales_batch_updates_an_estimate_without_mutating_physical_counts(
     assert chicken["chicken-01"]["coverage_complete"] is True
     physical = {lot["id"]: lot for lot in client.get("/api/v1/inventory").json()}
     assert physical["chicken-01"]["quantity"] == "12.000"
+
+
+def test_equal_expiry_lots_use_receipt_time_before_lot_id(
+    client: TestClient, database_url: str
+) -> None:
+    """Historical replay follows FEFO_EXPIRY_RECEIVED_LOT_ID_V1."""
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(db.inventory_lots)
+                .where(db.inventory_lots.c.id == "chicken-01")
+                .values(
+                    received_at=datetime.fromisoformat("2026-02-15T12:00:00+08:00"),
+                    expiry_date=date(2026, 2, 20),
+                )
+            )
+            connection.execute(
+                update(db.inventory_lots)
+                .where(db.inventory_lots.c.id == "chicken-02")
+                .values(
+                    received_at=datetime.fromisoformat("2026-02-15T08:00:00+08:00"),
+                    expiry_date=date(2026, 2, 20),
+                )
+            )
+    finally:
+        engine.dispose()
+
+    sign_in(client)
+    response = client.post(
+        "/api/v1/sales-batches",
+        json={
+            "source": "simulator",
+            "batch_id": "equal-expiry-receipt-order",
+            "period_start": "2026-02-15T22:00:00+08:00",
+            "period_end": "2026-02-16T01:00:00+08:00",
+            "sales": {"chicken-rice": 10},
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    estimate = client.get(
+        "/api/v1/inventory/estimated",
+        params={"as_of": "2026-02-16T01:00:00+08:00"},
+    )
+    assert estimate.status_code == 200, estimate.text
+    chicken = {
+        lot["id"]: lot for lot in estimate.json() if lot["ingredient_id"] == "chicken"
+    }
+    assert chicken["chicken-02"]["quantity"] == "3.500"
+    assert chicken["chicken-01"]["quantity"] == "12.000"
 
 
 def test_sales_correction_replaces_an_interval_and_overlaps_are_rejected(
