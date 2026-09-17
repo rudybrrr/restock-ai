@@ -44,11 +44,17 @@ for those two failures. They remain documented backend follow-up work, not passi
 tests. Normal GitHub protections still apply; no GitHub review approval is implied.
 This does not establish real backend/agent publication or deployed operation.
 
+Current backend update: PR #23 made the timestamp assertions timezone-agnostic.
+The subsequent FEFO replay alignment also passes the full PostgreSQL suite: 429
+tests, with Ruff and Pyright clean. The historical 426-pass/2-fail result above
+remains the result from Aniq's implementation commit, not the current main gate.
+
 Chun Yang already confirmed merged policy/domain authority in
 [#16](https://github.com/rudybrrr/restock-ai/issues/16#issuecomment-5700645096).
 The backend registers these exact tags; no repeat FEFO approval or tag activation
-is requested. Remaining backend work includes live source-coverage verification
-and the historical replay expiry/ID ordering mismatch before shared parity claims.
+is requested. Current backend replay orders equal-expiry lots by receipt time and
+then lot ID, matching `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`. Remaining backend work
+includes live source-coverage verification.
 Nonempty commitments need explicit projected lot identities. Rudy owns the thin
 adapter, immutable evidence and result mapping, with independent validation before
 backend freshness/publication. Record remaining mapping responses in #16.

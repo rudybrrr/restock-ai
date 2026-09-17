@@ -169,11 +169,15 @@ apply, and this relayed decision is not a GitHub review approval. No source or
 test changes were made to obtain this acceptance; the suite was not rerun for
 this documentation-only decision update.
 
+Subsequent backend status: PR #23 made those timestamp checks compare equivalent
+aware instants. The later FEFO replay alignment passes the complete PostgreSQL
+suite with **429 passed**, plus clean Ruff and Pyright checks.
+
 Backend policy/domain v1 already registers these tags; no new activation is
-requested. Chun Yang still owns source completeness and historical replay's
-remaining `(expiry, id)` ordering discrepancy. Empty post-count activity avoids
-that mismatch in the first slice; it does not repair it. No shared replay helper
-was extracted. Nonempty commitments need an explicit projected identity convention.
+requested. Chun Yang still owns source completeness. Historical replay now uses
+the shared `(expiry, received_at, lot_id)` ordering, with a regression that reverses
+receipt and lot-ID order. No shared replay helper was extracted. Nonempty
+commitments need an explicit projected identity convention.
 Rudy owns mapping the exact claimed-run contract and persisting/resolving input,
 result and independent-validation evidence before backend freshness/publication.
 No live adapter, genuine pending plan, full training dataset, multi-day economic
