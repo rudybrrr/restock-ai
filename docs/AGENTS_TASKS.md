@@ -371,6 +371,19 @@
 
 # 8. Coding Pass 6 — Full Dynamic Replanning
 
+> Local contract audit (2026-09-18): only supplier availability/status has a
+> complete frozen event → materiality → Decision Engine contract in this
+> checkout. Promotion revisions are persisted, but the frozen forecasting
+> contract neither applies the active promotion revision nor exposes an
+> immutable forecast-comparison artifact. Closing-count corrections emit
+> `DAILY_UPDATE_SUBMITTED`, not `INVENTORY_ADJUSTED`, and activity-bearing runs
+> intentionally lack the first-slice procurement contract. Delivery changes
+> preserve event history, but the Inventory adapter rejects commitment-bearing
+> snapshots until a commitment-aware projection contract exists. Sales batches
+> are revisioned but are not assessment-queue triggers and do not feed the
+> frozen forecast input. Do not mark the corresponding routes complete or
+> synthesize local semantics around these backend-owned gaps.
+
 - [x] Integrate deterministic materiality kernel for authoritative supplier availability/status changes
   - [x] Affected IDs
   - [x] Threshold / feasibility evidence
