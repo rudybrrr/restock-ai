@@ -1,6 +1,7 @@
 """Thin Coordinator adapters over the authoritative Backend planning services."""
 
 from collections.abc import Sequence
+from typing import Protocol
 
 from sqlalchemy.orm import Session
 
@@ -16,8 +17,18 @@ from src.agent_contracts import (
     InvocationMode,
     MaterialityAssessment,
     PlanPublicationResult,
+    SpecialistDelegation,
+    SpecialistResult,
+    SpecialistType,
 )
 from src.coordinator import Coordinator, CoordinatorExecution, ManualRouteClassifier
+from src.demand_specialist import (
+    DemandReasoningModel,
+    DemandSpecialist,
+    DemandToolPort,
+    LocalDemandReasoning,
+)
+from src.demand_tools import BackendDemandTools
 from src.errors import ApiError
 from src.procurement_specialist import (
     ProcurementReasoningModel,
@@ -25,6 +36,23 @@ from src.procurement_specialist import (
     ProcurementToolPort,
 )
 from src.replanning import supplier_events_for_run, supplier_materiality
+
+
+class _SpecialistExecutor(Protocol):
+    def execute(self, delegation: SpecialistDelegation) -> SpecialistResult: ...
+
+
+class LocalSpecialistRegistry:
+    """Coordinator-only dispatcher; specialists cannot invoke one another."""
+
+    def __init__(self, specialists: dict[SpecialistType, _SpecialistExecutor]) -> None:
+        self._specialists = specialists
+
+    def execute(self, delegation: SpecialistDelegation) -> SpecialistResult:
+        executor = self._specialists.get(delegation.specialist)
+        if executor is None:
+            raise ValueError(f"No local executor for {delegation.specialist.value}")
+        return executor.execute(delegation)
 
 
 class BackendCoordinatorControlPlane:
@@ -46,7 +74,9 @@ class BackendCoordinatorControlPlane:
         target = run.snapshot.get("revises_plan_id")
         active = planning.get_active_plan(self._session, target) if target else None
         if target is not None and active is None:
-            raise ApiError(409, "NO_CURRENT_PLAN", "The run's active plan no longer exists")
+            raise ApiError(
+                409, "NO_CURRENT_PLAN", "The run's active plan no longer exists"
+            )
         mode = (
             InvocationMode.MANUAL
             if run.trigger == "MANUAL_REASSESSMENT_REQUESTED"
@@ -68,9 +98,7 @@ class BackendCoordinatorControlPlane:
         plan = planning.get_active_plan(self._session, invocation.affected_plan_id)
         if plan is None:
             return []
-        certified_revision = planning.get_run(
-            self._session, plan.run_id
-        ).input_revision
+        certified_revision = planning.get_run(self._session, plan.run_id).input_revision
         return [
             EvidenceRef(
                 category=EvidenceCategory.CANDIDATE_RESULT,
@@ -131,8 +159,12 @@ class BackendCoordinatorControlPlane:
         completion: AgentCompletionPublication,
         trace: Sequence[AuditEvent],
     ) -> PlanPublicationResult:
-        completed = [event for event in trace if event.action is AuditAction.RUN_COMPLETED]
-        preceding = [event for event in trace if event.action is not AuditAction.RUN_COMPLETED]
+        completed = [
+            event for event in trace if event.action is AuditAction.RUN_COMPLETED
+        ]
+        preceding = [
+            event for event in trace if event.action is not AuditAction.RUN_COMPLETED
+        ]
         merged = sorted(
             [*preceding, *self._specialist_trace], key=lambda event: event.timestamp
         )
@@ -151,22 +183,30 @@ def run_backend_coordinator(
     reasoning_model: ProcurementReasoningModel,
     procurement_tools: ProcurementToolPort,
     *,
+    demand_model: DemandReasoningModel | None = None,
+    demand_tools: DemandToolPort | None = None,
     manual_classifier: ManualRouteClassifier | None = None,
 ) -> CoordinatorExecution:
-    """Run the local Pass 3 Procurement path against Backend-owned services.
-
-    Demand and Inventory executors are intentionally absent; those routes fail closed
-    until their separately approved implementation passes land.
-    """
+    """Run the local deterministic specialists against Backend-owned services."""
     control_plane = BackendCoordinatorControlPlane(session)
     procurement = ProcurementSpecialist(
         reasoning_model,
         procurement_tools,
         control_plane,
     )
+    demand = DemandSpecialist(
+        demand_model or LocalDemandReasoning(),
+        demand_tools or BackendDemandTools(session),
+        control_plane,
+    )
     coordinator = Coordinator(
         control_plane,
-        procurement,
+        LocalSpecialistRegistry(
+            {
+                SpecialistType.PROCUREMENT: procurement,
+                SpecialistType.DEMAND: demand,
+            }
+        ),
         manual_classifier=manual_classifier,
     )
     return coordinator.run(control_plane.get_invocation(run_id))

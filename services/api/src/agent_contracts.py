@@ -55,9 +55,15 @@ class EscalationDetail(StrEnum):
 
 class EvidenceCategory(StrEnum):
     EVENT_CONTEXT = "EVENT_CONTEXT"
+    SALES_CONTEXT = "SALES_CONTEXT"
+    PROMOTION_CONTEXT = "PROMOTION_CONTEXT"
+    DEMAND_HISTORY = "DEMAND_HISTORY"
     MATERIALITY = "MATERIALITY"
     FORECAST_RESULT = "FORECAST_RESULT"
     INVENTORY_SNAPSHOT = "INVENTORY_SNAPSHOT"
+    INVENTORY_PROJECTION = "INVENTORY_PROJECTION"
+    EXPIRY_RISK = "EXPIRY_RISK"
+    STOCKOUT_RISK = "STOCKOUT_RISK"
     SUPPLIER_STATE = "SUPPLIER_STATE"
     CANDIDATE_RESULT = "CANDIDATE_RESULT"
     VALIDATION_RESULT = "VALIDATION_RESULT"
@@ -420,8 +426,12 @@ def require_fresh_state_revision(check: StateRevisionCheck) -> None:
 
 
 class AgentToolName(StrEnum):
+    GET_SALES_CONTEXT = "get_sales_context"
+    GET_PROMOTION_CONTEXT = "get_promotion_context"
+    GET_HISTORICAL_DEMAND = "get_historical_demand"
     FORECAST_DEMAND = "forecast_demand"
     COMPARE_FORECAST_VERSIONS = "compare_forecast_versions"
+    GET_INVENTORY_SNAPSHOT = "get_inventory_snapshot"
     CALCULATE_INGREDIENT_REQUIREMENTS = "calculate_ingredient_requirements"
     CALCULATE_ESTIMATED_INVENTORY = "calculate_estimated_inventory"
     CALCULATE_EXPIRY_RISK = "calculate_expiry_risk"
@@ -452,6 +462,10 @@ class ToolResult(ContractModel):
     tool: AgentToolName
     output_ref: EvidenceRef
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    # Tool-owned, non-numerical routing facts.  Values are produced by the
+    # authoritative adapter, never by a specialist; numerical evidence stays in
+    # the referenced Backend/Decision Engine artifact.
+    output_data: dict[str, JsonValue] = Field(default_factory=dict)
     schema_version: SchemaVersion = "1"
 
 
