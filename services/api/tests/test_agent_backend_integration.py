@@ -31,6 +31,8 @@ from src.backend_control_plane import (
     BackendCoordinatorControlPlane,
     run_backend_coordinator,
 )
+from src.demand_tools import BackendDemandTools
+from src.inventory_tools import BackendInventoryTools
 from src.procurement_specialist import (
     ProcurementDecisionAction,
     ProcurementModelDecision,
@@ -41,10 +43,13 @@ from src.procurement_specialist import (
 def sign_in(client: TestClient) -> None:
     client.headers.pop("Authorization", None)
     client.headers["Origin"] = "https://frontend.example"
-    assert client.post(
-        "/api/v1/auth/login",
-        json={"username": "manager", "password": "test-manager-password"},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"username": "manager", "password": "test-manager-password"},
+        ).status_code
+        == 200
+    )
 
 
 def start_calculated_run(
@@ -89,6 +94,13 @@ class ProcurementOnlyClassifier:
         self, invocation: AgentInvocation, context_refs: Sequence[EvidenceRef]
     ) -> Sequence[SpecialistType]:
         return [SpecialistType.PROCUREMENT]
+
+
+class DemandOnlyClassifier:
+    def classify(
+        self, invocation: AgentInvocation, context_refs: Sequence[EvidenceRef]
+    ) -> Sequence[SpecialistType]:
+        return [SpecialistType.DEMAND]
 
 
 class TrustedCandidateModel:
@@ -166,6 +178,72 @@ def run_coordinator(session: Session, run: dict):
         TrustedCandidateTools(),
         manual_classifier=ProcurementOnlyClassifier(),
     )
+
+
+def tool_request(run: dict, tool: AgentToolName) -> ToolRequest:
+    return ToolRequest(
+        tool_call_id=f"{run['id']}-TASK-LOCAL-TOOL-1",
+        run_id=run["id"],
+        tool=tool,
+        captured_state_revision=str(run["input_revision"]),
+        input_refs=[
+            EvidenceRef(
+                category=EvidenceCategory.EVENT_CONTEXT,
+                source=EvidenceSource.BACKEND,
+                reference_id=run["trigger_event_id"],
+                state_revision=str(run["input_revision"]),
+            )
+        ],
+    )
+
+
+def test_local_demand_and_inventory_tools_read_frozen_backend_state_without_mutation(
+    client: TestClient, database_url: str
+) -> None:
+    run, _ = start_calculated_run(client)
+    engine = create_engine(database_url)
+    with Session(engine) as session:
+        before = planning.get_run(session, run["id"]).snapshot
+        forecast = BackendDemandTools(session).execute(
+            tool_request(run, AgentToolName.FORECAST_DEMAND)
+        )
+        projection = BackendInventoryTools(session).execute(
+            tool_request(run, AgentToolName.PROJECT_INVENTORY)
+        )
+        after = planning.get_run(session, run["id"]).snapshot
+    engine.dispose()
+
+    assert isinstance(forecast, ToolResult)
+    assert forecast.output_ref.category is EvidenceCategory.FORECAST_RESULT
+    assert forecast.output_ref.source is EvidenceSource.DECISION_ENGINE
+    assert forecast.output_data == {"forecast_complete": True}
+    assert isinstance(projection, ToolResult)
+    assert projection.output_ref.category is EvidenceCategory.INVENTORY_PROJECTION
+    assert projection.output_data["provenance"] == "PROJECTED"
+    assert before == after
+
+
+def test_local_specialists_are_selectively_routed_by_the_real_backend_coordinator(
+    client: TestClient, database_url: str
+) -> None:
+    run, _ = start_calculated_run(client)
+    engine = create_engine(database_url)
+    with Session(engine) as session:
+        result = run_backend_coordinator(
+            session,
+            run["id"],
+            TrustedCandidateModel(),
+            TrustedCandidateTools(),
+            manual_classifier=DemandOnlyClassifier(),
+        )
+    engine.dispose()
+
+    calls = [
+        event.specialist
+        for event in result.trace
+        if event.action is AuditAction.SPECIALIST_CALLED
+    ]
+    assert calls == [SpecialistType.DEMAND]
 
 
 def test_coordinator_procurement_publishes_through_real_backend_services(
