@@ -39,6 +39,9 @@ class OptimiseRequest(BaseModel):
 class PlanLine(BaseModel):
     ingredient_id: str
     supplier_id: str
+    offer_id: str | None = None
+    opportunity_id: str | None = None
+    shipment_group_id: str | None = None
     quantity: Annotated[Decimal, Field(gt=0)]
     unit_price: Annotated[Decimal, Field(ge=0)]
     arrival_at: AwareDatetime

@@ -135,6 +135,16 @@ def validate_candidate_reference(
     if run.status != "RUNNING":
         raise ApiError(409, "RUN_NOT_RUNNING", "Only a claimed assessment can validate")
     _require_claimed_agent_revision(run, captured_state_revision)
+    artifacts = run.snapshot.get("decision_engine_artifacts")
+    if artifacts is not None and reference_id == artifacts.get("candidate", {}).get("id"):
+        validation = artifacts.get("validation", {})
+        if (
+            validation.get("candidate_id") != reference_id
+            or validation.get("complete") is not True
+            or validation.get("feasible") is not True
+        ):
+            raise ApiError(409, "UNCERTIFIED_OUTCOME", "Engine candidate lacks validation")
+        return Candidate.model_validate(artifacts["candidate"]["candidate"])
     if reference_id != f"{run_id}:candidate":
         raise ApiError(409, "PLAN_INVALID", "Candidate reference does not belong to run")
     stored = run.snapshot.get("calculated_candidate")
@@ -803,7 +813,19 @@ def complete_run(
                 "PLAN_INVALID",
                 "Candidate must reference this run's frozen artifacts and have lines",
             )
-        _validate_candidate(snapshot, candidate)
+        artifacts = snapshot.get("decision_engine_artifacts")
+        engine_candidate = (
+            candidate.calculation_mode == "ENGINE"
+            and artifacts is not None
+            and artifacts.get("candidate", {}).get("candidate")
+            == candidate.model_dump(mode="json")
+            and artifacts.get("validation", {}).get("candidate_id")
+            == artifacts.get("candidate", {}).get("id")
+            and artifacts.get("validation", {}).get("complete") is True
+            and artifacts.get("validation", {}).get("feasible") is True
+        )
+        if not engine_candidate:
+            _validate_candidate(snapshot, candidate)
         if snapshot.get("calculated_candidate") != candidate.model_dump(mode="json"):
             raise ApiError(
                 409,
@@ -985,6 +1007,9 @@ def _canonical_plan_version(
             CanonicalPurchasePlanLine(
                 ingredient_id=line.ingredient_id,
                 supplier_id=line.supplier_id,
+                offer_id=line.offer_id,
+                opportunity_id=line.opportunity_id,
+                shipment_group_id=line.shipment_group_id,
                 quantity=line.quantity,
                 unit=units[line.ingredient_id],
                 unit_price=line.unit_price,

@@ -294,6 +294,9 @@ ALLOWED_PLAN_TRANSITIONS: dict[PlanStatus, frozenset[PlanStatus]] = {
 class PurchasePlanLine(ContractModel):
     ingredient_id: Identifier
     supplier_id: Identifier
+    offer_id: Identifier | None = None
+    opportunity_id: Identifier | None = None
+    shipment_group_id: Identifier | None = None
     quantity: PositiveDecimal
     unit: Identifier
     unit_price: NonNegativeDecimal

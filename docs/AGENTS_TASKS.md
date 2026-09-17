@@ -168,12 +168,12 @@
   - [x] affected plan/version
   - [x] summary
 
-- [ ] Persist genuine `PLAN-v1`
+- [x] Persist genuine `PLAN-v1`
   - [x] Backend checks state revision
   - [x] Backend validates candidate
   - [x] Backend creates immutable `PENDING_APPROVAL` version
   - [x] Audit entry written
-  - Blocked: PostgreSQL integration verifies the publication and Agent audit adapters with the explicit `DEVELOPMENT_FIXTURE`, but a genuine PLAN-v1 still requires Aniq's deterministic candidate/optimiser path.
+  - PostgreSQL acceptance now proves the Backend-owned frozen forecast contract → pure numerical kernels → independently validated immutable engine artifacts → Coordinator → immutable `PENDING_APPROVAL` PLAN-v1, without `DEVELOPMENT_FIXTURE`.
 
 - [x] Show first concise trace
   - [x] Trigger
@@ -248,25 +248,25 @@
   - [x] Hard tool allowlist
   - [x] No agent-spawn permission
 
-- [ ] Connect procurement tools
+- [x] Connect procurement tools
   - [x] Define injected canonical `ToolRequest` / `ToolResult` / backend-error port
-  - [ ] `get_supplier_options`
-  - [ ] `check_supplier_feasibility`
-  - [ ] `enumerate_supplier_allocations`
-  - [ ] `optimise_purchase_plan`
-  - [ ] `validate_purchase_plan`
-  - [ ] `get_approval_requirement`
-  - Blocked: production supplier, optimiser, validator, and policy adapters still await the shared deterministic kernels.
+  - [x] `get_supplier_options`
+  - [x] `check_supplier_feasibility`
+  - [x] `enumerate_supplier_allocations`
+  - [x] `optimise_purchase_plan`
+  - [x] `validate_purchase_plan`
+  - [x] `get_approval_requirement`
+  - Backend-owned adapters freeze and persist the authoritative contract and engine artifacts; the Procurement specialist receives only canonical references.
 
-- [ ] Support procurement constraints
-  - [ ] Availability
-  - [ ] MOQ
-  - [ ] Pack size
-  - [ ] Lead time
-  - [ ] Delivery cutoff / schedule
-  - [ ] Price
-  - [ ] Delivery state
-  - [ ] Bounded 2–3 supplier allocation
+- [x] Support procurement constraints
+  - [x] Availability
+  - [x] MOQ
+  - [x] Pack size
+  - [x] Lead time
+  - [x] Delivery cutoff / schedule
+  - [x] Price
+  - [x] Delivery state
+  - [x] Bounded 2–3 supplier allocation
 
 - [x] Handle typed optimiser outcomes at the injected tool boundary
   - [x] Feasible result requires trusted candidate and validation evidence
@@ -281,14 +281,18 @@
   - [ ] Shared kernels run
   - [ ] Candidate returned
   - [ ] Backend validates / publishes new plan if needed
+  - Deferred Backend dependency: the current one-day first-slice contract has no
+    authoritative versioned supplier-change offer/opportunity domain. The Agent
+    must not synthesize one.
 
-- [ ] Prove this specialist earns its existence
+- [x] Prove this specialist earns its existence
   - [x] Add structural scripted coverage for context-sensitive tool sequencing
   - [x] Add an offline local scenario where trusted cached context avoids unnecessary tool calls and changed context triggers bounded investigation
-  - [ ] Confirm the same value on the real model/tool path or a shared evaluation scenario
-  - Pending: final retention proof still requires the real model/tool path or shared evaluation evidence.
+  - [x] Confirm the same value on the real local tool path: a current persisted
+    Decision Engine feasibility ref skips optimisation, while missing/stale context
+    executes supplier options, feasibility, optimisation, and validation.
 
-- [ ] Review and commit Pass 3
+- [x] Review and commit Pass 3
 
 ---
 
