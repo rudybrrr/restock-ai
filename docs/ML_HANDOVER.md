@@ -2,8 +2,8 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.6, 17 September 2026<br>
-**Status:** Pass 3E numerical compatibility implemented; full backend run exposed two existing main failures. PR #22 remains unmerged; live adapter/publication is separate.
+**Version:** 1.7, 17 September 2026<br>
+**Status:** Pass 3E numerical compatibility implemented; Aniq authorized normal PR #22 merge with the two known timestamp-test failures deferred following Chun Yang's response. Live adapter/publication is separate.
 
 ## Current Pass 3E handoff
 
@@ -37,8 +37,11 @@ opportunity timestamps and frozen-contract `as_of` use UTC strings while tests
 expect Singapore-offset strings. The instants are equivalent. No backend code or
 tests were changed. Ruff, Pyright and four-file formatting checks passed again.
 See the numerical document for commands and the isolated database setup.
-Leave [PR #22](https://github.com/rudybrrr/restock-ai/pull/22) open until Chun Yang
-resolves the timestamp representation/test contract and the required gate passes.
+On 17 September, Aniq relayed Chun Yang's response that the Singapore timestamp
+issue can be fixed later and explicitly authorized proceeding. This supersedes
+the earlier instruction to hold [PR #22](https://github.com/rudybrrr/restock-ai/pull/22)
+for those two failures. They remain documented backend follow-up work, not passing
+tests. Normal GitHub protections still apply; no GitHub review approval is implied.
 This does not establish real backend/agent publication or deployed operation.
 
 Chun Yang already confirmed merged policy/domain authority in
@@ -395,6 +398,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.7 | 17 September 2026 | Recorded Aniq's explicit proceed instruction following Chun Yang's relayed acceptance of deferred timestamp correction; preserved actual failing-test evidence and normal PR protections. |
 | 1.6 | 17 September 2026 | Ran full isolated PostgreSQL suite: 426 passed, 2 existing backend timestamp failures reproduced on main; refreshed static checks. Replaces the Docker-unavailable blocker; PR #22 remains open. |
 | 1.5 | 17 September 2026 | Pass 3E FEFO/expiry compatibility, guarded complete reduction, semantic ties, canonical backend-domain fixture tests and outstanding combined-test/live integration gates. |
 | 1.0 | 14 September 2026 | Initial shared ML implementation and integration handover |

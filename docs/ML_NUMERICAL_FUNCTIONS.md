@@ -159,9 +159,15 @@ A separate read-only API diagnostic against a disposable seeded test database
 confirmed all 24 opportunities have the expected kind, expiry and equivalent
 order/arrival instants; their rendered timestamps use UTC. This is diagnostic
 evidence, not a replacement passing test or a waived gate.
-The earlier Docker-startup error and historical 394-test result are not the current
-blocker/evidence. [PR #22](https://github.com/rudybrrr/restock-ai/pull/22) remains
-unmerged pending that correction and required checks on the final head.
+The earlier Docker-startup error and historical 394-test result are not current
+evidence. On 17 September, Aniq relayed Chun Yang's acceptance of fixing the
+Singapore timestamp issue later and explicitly authorized proceeding with
+[PR #22](https://github.com/rudybrrr/restock-ai/pull/22). This replaces the earlier
+hold for these two known failures only; their recorded results are unchanged.
+The backend correction remains deferred. Normal GitHub protection checks still
+apply, and this relayed decision is not a GitHub review approval. No source or
+test changes were made to obtain this acceptance; the suite was not rerun for
+this documentation-only decision update.
 
 Backend policy/domain v1 already registers these tags; no new activation is
 requested. Chun Yang still owns source completeness and historical replay's
