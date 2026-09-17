@@ -114,6 +114,15 @@ export type Plan = {
   created_at: string;
 };
 export type Run = {
+  input_revision?: number;
+  claimed_at?: string | null;
+  completed_at?: string | null;
+  snapshot?: {
+    known_at?: string;
+    missing_offer_history?: string[];
+    procurement_contract_unavailable_reason?: string;
+    procurement_contract?: { captured_state_revision: string };
+  };
   id: string;
   status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
   trigger: string;

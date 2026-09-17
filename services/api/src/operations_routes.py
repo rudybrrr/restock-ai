@@ -47,7 +47,11 @@ from src.planning_schemas import (
     PurchasePlanVersion,
     StoredPlanLine,
 )
-from src.procurement_contract_schemas import ProcurementContract
+from src.procurement_contract_schemas import (
+    ProcurementContract,
+    ProcurementDisplay,
+    ProcurementPolicyVersion,
+)
 from src.schemas import EstimatedInventoryLot, Identity, SupplierOffer
 
 router = APIRouter(
@@ -170,6 +174,60 @@ def request_assessment(body: AssessmentRequest, session: SessionDep, manager: Ma
 @router.get("/runs/{run_id}", response_model=PlanningRun)
 def read_run(run_id: str, session: SessionDep):
     return planning.get_run(session, run_id)
+
+
+@router.get(
+    "/manager/procurement-policies", response_model=list[ProcurementPolicyVersion]
+)
+def list_manager_procurement_policies(session: SessionDep, manager: Manager):
+    """Discover persisted versions, without implying a version applies to every run."""
+    return (
+        session.execute(
+            select(db.procurement_policy_versions).order_by(
+                db.procurement_policy_versions.c.recorded_at.desc(),
+                db.procurement_policy_versions.c.version.desc(),
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+@router.get(
+    "/manager/procurement-policies/{policy_id}/versions/{version}",
+    response_model=ProcurementDisplay,
+)
+def read_manager_procurement_policy(
+    policy_id: str, version: int, session: SessionDep, manager: Manager
+):
+    contract = procurement_contracts.read_policy_contract(session, policy_id, version)
+    return ProcurementDisplay(
+        policy=contract.policy,
+        domain=contract.domain,
+        forecast_input=contract.forecast_input,
+    )
+
+
+@router.get(
+    "/manager/runs/{run_id}/procurement-evidence", response_model=ProcurementDisplay
+)
+def read_manager_run_procurement_evidence(
+    run_id: str, session: SessionDep, manager: Manager
+):
+    run = planning.get_run(session, run_id)
+    value = run.snapshot.get("procurement_contract")
+    if value is None:
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "No frozen procurement contract recorded for this run",
+        )
+    contract = ProcurementContract.model_validate(value)
+    return ProcurementDisplay(
+        policy=contract.policy,
+        domain=contract.domain,
+        forecast_input=contract.forecast_input,
+    )
 
 
 @router.get(

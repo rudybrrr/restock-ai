@@ -306,9 +306,10 @@ export default function Inventory() {
         </>
       )}
       <p className="quiet">
-        FEFO uses earlier-expiring eligible lots first. Stock remains usable
-        through its expiry date in Singapore time. Unexplained differences are
-        not recorded waste.
+        FEFO uses earlier-expiring eligible lots first, then earlier receipt
+        time, then ascending lot ID. Only arrived, unexpired lots are eligible.
+        Stock remains usable through its expiry date in Singapore time.
+        Unexplained differences are not recorded waste.
       </p>
     </>
   );
