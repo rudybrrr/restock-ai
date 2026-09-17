@@ -2,8 +2,8 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.5, 17 September 2026<br>
-**Status:** Pass 3E numerical compatibility implemented; combined backend verification and live adapter/publication remain separate gates.
+**Version:** 1.6, 17 September 2026<br>
+**Status:** Pass 3E numerical compatibility implemented; full backend run exposed two existing main failures. PR #22 remains unmerged; live adapter/publication is separate.
 
 ## Current Pass 3E handoff
 
@@ -28,10 +28,17 @@ evaluates 450 proved-sufficient allocations, using 748 generation/evaluation wor
 units. Expected results are assertions, not runtime inputs. Unsupported scope
 and work exhaustion never produce actionable candidates.
 
-**Verified now:** 367 numerical tests (34 new), Ruff, Pyright, changed-file format
-and diff checks. **Not verified now:** full PostgreSQL suite; Docker Desktop
-cannot start its engine because `sailor-ingest.sock` cannot be renamed/accessed.
-Leave the PR open until that required gate and repository review requirements pass.
+**Verification update:** Docker is now available. The full PostgreSQL-backed suite
+on implementation commit `8aefe36b51d166c86f94c9eddc8eb45a570fad98` finished with
+**426 passed, 2 failed, 2 warnings** (788.92 s), including all 367 passing numerical
+cases. The two `test_procurement_contract.py` failures also reproduce on unchanged
+main `86abb37cb12eaee8296c2418e88f2f7b9bdef0ba` (2 failed, 28.50 s): endpoint
+opportunity timestamps and frozen-contract `as_of` use UTC strings while tests
+expect Singapore-offset strings. The instants are equivalent. No backend code or
+tests were changed. Ruff, Pyright and four-file formatting checks passed again.
+See the numerical document for commands and the isolated database setup.
+Leave [PR #22](https://github.com/rudybrrr/restock-ai/pull/22) open until Chun Yang
+resolves the timestamp representation/test contract and the required gate passes.
 This does not establish real backend/agent publication or deployed operation.
 
 Chun Yang already confirmed merged policy/domain authority in
@@ -388,6 +395,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.6 | 17 September 2026 | Ran full isolated PostgreSQL suite: 426 passed, 2 existing backend timestamp failures reproduced on main; refreshed static checks. Replaces the Docker-unavailable blocker; PR #22 remains open. |
 | 1.5 | 17 September 2026 | Pass 3E FEFO/expiry compatibility, guarded complete reduction, semantic ties, canonical backend-domain fixture tests and outstanding combined-test/live integration gates. |
 | 1.0 | 14 September 2026 | Initial shared ML implementation and integration handover |
 | 1.1 | 14 September 2026 | Changed teammate/AI review access to GitHub `feat/forecasting`; added branch, source, test and handover links, commit verification and direct AI-review instructions. Numerical scope, test evidence and unresolved contracts are unchanged. |

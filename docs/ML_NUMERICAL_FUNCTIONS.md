@@ -125,11 +125,43 @@ two existing dependency deprecation warnings. Ruff passed, Pyright zero
 errors/warnings, four changed Python files formatted. A preliminary root-directory
 Ruff invocation misclassified first-party imports; the API-directory run passed.
 
-The full PostgreSQL gate is **not freshly verified**. Docker Desktop fails to start
-its Linux engine: `sailor-ingest.sock` rename/access error. No project containers,
-API, frontend or hosted/team database were started. The historical 394-test backend
-result is not fresh evidence. Leave the PR unmerged until the required combined
-backend gate and repository review/protection requirements pass on its final head.
+**Subsequent full-suite verification, 17 September:** Docker is available again.
+On implementation commit `8aefe36b51d166c86f94c9eddc8eb45a570fad98`,
+`python -m pytest -q` produced **426 passed, 2 failed, 2 warnings in 788.92 s**.
+This includes all 367 numerical cases above. API-wide Ruff, Pyright (zero
+errors/warnings) and formatting for the four changed Python files passed again.
+
+Testing used a separate `postgres:18-alpine` container with tmpfs storage,
+loopback-only ephemeral port and default server timezone UTC. `TEST_DATABASE_URL`
+pointed only to this instance; repository fixtures created/migrated/seeded/dropped
+their own disposable databases. Existing application data and stopped project
+containers were untouched. No API/frontend service or hosted database was started.
+
+The failures are in unchanged `tests/test_procurement_contract.py`:
+
+- `test_first_slice_policy_endpoint_exposes_complete_immutable_domain`, line 69:
+  exact opportunity timestamp strings differ from the expected Singapore offset.
+- `test_agent_reads_the_exact_contract_frozen_with_run_context`, line 94:
+  returned `2026-02-15T14:00:00Z` versus expected `2026-02-15T22:00:00+08:00`.
+
+Both reproduce on an isolated archive of unchanged main
+`86abb37cb12eaee8296c2418e88f2f7b9bdef0ba`: **2 failed, 2 warnings in 28.50 s**,
+using the same environment and the following focused command:
+
+```powershell
+python -m pytest -q tests/test_procurement_contract.py::test_first_slice_policy_endpoint_exposes_complete_immutable_domain tests/test_procurement_contract.py::test_agent_reads_the_exact_contract_frozen_with_run_context
+```
+
+These are equivalent instants, but the full gate is not passing. Chun Yang owns
+resolving the serialization/test expectation contract; this task does not change
+backend code/tests or change the database timezone merely to hide the failures.
+A separate read-only API diagnostic against a disposable seeded test database
+confirmed all 24 opportunities have the expected kind, expiry and equivalent
+order/arrival instants; their rendered timestamps use UTC. This is diagnostic
+evidence, not a replacement passing test or a waived gate.
+The earlier Docker-startup error and historical 394-test result are not the current
+blocker/evidence. [PR #22](https://github.com/rudybrrr/restock-ai/pull/22) remains
+unmerged pending that correction and required checks on the final head.
 
 Backend policy/domain v1 already registers these tags; no new activation is
 requested. Chun Yang still owns source completeness and historical replay's
