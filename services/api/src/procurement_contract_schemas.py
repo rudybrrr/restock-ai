@@ -154,3 +154,12 @@ class ProcurementContract(BaseModel):
     domain: ApprovedProcurementDomain
     forecast_input: ForecastInputArtifact
     frozen_state: dict | None = None
+
+
+class ProcurementDisplay(BaseModel):
+    """Manager-facing immutable evidence; excludes arbitrary operational snapshots."""
+
+    model_config = ConfigDict(extra="forbid")
+    policy: ProcurementPolicyVersion
+    domain: ApprovedProcurementDomain
+    forecast_input: ForecastInputArtifact

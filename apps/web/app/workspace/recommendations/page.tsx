@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { ProcurementEvidence } from "@/components/procurement-evidence";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord, Plan, PlanLine } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
@@ -16,19 +18,40 @@ type StoredLine = PlanLine & {
   uncommitted_quantity: string;
 };
 export default function Recommendations() {
+  return (
+    <Suspense fallback={<p role="status">Loading recommendation…</p>}>
+      <RecommendationsContent />
+    </Suspense>
+  );
+}
+function RecommendationsContent() {
+  const params = useSearchParams();
+  const requested = params.get("version") ?? "";
+  return <RecommendationView key={requested} requested={requested} />;
+}
+function RecommendationView({ requested }: { requested: string }) {
   const q = useQuery({
     queryKey: ["plans"],
     queryFn: ({ signal }) => api<Plan[]>("/plan-history", { signal }),
   });
-  const [selected, setSelected] = useState("");
+  const [selection, setSelected] = useState<string | null>(null);
+  const selected = selection ?? requested;
+  const exact = useQuery({
+    queryKey: ["plan", selected],
+    queryFn: ({ signal }) =>
+      api<Plan>(`/plans/${encodeURIComponent(selected)}`, { signal }),
+    enabled: !!selected,
+  });
   const [tab, setTab] = useState("Purchase plans");
   const active = q.data?.find((p) =>
     ["APPROVED", "PENDING_APPROVAL"].includes(p.status),
   );
-  const plan =
-    q.data?.find((p) => p.id === selected) ??
-    active ??
-    q.data?.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const plan = selected
+    ? exact.data
+    : (active ??
+      q.data
+        ?.slice()
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]);
   return (
     <>
       <PageHeading
@@ -54,6 +77,7 @@ export default function Recommendations() {
       </div>
       {tab === "Forecast" ? (
         <>
+          <ProcurementEvidence historyOnly />
           <Placeholder title="Demand and ingredient forecast">
             Daily dish forecasts, dated service intervals, and ingredient
             requirements will appear when persisted calculation artifacts are
@@ -65,16 +89,14 @@ export default function Recommendations() {
           </Placeholder>
         </>
       ) : tab === "Policy" ? (
-        <Placeholder title="Authoritative procurement policy">
-          The proposed first slice is CASH_SLICE_V1. Budget, storage, safety
-          stock, service boundaries, fee grouping, reliability, emergency
-          permission, and the complete supplier opportunity domain will be shown
-          from the canonical backend record when available. Proposed values are
-          not treated as active policy.
-        </Placeholder>
-      ) : q.error ? (
+        <ProcurementEvidence />
+      ) : selected && exact.error ? (
+        <ErrorNotice error={exact.error} retry={() => exact.refetch()} />
+      ) : selected && exact.isPending ? (
+        <p role="status">Loading the requested plan version…</p>
+      ) : !selected && q.error ? (
         <ErrorNotice error={q.error} retry={() => q.refetch()} />
-      ) : q.isPending ? (
+      ) : !selected && q.isPending ? (
         <p role="status">Loading recommendations…</p>
       ) : !plan ? (
         <section className="panel">
@@ -95,6 +117,11 @@ export default function Recommendations() {
               value={plan.id}
               onChange={(e) => setSelected(e.target.value)}
             >
+              {selected && plan && !q.data?.some((p) => p.id === plan.id) && (
+                <option value={plan.id}>
+                  Requested version {plan.version} · {plan.id}
+                </option>
+              )}
               {q.data
                 ?.slice()
                 .sort((a, b) => b.created_at.localeCompare(a.created_at))

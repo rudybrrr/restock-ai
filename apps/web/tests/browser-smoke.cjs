@@ -215,6 +215,7 @@ async function main() {
     if (p === "/suppliers") return reply([{ id: "fresh", name: "Fresh" }]);
     if (p === "/supplier-offers") return reply([offer]);
     if (p === "/plan-history") return reply([plan]);
+    if (p === "/plans/version-1") return reply(plan);
     if (p.endsWith("/lines")) return reply([line]);
     if (p === "/runs")
       return reply([
