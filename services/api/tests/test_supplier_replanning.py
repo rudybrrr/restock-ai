@@ -200,6 +200,13 @@ def test_selected_supplier_unavailable_publishes_replacement_then_supersedes(
             assert second.status.value == "PENDING_APPROVAL"
             assert planning.read_plan(session, first_id).status.value == "SUPERSEDED"
             assert all(line.offer_id != selected for line in second.lines)
+            materiality = next(
+                event
+                for event in result.trace
+                if event.action is AuditAction.MATERIALITY_ASSESSED
+            )
+            assert materiality.materiality is not None
+            assert materiality.materiality.affected_offer_ids == [selected]
             actionable = session.execute(
                 select(db.plan_versions.c.id).where(
                     db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED"))

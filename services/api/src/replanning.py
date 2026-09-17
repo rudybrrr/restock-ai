@@ -108,6 +108,7 @@ def supplier_materiality(
         affected_plan_id=active_plan.plan_id,
         affected_plan_version=active_plan.version,
         affected_ingredient_ids=sorted({line["ingredient_id"] for line in affected_lines}),
+        affected_offer_ids=sorted(affected_offer_ids),
         affected_supplier_ids=sorted({line["supplier_id"] for line in affected_lines}),
         affected_plan_line_ids=sorted({line["id"] for line in affected_lines}),
         material=unusable,

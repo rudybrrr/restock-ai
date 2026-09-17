@@ -540,6 +540,7 @@ class MaterialityAssessment(ContractModel):
     affected_plan_id: Identifier | None = None
     affected_plan_version: PositiveInt | None = None
     affected_ingredient_ids: list[Identifier] = Field(default_factory=list)
+    affected_offer_ids: list[Identifier] = Field(default_factory=list)
     affected_supplier_ids: list[Identifier] = Field(default_factory=list)
     affected_plan_line_ids: list[Identifier] = Field(default_factory=list)
     material: bool
