@@ -71,6 +71,7 @@ Integration points:
 - `assessment_queue.enqueue_event`: queue a material event inside the same transaction that records it. `operations.record_event` already routes explicit triggers. Do not call the LLM from sales ingestion.
 - `planning.complete_run`: publication and outcome checks; `planning.decide_plan`: manager identity/version enforcement. Add real feasibility certification and material invalidation here using engine results, preserving original snapshots and historical approval events.
 - `deliveries.read_delivery`: separates received, cancelled and outstanding quantities. Pass outstanding commitments as fixed dated supply, not as new recommendation lines. Agent tools must never mutate those commitments.
+- `sales.estimated_inventory`: historical replay now follows `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`, ordering usable lots by expiry, receipt time, then lot ID. This matches the merged numerical projector for equal-expiry lots.
 
 Until materiality is integrated, revision checks conservatively block approval/publication after newer events. This is an explicit temporary limitation, not harmless-change certification. Full ticket closure requires the real integrated acceptance scenarios.
 
@@ -102,4 +103,4 @@ python -m pytest -q
 
 Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. Backend tests do not prove real ML/OpenClaw integration, a hosted deployment, or a second-machine connection.
 
-Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 394 tests on the merged Pass 3E contract tree. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
+Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 429 tests after the Pass 3E numerical merge, timezone-agnostic contract-test correction, and FEFO replay alignment. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
