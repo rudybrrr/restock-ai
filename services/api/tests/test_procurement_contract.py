@@ -6,6 +6,13 @@ from sqlalchemy import create_engine, delete
 from src import database as db
 
 ISSUE_TIME = "2026-02-15T22:00:00+08:00"
+ARRIVAL_TIME = "2026-02-16T08:00:00+08:00"
+
+
+def instant(value: str) -> datetime:
+    timestamp = datetime.fromisoformat(value)
+    assert timestamp.utcoffset() is not None
+    return timestamp
 
 
 def sign_in(client: TestClient) -> None:
@@ -68,8 +75,8 @@ def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
     assert all(row["source_revision"] for row in domain["offers"])
     assert all(
         row["kind"] == "NORMAL"
-        and row["ordered_at"] == ISSUE_TIME
-        and row["arrival_at"] == "2026-02-16T08:00:00+08:00"
+        and instant(row["ordered_at"]) == instant(ISSUE_TIME)
+        and instant(row["arrival_at"]) == instant(ARRIVAL_TIME)
         and row["expiry_date"] == "2026-02-20"
         for row in domain["opportunities"]
     )
@@ -91,10 +98,8 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     assert response.status_code == 200, response.text
     contract = response.json()
     assert contract["run_id"] == run_id
-    assert contract["as_of"] == ISSUE_TIME
-    assert datetime.fromisoformat(contract["known_at"]) == datetime.fromisoformat(
-        run["snapshot"]["known_at"]
-    )
+    assert instant(contract["as_of"]) == instant(ISSUE_TIME)
+    assert instant(contract["known_at"]) == instant(run["snapshot"]["known_at"])
     assert contract["captured_state_revision"] == str(run["input_revision"])
     assert contract["policy"]["version"] == 1
     assert contract["domain"]["version"] == 1
