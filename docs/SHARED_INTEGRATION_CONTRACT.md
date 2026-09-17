@@ -16,6 +16,7 @@ The first Pass 3E procurement input is implemented and frozen. This contract def
 | --- | --- |
 | Policy | `CASH_SLICE_V1`, version `1` |
 | Approved domain | `CASH_SLICE_20260216_DOMAIN_V1`, version `1` |
+| Forecast input | `CASH_SLICE_20260216_HISTORY_V1`, version `1` |
 | Issue time | `2026-02-15T22:00:00+08:00` |
 | Service date and horizon | 16 February 2026, ending `21:00 +08:00` |
 | Service periods | 11:00–14:00 at 0.4; 17:00–21:00 at 0.6; 30-minute buckets |
@@ -30,6 +31,8 @@ The first Pass 3E procurement input is implemented and frozen. This contract def
 
 The approved domain contains 24 frozen offer revisions and 24 dated normal-order opportunities: one for each combination of the three approved suppliers and eight seeded ingredients. Every entry carries a source revision. Missing or inconsistent entries fail with `409 MISSING_REQUIRED_DATA`.
 
+The forecast input is a separate immutable Backend artifact. It contains the four complete Monday closing-sales observations dated 19 January, 26 January, 2 February, and 9 February 2026, plus the five-item menu manifest, target date, `SEASONAL_BASELINE_V1` method tag, recording time, and source revision. It contains inputs, not a precomputed forecast: the deterministic engine must run `seasonal_baseline` and preserve its output evidence. Missing, late-recorded, or inconsistent forecast input fails closed instead of allowing the adapter to inject fixture data.
+
 ## Agent reads
 
 Both routes require the Agent bearer credential.
@@ -39,7 +42,7 @@ Both routes require the Agent bearer credential.
 | Inspect the policy and complete approved domain | `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1` |
 | Read the exact input frozen for a claimed run | `GET /api/v1/runs/{run_id}/procurement-contract` |
 
-The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, and sales batches.
+The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, versioned `forecast_input`, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, and sales batches. The forecast input must be effective by `as_of` and recorded by `known_at`; the complete contract is saved in the claimed run snapshot under the captured state revision.
 
 This first fixture is available only at its declared issue time and with its explicit empty commitments and post-count activity. Other activity returns `409 MISSING_REQUIRED_DATA` instead of producing a partially inferred contract.
 

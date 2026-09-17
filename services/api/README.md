@@ -242,15 +242,20 @@ GET /api/v1/runs/{run_id}/procurement-contract
 ```
 
 It carries `as_of`, `known_at`, `captured_state_revision`, policy version,
-approved domain, all 24 frozen offer/opportunity revisions, fee grouping and the
-frozen baseline state. The endpoint fails closed with `409 MISSING_REQUIRED_DATA`
-when the domain is incomplete or the run cannot use the deliberately empty
-first-slice baseline. The adapter must pass this artifact unchanged to the
-deterministic engine; it must not fetch current supplier facts or invent defaults.
+approved domain, all 24 frozen offer/opportunity revisions, the versioned
+`CASH_SLICE_20260216_HISTORY_V1` forecast input, fee grouping and the frozen
+baseline state. The forecast input supplies the four complete Monday observations
+needed by `seasonal_baseline`; it does not contain a Backend-calculated forecast.
+The endpoint fails closed with `409 MISSING_REQUIRED_DATA` when the domain or
+forecast input is incomplete, recorded after the run's `known_at`, or the run
+cannot use the deliberately empty first-slice baseline. The adapter must use this
+artifact instead of injecting test history, fetching current supplier facts, or
+inventing defaults.
 
 ## Audit safeguards and database upgrade
 
-Pull the current code, then run `python -m alembic upgrade head` before starting
+Pull the current code, then run `python -m alembic upgrade head` and rerun
+`python -m src.seed` before starting
 the API. The new migrations preserve data, supersede older overlapping actionable
 plans with audit records, label pre-existing plan links `LEGACY_REFERENCE`, and
 add supplier-history and recording-time fields. An invalid existing ordering

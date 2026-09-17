@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -105,6 +105,42 @@ class ApprovedProcurementDomain(BaseModel):
     opportunities: list[FrozenOrderingOpportunity]
 
 
+class HistoricalDemandObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    available_at: AwareDatetime
+    revision: int = Field(gt=0)
+    promotion: bool
+    censored: bool
+    portions: dict[str, Annotated[int, Field(ge=0)]]
+
+
+class ForecastInputPayload(BaseModel):
+    """Versioned historical inputs for the deterministic forecast kernel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["FIRST_SLICE_SYNTHETIC_HISTORY"]
+    forecast_method: Literal["SEASONAL_BASELINE_V1"]
+    target_date: date
+    menu_item_ids: list[str] = Field(min_length=1)
+    history: list[HistoricalDemandObservation] = Field(min_length=4, max_length=4)
+
+
+class ForecastInputArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    policy_version_id: str
+    artifact_id: str
+    version: int = Field(gt=0)
+    effective_at: AwareDatetime
+    recorded_at: AwareDatetime
+    source_revision: str
+    payload: ForecastInputPayload
+
+
 class ProcurementContract(BaseModel):
     """Exact backend evidence an Agent adapter may pass to pure numerical code."""
 
@@ -116,4 +152,5 @@ class ProcurementContract(BaseModel):
     captured_state_revision: str
     policy: ProcurementPolicyVersion
     domain: ApprovedProcurementDomain
+    forecast_input: ForecastInputArtifact
     frozen_state: dict | None = None

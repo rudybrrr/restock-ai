@@ -61,6 +61,25 @@ procurement_policy_domains = Table(
     UniqueConstraint("domain_id", "version"),
 )
 
+procurement_forecast_inputs = Table(
+    "procurement_forecast_inputs",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "policy_version_id",
+        ForeignKey("procurement_policy_versions.id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("artifact_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("artifact_id", "version"),
+)
+
 procurement_domain_offer_revisions = Table(
     "procurement_domain_offer_revisions",
     metadata,
