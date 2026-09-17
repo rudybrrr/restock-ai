@@ -148,8 +148,13 @@ def test_agent_tool_contract_names_are_frozen() -> None:
     assert {item.value for item in AgentToolName} == {
         "forecast_demand",
         "compare_forecast_versions",
+        "get_sales_context",
+        "get_promotion_context",
+        "get_historical_demand",
+        "get_inventory_snapshot",
         "calculate_ingredient_requirements",
         "calculate_estimated_inventory",
+        "project_inventory",
         "calculate_expiry_risk",
         "calculate_stockout_risk",
         "get_supplier_options",

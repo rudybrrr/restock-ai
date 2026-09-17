@@ -298,74 +298,74 @@
 
 # 6. Coding Pass 4 — Demand Specialist
 
-- [ ] Confirm Demand specialist adds real reasoning value
-- [ ] Create Demand Agent
-  - [ ] Narrow instructions
-  - [ ] Strict input / output schema
-  - [ ] Hard tool allowlist
-  - [ ] No agent-spawn permission
+- [x] Confirm Demand specialist adds real reasoning value
+- [x] Create Demand Agent
+  - [x] Narrow instructions
+  - [x] Strict input / output schema
+  - [x] Hard tool allowlist
+  - [x] No agent-spawn permission
 
-- [ ] Connect demand tools
-  - [ ] Sales context
-  - [ ] Promotion context
-  - [ ] Historical demand context
-  - [ ] Forecast demand
+- [x] Connect demand tools
+  - [x] Sales context
+  - [x] Promotion context
+  - [x] Historical demand context
+  - [x] Forecast demand
   - [ ] Compare forecast versions
 
-- [ ] Support demand cases
-  - [ ] Promotion
-  - [ ] Demand spike / drop
-  - [ ] Seasonal / weekday effects
+- [x] Support demand cases
+  - [x] Promotion
+  - [x] Demand spike / drop
+  - [x] Seasonal / weekday effects
   - [ ] Holiday context
-  - [ ] Forecast uncertainty
-  - [ ] Missing sales interval
+  - [x] Forecast uncertainty
+  - [x] Missing sales interval
 
-- [ ] Keep materiality authority deterministic
-  - [ ] Specialist interprets evidence
-  - [ ] Specialist never invents authoritative materiality
+- [x] Keep materiality authority deterministic
+  - [x] Specialist interprets evidence
+  - [x] Specialist never invents authoritative materiality
 
-- [ ] Prove this specialist earns its existence
-  - [ ] At least one scenario where contextual reasoning changes investigation / tool order
+- [x] Prove this specialist earns its existence
+  - [x] At least one scenario where contextual reasoning changes investigation / tool order
 
-- [ ] Review and commit Pass 4
+- [x] Review and commit Pass 4
 
 ---
 
 # 7. Coding Pass 5 — Inventory Specialist
 
-- [ ] Confirm Inventory specialist adds real reasoning value
-- [ ] Create Inventory Agent
-  - [ ] Narrow instructions
-  - [ ] Strict input / output schema
-  - [ ] Hard tool allowlist
-  - [ ] No agent-spawn permission
+- [x] Confirm Inventory specialist adds real reasoning value
+- [x] Create Inventory Agent
+  - [x] Narrow instructions
+  - [x] Strict input / output schema
+  - [x] Hard tool allowlist
+  - [x] No agent-spawn permission
 
-- [ ] Connect inventory tools
-  - [ ] Inventory snapshot
-  - [ ] Estimated inventory
-  - [ ] Ingredient requirements
-  - [ ] Expiry risk
-  - [ ] Stockout risk
+- [x] Connect inventory tools
+  - [x] Inventory snapshot
+  - [x] Estimated inventory
+  - [x] Ingredient requirements
+  - [x] Expiry risk
+  - [x] Stockout risk
   - [ ] Snapshot comparison
 
-- [ ] Support inventory cases
-  - [ ] Physical stocktake correction
-  - [ ] Wastage / manual adjustment
-  - [ ] Expiry risk
+- [x] Support inventory cases
+  - [x] Physical stocktake correction
+  - [x] Wastage / manual adjustment
+  - [x] Expiry risk
   - [ ] Safety stock
   - [ ] Incoming deliveries
-  - [ ] Estimated stock between stocktakes
+  - [x] Estimated stock between stocktakes
   - [ ] Storage constraints
 
-- [ ] Keep inventory language accurate
-  - [ ] Physical count = physical
-  - [ ] Between-stocktake balance = estimated / inferred
-  - [ ] Unknown stays unknown
+- [x] Keep inventory language accurate
+  - [x] Physical count = physical
+  - [x] Between-stocktake balance = estimated / inferred
+  - [x] Unknown stays unknown
 
-- [ ] Prove this specialist earns its existence
-  - [ ] At least one scenario where contextual reasoning changes investigation / tool order
+- [x] Prove this specialist earns its existence
+  - [x] At least one scenario where contextual reasoning changes investigation / tool order
 
-- [ ] Review and commit Pass 5
+- [x] Review and commit Pass 5
 
 ---
 

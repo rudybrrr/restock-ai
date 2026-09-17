@@ -30,6 +30,13 @@ from src.demand_specialist import (
 )
 from src.demand_tools import BackendDemandTools
 from src.errors import ApiError
+from src.inventory_specialist import (
+    InventoryReasoningModel,
+    InventorySpecialist,
+    InventoryToolPort,
+    LocalInventoryReasoning,
+)
+from src.inventory_tools import BackendInventoryTools
 from src.procurement_specialist import (
     ProcurementReasoningModel,
     ProcurementSpecialist,
@@ -185,6 +192,8 @@ def run_backend_coordinator(
     *,
     demand_model: DemandReasoningModel | None = None,
     demand_tools: DemandToolPort | None = None,
+    inventory_model: InventoryReasoningModel | None = None,
+    inventory_tools: InventoryToolPort | None = None,
     manual_classifier: ManualRouteClassifier | None = None,
 ) -> CoordinatorExecution:
     """Run the local deterministic specialists against Backend-owned services."""
@@ -199,12 +208,18 @@ def run_backend_coordinator(
         demand_tools or BackendDemandTools(session),
         control_plane,
     )
+    inventory = InventorySpecialist(
+        inventory_model or LocalInventoryReasoning(),
+        inventory_tools or BackendInventoryTools(session),
+        control_plane,
+    )
     coordinator = Coordinator(
         control_plane,
         LocalSpecialistRegistry(
             {
                 SpecialistType.PROCUREMENT: procurement,
                 SpecialistType.DEMAND: demand,
+                SpecialistType.INVENTORY: inventory,
             }
         ),
         manual_classifier=manual_classifier,

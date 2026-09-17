@@ -434,6 +434,7 @@ class AgentToolName(StrEnum):
     GET_INVENTORY_SNAPSHOT = "get_inventory_snapshot"
     CALCULATE_INGREDIENT_REQUIREMENTS = "calculate_ingredient_requirements"
     CALCULATE_ESTIMATED_INVENTORY = "calculate_estimated_inventory"
+    PROJECT_INVENTORY = "project_inventory"
     CALCULATE_EXPIRY_RISK = "calculate_expiry_risk"
     CALCULATE_STOCKOUT_RISK = "calculate_stockout_risk"
     GET_SUPPLIER_OPTIONS = "get_supplier_options"
