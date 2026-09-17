@@ -199,6 +199,7 @@ def test_cross_domain_tool_stale_evidence_and_no_recursion_are_denied() -> None:
 
     tools = Tools({})
     result = InventorySpecialist(Bad(), tools, Audit()).execute(delegation())
+    assert result.escalation_reason is not None
     assert result.escalation_reason.value == "TOOL_FAILURE"
     assert tools.calls == []
     with pytest.raises(ValueError):

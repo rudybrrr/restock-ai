@@ -138,6 +138,7 @@ def test_forbidden_cross_domain_tool_is_denied() -> None:
 
     tools = Tools()
     result = DemandSpecialist(BadModel(), tools, Audit()).execute(delegation())
+    assert result.escalation_reason is not None
     assert result.escalation_reason.value == "TOOL_FAILURE"
     assert tools.calls == []
 
