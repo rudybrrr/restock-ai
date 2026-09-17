@@ -2,8 +2,52 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.4, 15 September 2026<br>
-**Status:** Implemented numerical foundation, with live integration contracts awaiting confirmation.
+**Version:** 1.5, 17 September 2026<br>
+**Status:** Pass 3E numerical compatibility implemented; combined backend verification and live adapter/publication remain separate gates.
+
+## Current Pass 3E handoff
+
+Read [Pass 3E numerical compatibility](ML_NUMERICAL_FUNCTIONS.md#pass-3e-numerical-compatibility--17-september-2026)
+first. It supersedes historical policy proposals and waiting instructions below.
+This contribution uses [feat/ml-pass3e-compatibility](https://github.com/rudybrrr/restock-ai/tree/feat/ml-pass3e-compatibility),
+based on main `86abb37cb12eaee8296c2418e88f2f7b9bdef0ba`. Older branch links and
+commit records below identify historical publications, not this contribution.
+
+Implemented corrected/versioned expiry, receipt-aware projection FEFO, guarded
+complete minimum-pack search and semantic supplier/ingredient ties. Exact tags:
+`EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1`,
+`FEFO_EXPIRY_RECEIVED_LOT_ID_V1`, `COMPLETE_PRUNED_DOMAIN_V1`, and
+`SUPPLIER_ID_THEN_INGREDIENT_ID_V1`. Complete definitions, identity mapping, search
+proof and guards are in the numerical document. Five-day shelf life arriving
+16 February expires 20 February; the legacy plus-days tag is rejected.
+
+The complete backend supplier fixture retains all 24 offers/opportunities at
+capacity 200 and explicit nine-lot v3 stock. Forecast/recipe kernels derive
+Fresh chicken 8 kg and noodles 3 kg: **SGD 55.50 +5 delivery =60.50**. Search
+evaluates 450 proved-sufficient allocations, using 748 generation/evaluation work
+units. Expected results are assertions, not runtime inputs. Unsupported scope
+and work exhaustion never produce actionable candidates.
+
+**Verified now:** 367 numerical tests (34 new), Ruff, Pyright, changed-file format
+and diff checks. **Not verified now:** full PostgreSQL suite; Docker Desktop
+cannot start its engine because `sailor-ingest.sock` cannot be renamed/accessed.
+Leave the PR open until that required gate and repository review requirements pass.
+This does not establish real backend/agent publication or deployed operation.
+
+Chun Yang already confirmed merged policy/domain authority in
+[#16](https://github.com/rudybrrr/restock-ai/issues/16#issuecomment-5700645096).
+The backend registers these exact tags; no repeat FEFO approval or tag activation
+is requested. Remaining backend work includes live source-coverage verification
+and the historical replay expiry/ID ordering mismatch before shared parity claims.
+Nonempty commitments need explicit projected lot identities. Rudy owns the thin
+adapter, immutable evidence and result mapping, with independent validation before
+backend freshness/publication. Record remaining mapping responses in #16.
+
+## Historical implementation and coordination record
+
+The dated material below is retained for provenance. The current section above
+overrides stale policy/owner waiting statements. Full training data, multi-day
+economics and live integration remain incomplete.
 
 ## 1. Start here
 
@@ -344,6 +388,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.5 | 17 September 2026 | Pass 3E FEFO/expiry compatibility, guarded complete reduction, semantic ties, canonical backend-domain fixture tests and outstanding combined-test/live integration gates. |
 | 1.0 | 14 September 2026 | Initial shared ML implementation and integration handover |
 | 1.1 | 14 September 2026 | Changed teammate/AI review access to GitHub `feat/forecasting`; added branch, source, test and handover links, commit verification and direct AI-review instructions. Numerical scope, test evidence and unresolved contracts are unchanged. |
 | 1.2 | 14 September 2026 | Added the repository handover and verified implementation commit permalink; corrected the pending-publication record. Numerical scope and unresolved contracts are unchanged. |

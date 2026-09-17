@@ -1,5 +1,151 @@
 # ReStock numerical functions and development datasets
 
+## Pass 3E numerical compatibility — 17 September 2026
+
+This section supersedes historical policy/waiting statements below. Governing
+sources: approved v2 + v3, both supplied Pass 3E discussion/handoff documents,
+and the explicit 16–17 September decisions in the implementation prompt.
+Base: `86abb37cb12eaee8296c2418e88f2f7b9bdef0ba`; isolated branch
+`feat/ml-pass3e-compatibility`. The original checkout is preserved.
+[Chun Yang's confirmation](https://github.com/rudybrrr/restock-ai/issues/16#issuecomment-5700645096)
+and current code establish that PR #20's policy/domain is merged. The fetched agent
+branch remains `764a27b9f89be86a36dd3d8dcc95079f77314239`; unpublished work is unknown.
+
+### Exact supported policies
+
+| Identifier | Meaning |
+|---|---|
+| `FEFO_EXPIRY_RECEIVED_LOT_ID_V1` | Expiry, receipt/expected-availability instant, actual or explicitly projected lot identity; only arrived, unexpired stock |
+| `EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1` | Singapore arrival date + shelf-life days − 1; usable through that day, excluded at next Singapore midnight; nonpositive shelf life cannot validate |
+| `SUPPLIER_ID_THEN_INGREDIENT_ID_V1` | Cash first, then lexicographically sorted `(supplier_id, ingredient_id, normalized order instant, normalized arrival instant, kind, offer_id, Decimal quantity, unit)` line tuples; no fewer-lines or opportunity-ID preference |
+| `COMPLETE_PRUNED_DOMAIN_V1` | Complete minimum-pack compositions under the guards/proof below; explicit incomplete result outside that scope |
+
+Backend `CASH_SLICE_V1` and normal-only `SUPPLIER_ARRIVAL_ONCE_V1` are supported
+directly: exact acquisition plus one fee per supplier/arrival; no emergency line,
+commitment co-shipping credit, discounts, minimum-spend obligation or future value.
+Reliability remains context-only. Legacy explicit emergency cash/tie and Cartesian
+policies remain available for earlier fixtures. The old
+`USABLE_THROUGH_ARRIVAL_DATE_PLUS_DAYS` tag is rejected, not reinterpreted. The
+small procurement fixture/tests now supply corrected expiry; physical expiries
+and the backend seed are unchanged.
+
+### Callable inputs, evidence and identity
+
+`search_procurement(ProcurementInputs)` and independent
+`validate_candidate(inputs, PurchaseCandidate)` remain pure functions. New input
+`search_policy` selects the method; omission preserves legacy
+`COMPLETE_CARTESIAN_V1`, never implicit pruning. Bind the search tag to required
+domain policy evidence and persist it with the request. The validator recomputes
+cash, expiry, timed coverage, capacity, packs/MOQ, storage, budget and safety
+without calling the optimiser or trusting its feasible flag.
+
+| Backend source | Numerical mapping / required validation |
+|---|---|
+| `policy.payload` | Issue/target/end/profile, safety/storage/budget, objective/fee/expiry/tie/search tags; verify SGD, Singapore, 30-minute, NORMAL_ONLY and CONTEXT_ONLY before mapping; no missing-field defaults |
+| `domain.offers[].offer` | Existing `SupplierOffer`; preserve every original capacity and source revision in offer evidence |
+| `domain.opportunities[]` | `OrderingOpportunity` dates/kind/offer/expiry; ID remains evidence/line lookup, not ranking; `max_packs` is floor(original new capacity / pack) for each opportunity |
+| Policy/domain IDs, versions, source revisions, clocks and capture | Resolvable `SourceEvidence`; original revision belongs in its reference, capture stamp identifies the same bundle. Syntactic checks cannot establish correct source selection |
+| `frozen_state` | Existing inventory/catalogue/recipe/history models, complete authoritative manifests, and existing baseline/recipe/bucket kernels; verified empty activity/commitments are evidence, not inferred from absence |
+| Fixed expected supply | Existing `Delivery` + supported expected expiry/evidence + explicit `ExpectedSupply.projected_lot_id` for shared FEFO; received quantities stay once in opening stock |
+| Results | Persist request, exact result and separate validation. Preserve `domain_size`, `reduced_domain_size`, `evaluated`, `work_used`, `search_policy`, completion, optimality and cause evidence |
+
+Provenance keys remain `opening:<actual-lot-id>` and `supply:<delivery-id>`; those
+prefixes do **not** determine shared FEFO ties. Opening stock uses original lot
+IDs/times. Fixed expected supply requires an explicit unique projected identity.
+Candidate identity is `projected-purchase:` plus compact JSON of its normalized
+semantic opportunity tuple `(supplier, ingredient, order, arrival, kind, offer)`.
+This is hypothetical identity, not a future actual receipt ID. Renaming opaque
+opportunity IDs does not change it. Identities must be unique across physical and
+projected stock. Zero outstanding adds no lot. Legacy fixture FEFO tags preserve
+their original namespaced order; they are not aliases of the shared tag.
+
+### Proof, guards and honest completion
+
+Keep all offers/opportunities/capacities in the input and evidence. Guards require
+complete inputs, positive acquisition, nonnegative consistent shipment fees,
+the exact normal cash/semantic tie policies, zero safety, empty commitments,
+one normal opportunity per offer, unit pack/MOQ, available offers with valid
+cutoff/lead/slot, a common pre-service arrival, and opening/new stock usable
+throughout service. Only one-day upper storage/budget constraints apply; the
+supported cash policy has no discounts, minimum-spend obligations or future rewards.
+
+Derive `ceil(max(0, total requirement − usable opening))` using exact rational
+arithmetic. Under these guards, remove excess packs from any feasible allocation
+until this minimum remains. Every service prefix remains covered, MOQ one is
+preserved, capacity only decreases, storage/budget cannot worsen, positive
+acquisition falls and a nonnegative fixed shipment fee can only stay or disappear.
+Thus an optimum exists among the retained minimum-pack compositions. Enumerate
+every such supplier split within original capacities. This is exclusion by proof,
+not a claim that all raw combinations were visited or a universal optimiser.
+
+Outside the guards: `UNSUPPORTED_SEARCH_SCOPE`, no actionable candidate. Callers
+may explicitly use supported Cartesian enumeration with an honest limit. Unknown
+economic/fee policies remain incomplete rather than being ignored.
+Generation uses iterative composition traversal; each ingredient, visited node,
+created edge and evaluated complete candidate uses one work unit. Construction
+as well as evaluation is bounded; no unbounded capacity pool is materialized.
+`domain_size` always records the original Cartesian product;
+`reduced_domain_size` is null until construction completes. Impossible capacity
+can prove an empty reduced domain with `INSUFFICIENT_NEW_CAPACITY` evidence.
+Budget/storage failures keep their own causes, not `NO_FEASIBLE_SUPPLIER`.
+
+`SEARCH_LIMIT_REACHED` returns incomplete with null actionable candidate and
+validation; an incumbent is diagnostic only. Unsupported scope, missing evidence,
+interrupted work, completed infeasibility and tool failure remain distinct.
+Rudy owns mapping to the existing Agent outcome vocabulary.
+
+### Executed fixture, checks and limitations
+
+`test_pass3e_numerical.py::full` reads actual backend `first_slice_seed_rows` and
+canonical contract models without a DB. Explicit v3 nine-lot stock and four
+Monday observations flow through baseline, bucket and recipe kernels. All 24
+offers/opportunities retain capacity 200. Oracles appear only in assertions.
+Current mutable seed has richer supplier terms and different lot expiries; this
+fixture is not a claim about a populated database and does not overwrite it.
+
+Raw domain `201**24`; chicken gap 7.6 → 8 packs (45 compositions), noodles gap 3 →
+3 packs (10): **450 candidates, 748 total work units**. Fresh supplies chicken
+**8 kg**, noodles **3 kg**: acquisition **SGD 55.50**, delivery **5**, emergency
+**0**, total **60.50**. Independent validation passes. Small independent exhaustive
+oracles vary gaps, capacity and prices. Tests also interrupt generation and stop
+after a feasible incumbent, with no actionable incomplete result.
+
+Fresh verification from `services/api`, prepared Python environment:
+
+```powershell
+python -m pytest -q tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_procurement.py tests/test_synthetic_history.py tests/test_pass3e_numerical.py
+python -m ruff check .
+python -m pyright
+python -m ruff format --check src/procurement.py src/inventory_projection.py tests/test_procurement.py tests/test_pass3e_numerical.py
+git diff --check
+```
+
+**367 passed**, including 34 new cases and synthetic service-profile regressions;
+two existing dependency deprecation warnings. Ruff passed, Pyright zero
+errors/warnings, four changed Python files formatted. A preliminary root-directory
+Ruff invocation misclassified first-party imports; the API-directory run passed.
+
+The full PostgreSQL gate is **not freshly verified**. Docker Desktop fails to start
+its Linux engine: `sailor-ingest.sock` rename/access error. No project containers,
+API, frontend or hosted/team database were started. The historical 394-test backend
+result is not fresh evidence. Leave the PR unmerged until the required combined
+backend gate and repository review/protection requirements pass on its final head.
+
+Backend policy/domain v1 already registers these tags; no new activation is
+requested. Chun Yang still owns source completeness and historical replay's
+remaining `(expiry, id)` ordering discrepancy. Empty post-count activity avoids
+that mismatch in the first slice; it does not repair it. No shared replay helper
+was extracted. Nonempty commitments need an explicit projected identity convention.
+Rudy owns mapping the exact claimed-run contract and persisting/resolving input,
+result and independent-validation evidence before backend freshness/publication.
+No live adapter, genuine pending plan, full training dataset, multi-day economic
+objective or end-to-end integration is claimed here.
+
+## Earlier implementation record
+
+The dated sections below retain fixture and source history. This Pass 3E section
+overrides their earlier policy proposals, expiry convention and waiting instructions.
+
 This revision includes baseline forecasting, recipe conversion, dated service
 allocation, one-day inventory projection, reproducible development history and
 one-day cash procurement with independent validation. Use [feat/forecasting](https://github.com/rudybrrr/restock-ai/tree/feat/forecasting)
@@ -862,3 +1008,14 @@ before merging this contribution into main. In particular retain and execute
 historical selection/audit behaviour crossed by the recipe-helper merge.
 No database schema, backend publication logic, agent code or frontend behaviour
 was newly implemented by this ML update.
+# Pass 3E implementation note — 17 September 2026
+
+Base: `86abb37cb12eaee8296c2418e88f2f7b9bdef0ba`; isolated branch
+`feat/ml-pass3e-compatibility`. Scope: projection FEFO identity, procurement
+expiry, guarded minimum-pack enumeration and semantic supplier ties, with focused
+numerical/contract tests. Reuse the backend-owned 24-offer fixture and schemas;
+no persistence, adapter, replay or frontend changes. Inspect independent small
+exhaustive oracles, full fixture cash, expiry boundaries, cross-source ties,
+applicability guards and generation/evaluation limits. The original checkout is
+preserved. Backend policy tags are implemented on main; historical `sales.py`
+still sorts expiry/ID and must not be described as receipt-aware parity.

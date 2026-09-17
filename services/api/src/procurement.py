@@ -4,12 +4,13 @@ Internal numerical records only: no backend Candidate, order creation or adapter
 All new purchases are hypothetical supply placed at the explicit opening/issue.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Context, Decimal, localcontext
 from fractions import Fraction
-from math import prod
+from math import ceil, prod
 from typing import Literal, TypedDict
 
 from src.inventory_projection import (
@@ -95,6 +96,8 @@ class ProcurementInputs:
     offer_evidence: Mapping[str, SourceEvidence]
     max_packs: Mapping[str, int]
     work_limit: int
+    # Legacy callers keep explicit full Cartesian enumeration, never implicit pruning.
+    search_policy: str = "COMPLETE_CARTESIAN_V1"
 
 
 @dataclass(frozen=True, order=True)
@@ -142,14 +145,24 @@ class ProcurementResult:
     findings: tuple[Finding, ...]
     rejection_counts: tuple[tuple[str, int], ...]
     diagnostic_incumbent: PurchaseCandidate | None = None
+    search_policy: str = "COMPLETE_CARTESIAN_V1"
+    reduced_domain_size: int | None = None
+    work_used: int = 0
 
 
 POLICIES = {
     "fee_policy": "SUPPLIER_ARRIVAL_ONCE_PLUS_EMERGENCY_ONCE",
     "tie_policy": "FEWER_LINES_THEN_STABLE_LINES",
-    "expiry_policy": "USABLE_THROUGH_ARRIVAL_DATE_PLUS_DAYS",
+    "expiry_policy": "EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1",
     "cash_policy": "CASH_SLICE_V1_EXACT_SGD",
 }
+EXPIRY_POLICY = POLICIES["expiry_policy"]
+TIE_POLICY = "SUPPLIER_ID_THEN_INGREDIENT_ID_V1"
+SEARCH_POLICY = "COMPLETE_PRUNED_DOMAIN_V1"
+SUPPORTED_POLICIES = {key: {value} for key, value in POLICIES.items()}
+SUPPORTED_POLICIES["fee_policy"].add("SUPPLIER_ARRIVAL_ONCE_V1")
+SUPPORTED_POLICIES["cash_policy"].add("CASH_SLICE_V1")
+SUPPORTED_POLICIES["tie_policy"].add(TIE_POLICY)
 EVIDENCE = frozenset(
     {"approvals", "opportunities", "safety", "storage", "budget", "domain", *POLICIES}
 )
@@ -216,9 +229,13 @@ def _prepare(p: ProcurementInputs) -> _Prepared:
         raise ValueError("Unknown policy evidence category")
     for key in sorted(EVIDENCE):
         evidence(key, p.policy_evidence.get(key))
-    for key, supported in POLICIES.items():
-        if getattr(p, key) != supported:
+    for key, supported in SUPPORTED_POLICIES.items():
+        if getattr(p, key) not in supported:
             missing("MISSING_OR_UNSUPPORTED_POLICY", key)
+    if p.search_policy not in ("COMPLETE_CARTESIAN_V1", SEARCH_POLICY):
+        missing("MISSING_OR_UNSUPPORTED_POLICY", "search_policy")
+    if p.search_policy == SEARCH_POLICY:
+        evidence("search_policy", p.policy_evidence.get("domain"))
     units = {i.id: i.unit for i in inv["ingredients"]}
     for name, vector in (("safety", p.safety), ("storage", p.storage)):
         if set(vector) - set(units):
@@ -318,6 +335,8 @@ def _prepare(p: ProcurementInputs) -> _Prepared:
         order, arrival = _aware(op.ordered_at), _aware(op.arrival_at)
         if op.kind not in ("NORMAL", "EMERGENCY"):
             raise ValueError("Unknown purchasing kind")
+        if p.fee_policy == "SUPPLIER_ARRIVAL_ONCE_V1" and op.kind != "NORMAL":
+            missing("UNSUPPORTED_NORMAL_ONLY_POLICY", op.id)
         key = (op.offer_id, order, arrival, op.kind)
         if key in slots:
             raise ValueError("Duplicate semantic opportunity")
@@ -415,7 +434,11 @@ def _validate(
         if arrival not in (o.feasible_delivery_at or ()):
             reject("DELIVERY_SLOT", op.id)
         assert o.shelf_life_days_on_arrival is not None
-        expected_expiry = arrival.date() + timedelta(days=o.shelf_life_days_on_arrival)
+        expected_expiry = arrival.date() + timedelta(
+            days=o.shelf_life_days_on_arrival - 1
+        )
+        if o.shelf_life_days_on_arrival < 1:
+            reject("UNUSABLE_ARRIVAL_SHELF_LIFE", op.id)
         if op.expiry_date != expected_expiry:
             reject("EXPECTED_EXPIRY_POLICY", op.id)
         acquisition += q * Fraction(_q(o, "unit_price"))
@@ -489,7 +512,15 @@ def _validate(
                 None,
                 None,
             )
-        supplies.append(ExpectedSupply(d, op.expiry_date, op.expiry_evidence))
+        supplies.append(
+            ExpectedSupply(
+                d,
+                op.expiry_date,
+                op.expiry_evidence,
+                "projected-purchase:"
+                + json.dumps(_semantic_op(op, o), separators=(",", ":")),
+            )
+        )
         ids.append(key)
         new_ids.append(key)
     inv = p.inventory.copy()
@@ -564,92 +595,260 @@ def validate_candidate(
     return _validate(inputs, candidate, _prepare(inputs))
 
 
-def search_procurement(inputs: ProcurementInputs) -> ProcurementResult:
-    """Exhaustive Cartesian pack enumeration in the supplied finite domain.
+def _semantic_op(op: OrderingOpportunity, offer: SupplierOffer) -> tuple[str, ...]:
+    return (
+        offer.supplier_id,
+        offer.ingredient_id,
+        _aware(op.ordered_at).isoformat(),
+        _aware(op.arrival_at).isoformat(),
+        op.kind,
+        offer.id,
+    )
 
-    A domain includes every count 0..floor(new capacity/pack) at every declared
-    opportunity, even counts below MOQ; validation rejects inadmissible choices.
-    No arbitrary quantity pruning, supplier preselection or incumbent fallback.
+
+def _candidate_key(p: ProcurementInputs, c: PurchaseCandidate, ready: _Prepared):
+    if p.tie_policy != TIE_POLICY:
+        return (len(c.lines), c.lines)
+    # No fewer-lines preference in the backend's supplier-first contract.
+    return tuple(
+        sorted(
+            (
+                *_semantic_op(
+                    ready.opportunities[line.opportunity_id],
+                    ready.offers[ready.opportunities[line.opportunity_id].offer_id],
+                ),
+                line.quantity,
+                line.unit,
+            )
+            for line in c.lines
+        )
+    )
+
+
+class _SearchLimit(Exception):
+    pass
+
+
+@dataclass
+class _Work:
+    limit: int
+    used: int = 0
+
+    def tick(self) -> None:
+        if self.used == self.limit:
+            raise _SearchLimit
+        self.used += 1
+
+
+def _reduction_guards(p: ProcurementInputs, ready: _Prepared) -> tuple[Finding, ...]:
+    """Sufficient conditions for deleting all above-minimum packs (see docs)."""
+    failed = set()
+
+    def require(condition: bool, name: str) -> None:
+        if not condition:
+            failed.add(Finding("UNSUPPORTED_SEARCH_SCOPE", name))
+
+    require(
+        p.cash_policy == "CASH_SLICE_V1", "cash_only_no_discounts_or_future_rewards"
+    )
+    require(
+        p.fee_policy == "SUPPLIER_ARRIVAL_ONCE_V1", "nonnegative_normal_shipment_fees"
+    )
+    require(p.tie_policy == TIE_POLICY, "semantic_tie_policy")
+    require(not any(p.safety.values()), "zero_safety")
+    require(
+        not p.inventory["supplies"] and not p.inventory["supply_manifest"],
+        "empty_commitments",
+    )
+    ops = list(ready.opportunities.values())
+    require(
+        len({o.offer_id for o in ops}) == len(ops) == len(ready.offers),
+        "one_opportunity_per_offer",
+    )
+    require(len({_aware(o.arrival_at) for o in ops}) <= 1, "common_arrival")
+    buckets = p.inventory["buckets"]
+    first = min(_aware(b.start) for b in buckets)
+    last = max(_aware(b.end) for b in buckets)
+    # Service ending exactly at midnight consumes on the prior date.
+    last_day = (last - timedelta(microseconds=1)).date()
+    require(
+        all(
+            not l.quantity or l.expiry_date >= last_day
+            for l in p.inventory["opening_lots"]
+        ),
+        "opening_usable_through_service",
+    )
+    for op in ops:
+        o = ready.offers[op.offer_id]
+        arrival, order = _aware(op.arrival_at), _aware(op.ordered_at)
+        require(op.kind == "NORMAL", "normal_only")
+        require(arrival <= first, "pre_service_arrival")
+        require(o.pack_size == 1 and o.moq == 1, "unit_pack_and_moq")
+        require(_q(o, "unit_price") > 0, "positive_acquisition")
+        require(o.current_status == "AVAILABLE", "available_offers")
+        require(
+            o.order_cutoff.kind == "NONE"
+            or (
+                o.order_cutoff.kind == "LOCAL_TIME"
+                and order.time() <= o.order_cutoff.local_time
+            ),
+            "cutoff",
+        )
+        assert (
+            o.lead_time_minutes is not None and o.shelf_life_days_on_arrival is not None
+        )
+        require(
+            arrival >= order + timedelta(minutes=o.lead_time_minutes)
+            and arrival in (o.feasible_delivery_at or ()),
+            "feasible_arrival",
+        )
+        require(
+            o.shelf_life_days_on_arrival >= 1
+            and op.expiry_date is not None
+            and op.expiry_date
+            == (arrival.date() + timedelta(days=o.shelf_life_days_on_arrival - 1))
+            and op.expiry_date >= last_day,
+            "new_stock_usable_through_service",
+        )
+    return tuple(sorted(failed))
+
+
+def _reduced_pools(p: ProcurementInputs, ready: _Prepared, ids: list[str], work: _Work):
+    """Bound allocation construction itself; never materialize capacity ranges."""
+    assert ready.baseline.ingredients is not None
+    pools: list[list[dict[str, int]]] = []
+    for row in ready.baseline.ingredients:
+        work.tick()
+        need = max(0, ceil(Fraction(row.required) - Fraction(row.opening)))
+        group = [
+            key
+            for key in ids
+            if ready.offers[ready.opportunities[key].offer_id].ingredient_id
+            == row.ingredient_id
+        ]
+        caps = [p.max_packs[key] for key in group]
+        pool: list[dict[str, int]] = []
+        # Iterative DFS avoids recursion limits; stack width is bounded by work.
+        stack = [(0, need, {})]
+        while stack:
+            work.tick()
+            depth, remaining, allocation = stack.pop()
+            if depth == len(group):
+                if remaining == 0:
+                    pool.append(allocation)
+                continue
+            low = max(0, remaining - sum(caps[depth + 1 :]))
+            high = min(remaining, caps[depth])
+            for count in range(low, high + 1):
+                work.tick()
+                stack.append(
+                    (depth + 1, remaining - count, {**allocation, group[depth]: count})
+                )
+        pools.append(pool)
+    return pools
+
+
+def search_procurement(inputs: ProcurementInputs) -> ProcurementResult:
+    """Complete Cartesian or explicitly guarded minimum-pack search.
+
+    domain_size always records the original capacity domain. Reduced counts and
+    generation/evaluation work are separate evidence; interruption is incomplete.
     """
     ready = _prepare(inputs)
-    if ready.findings:
-        return ProcurementResult(
-            "INCOMPLETE", False, False, 0, None, None, None, ready.findings, ()
-        )
     ids = sorted(ready.opportunities)
-    sizes = [inputs.max_packs[key] + 1 for key in ids]
-    domain_size = prod(sizes)
+    sizes = [inputs.max_packs.get(key, 0) + 1 for key in ids]
+    domain_size = prod(sizes) if not ready.findings else None
+    reduced_size = None
     best = None
     best_validation = None
     best_key = None
     rejected: dict[str, int] = {}
     evaluated = 0
-    units = {i.id: i.unit for i in inputs.inventory["ingredients"]}
-    # product(range(...)) materializes each pool; cap each pool lazily through
-    # mixed-radix indices instead, so even a huge domain respects the work limit.
-    for index in range(min(domain_size, inputs.work_limit)):
-        remaining = index
-        counts = []
-        for size in reversed(sizes):
-            remaining, count = divmod(remaining, size)
-            counts.append(count)
-        lines = []
-        for key, count in zip(ids, reversed(counts), strict=True):
-            if count:
-                offer = ready.offers[ready.opportunities[key].offer_id]
-                lines.append(
-                    PurchaseLine(
-                        key,
-                        _decimal(Fraction(_q(offer, "pack_size")) * count),
-                        units[offer.ingredient_id],
-                    )
-                )
-        candidate = PurchaseCandidate(tuple(lines))
-        result = _validate(inputs, candidate, ready)
-        evaluated += 1
-        if not result.complete:
-            return ProcurementResult(
-                "INCOMPLETE",
-                False,
-                False,
-                evaluated,
-                domain_size,
-                None,
-                None,
-                result.findings,
-                tuple(sorted(rejected.items())),
-                best,
-            )
-        for code in {v.code for v in result.violations}:
-            rejected[code] = rejected.get(code, 0) + 1
-        if result.feasible:
-            assert result.cash is not None
-            score = (result.cash.total, len(candidate.lines), candidate.lines)
-            if best_key is None or score < best_key:
-                best_key = score
-                best = PurchaseCandidate(candidate.lines, result.cash)
-                best_validation = result
-    if evaluated < domain_size:
+    work = _Work(inputs.work_limit)
+
+    def result(findings=(), complete=False):
         return ProcurementResult(
-            "INCOMPLETE",
-            False,
-            False,
+            ("OPTIMAL_IN_DOMAIN" if best is not None else "INFEASIBLE_IN_DOMAIN")
+            if complete
+            else "INCOMPLETE",
+            complete,
+            complete and best is not None,
             evaluated,
             domain_size,
-            None,
-            None,
-            (Finding("SEARCH_LIMIT_REACHED", f"{evaluated}/{domain_size} candidates"),),
+            best if complete else None,
+            best_validation if complete else None,
+            findings,
             tuple(sorted(rejected.items())),
-            best,
+            best if not complete else None,
+            inputs.search_policy,
+            reduced_size,
+            work.used,
         )
-    return ProcurementResult(
-        "OPTIMAL_IN_DOMAIN" if best is not None else "INFEASIBLE_IN_DOMAIN",
-        True,
-        best is not None,
-        evaluated,
-        domain_size,
-        best,
-        best_validation,
-        (),
-        tuple(sorted(rejected.items())),
-    )
+
+    if ready.findings:
+        return result(ready.findings)
+    units = {i.id: i.unit for i in inputs.inventory["ingredients"]}
+    try:
+        pools = None
+        if inputs.search_policy == SEARCH_POLICY:
+            guards = _reduction_guards(inputs, ready)
+            if guards:
+                return result(guards)
+            pools = _reduced_pools(inputs, ready, ids, work)
+            sizes = [len(pool) for pool in pools]
+            reduced_size = prod(sizes)
+            if reduced_size == 0:
+                rejected["INSUFFICIENT_NEW_CAPACITY"] = 1
+        size = prod(sizes)
+        for index in range(size):
+            work.tick()
+            remaining = index
+            counts = []
+            for radix in reversed(sizes):
+                remaining, count = divmod(remaining, radix)
+                counts.append(count)
+            digits = list(reversed(counts))
+            allocations = (
+                dict(zip(ids, digits, strict=True))
+                if pools is None
+                else {
+                    key: count
+                    for pool, digit in zip(pools, digits, strict=True)
+                    for key, count in pool[digit].items()
+                }
+            )
+            lines = []
+            for key, count in sorted(allocations.items()):
+                if count:
+                    offer = ready.offers[ready.opportunities[key].offer_id]
+                    lines.append(
+                        PurchaseLine(
+                            key,
+                            _decimal(Fraction(_q(offer, "pack_size")) * count),
+                            units[offer.ingredient_id],
+                        )
+                    )
+            candidate = PurchaseCandidate(tuple(lines))
+            checked = _validate(inputs, candidate, ready)
+            evaluated += 1
+            if not checked.complete:
+                return result(checked.findings)
+            for code in {v.code for v in checked.violations}:
+                rejected[code] = rejected.get(code, 0) + 1
+            if checked.feasible:
+                assert checked.cash is not None
+                score = (checked.cash.total, _candidate_key(inputs, candidate, ready))
+                if best_key is None or score < best_key:
+                    best_key = score
+                    best = PurchaseCandidate(candidate.lines, checked.cash)
+                    best_validation = checked
+    except _SearchLimit:
+        return result(
+            (
+                Finding(
+                    "SEARCH_LIMIT_REACHED",
+                    f"{work.used} work units; {evaluated} candidates",
+                ),
+            )
+        )
+    return result(complete=True)

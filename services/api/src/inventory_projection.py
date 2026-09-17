@@ -20,7 +20,10 @@ ZERO = Decimal(0)
 SOURCE_NAMES = frozenset(
     {"snapshot", "opening", "supply", "catalogue", "recipe", "forecast", "profile"}
 )
-FixtureFEFO = Literal["EXPIRY_RECEIVED_ID", "EXPIRY_ID"]
+FixtureFEFO = Literal[
+    "EXPIRY_RECEIVED_ID", "EXPIRY_ID", "FEFO_EXPIRY_RECEIVED_LOT_ID_V1"
+]
+FEFO_POLICY = "FEFO_EXPIRY_RECEIVED_LOT_ID_V1"
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class ExpectedSupply:
     delivery: Delivery
     expiry_date: date | None
     expiry_evidence: SourceEvidence | None
+    projected_lot_id: str | None = None
 
 
 @dataclass(frozen=True, order=True)
@@ -188,7 +192,7 @@ def project_inventory(
     """
     as_of, horizon_end, known_at = map(_aware, (as_of, horizon_end, known_at))
     _id(captured_revision)
-    if fixture_fefo not in ("EXPIRY_RECEIVED_ID", "EXPIRY_ID"):
+    if fixture_fefo not in ("EXPIRY_RECEIVED_ID", "EXPIRY_ID", FEFO_POLICY):
         raise ValueError("Explicit fixture FEFO ordering required")
     if type(target_date) is not date or target_date == date.max:
         raise ValueError("One supported target date required")
@@ -416,6 +420,20 @@ def project_inventory(
                 raise ValueError("Expected supply expires before arrival")
         deliveries.append((d, supply))
 
+    # Result keys remain namespaced for provenance; they are not FEFO tie keys.
+    identities = {"opening:" + lot.id: lot.id for lot in lots}
+    if fixture_fefo == FEFO_POLICY:
+        for d, supply in deliveries:
+            if d.outstanding_quantity:
+                if not supply.projected_lot_id or not supply.projected_lot_id.strip():
+                    findings.add(Finding("MISSING_PROJECTED_LOT_ID", d.id))
+                else:
+                    identities["supply:" + d.id] = supply.projected_lot_id
+        if len(set(identities.values())) != len(identities):
+            raise ValueError(
+                "FEFO identities must be unique across actual and projected lots"
+            )
+
     source_rows = tuple(sorted(evidence.items())) + tuple(
         ("expiry:" + d.id, s.expiry_evidence)
         for d, s in sorted(deliveries, key=lambda row: row[0].id)
@@ -471,8 +489,8 @@ def project_inventory(
         keys,
         key=lambda k: (
             metadata[k][4],
-            metadata[k][3] if fixture_fefo == "EXPIRY_RECEIVED_ID" else as_of,
-            k,
+            metadata[k][3] if fixture_fefo != "EXPIRY_ID" else as_of,
+            identities[k] if fixture_fefo == FEFO_POLICY else k,
         ),
     )
     values = [
