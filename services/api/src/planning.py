@@ -19,6 +19,7 @@ from src.agent_contracts import (
     EvidenceCategory,
     EvidenceRef,
     EvidenceSource,
+    MaterialityAssessment,
     PlanPublicationResult,
     PlanStatus,
     StateRevisionStaleError,
@@ -41,7 +42,10 @@ from src.planning_schemas import (
     PlanningRun,
     PurchasePlanVersion,
 )
-from src.procurement_contracts import freeze_first_slice_contract
+from src.procurement_contracts import (
+    bind_frozen_supplier_state,
+    freeze_first_slice_contract,
+)
 from src.reconciliation import authoritative_daily_sales
 from src.requirements import sum_recipe_usage
 from src.sales import estimated_inventory
@@ -66,7 +70,12 @@ def _revision(session: Session) -> int:
         .select_from(db.events)
         .where(
             db.events.c.type.not_in(
-                ("PLAN_APPROVED", "PLAN_REJECTED", "PLAN_SUPERSEDED")
+                (
+                    "PLAN_APPROVED",
+                    "PLAN_REJECTED",
+                    "PLAN_INVALIDATED",
+                    "PLAN_SUPERSEDED",
+                )
             )
         )
     ).scalar_one()
@@ -271,6 +280,22 @@ def _snapshot(
         session, as_of, known_at, captured_state_revision
     )
     if contract is not None:
+        supplier_reassessment = session.execute(
+            select(db.events.c.id)
+            .join(
+                db.assessment_requests,
+                db.assessment_requests.c.event_id == db.events.c.id,
+            )
+            .where(
+                db.assessment_requests.c.run_id == run_id,
+                db.events.c.type.in_(
+                    ("SUPPLIER_AVAILABILITY_CHANGED", "SUPPLIER_STATUS_CHANGED")
+                ),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if supplier_reassessment is not None:
+            contract = bind_frozen_supplier_state(contract, offers, offer_versions)
         contract["run_id"] = run_id
         required_empty = (
             snapshot["commitments"],
@@ -688,6 +713,46 @@ def _validate_candidate(snapshot: dict, candidate: Candidate) -> None:
         )
 
 
+def _materiality_from_audit(
+    audit_events: Sequence[AuditEvent],
+) -> MaterialityAssessment | None:
+    assessments = [
+        event.materiality
+        for event in audit_events
+        if event.action is AuditAction.MATERIALITY_ASSESSED
+        and event.materiality is not None
+    ]
+    if not assessments:
+        return None
+    if len(assessments) != 1:
+        raise ApiError(409, "AUDIT_CONTEXT_MISMATCH", "Run has conflicting materiality evidence")
+    return assessments[0]
+
+
+def _transition_audit(
+    run: PlanningRun,
+    plan: PurchasePlanVersion,
+    from_status: PlanStatus,
+    to_status: PlanStatus,
+    reason: str,
+) -> AuditEvent:
+    return AuditEvent(
+        audit_event_id=f"{run.id}-PLAN-{plan.version}-{to_status.value}",
+        timestamp=datetime.now(UTC),
+        actor="BACKEND",
+        action=AuditAction.PLAN_TRANSITIONED,
+        state_revision=str(run.input_revision),
+        trigger_id=run.trigger_event_id,
+        plan_id=plan.plan_id,
+        plan_version=plan.version,
+        run_id=run.id,
+        from_plan_status=from_status,
+        to_plan_status=to_status,
+        reason_codes=[reason],
+        summary=f"Plan version transitioned from {from_status.value} to {to_status.value}.",
+    )
+
+
 def complete_run(
     session: Session,
     run_id: str,
@@ -748,21 +813,16 @@ def complete_run(
         raise ApiError(
             422, "INVALID_OUTCOME", "REVISE_PLAN requires exactly one candidate"
         )
+    materiality = _materiality_from_audit(audit_events)
+    transition_events: list[AuditEvent] = []
     version_id = None
     if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
         calculated = run.snapshot.get("calculated_candidate")
-        if calculated is None:
-            raise ApiError(
-                409,
-                "UNCERTIFIED_OUTCOME",
-                "Run the deterministic tools before certifying a plan or no-purchase result",
-            )
-        target = run.snapshot.get("revises_plan_id")
         current = (
             session.execute(
                 select(db.plan_versions)
                 .where(
-                    db.plan_versions.c.plan_id == target,
+                    db.plan_versions.c.plan_id == run.snapshot.get("revises_plan_id"),
                     db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
                 )
                 .order_by(db.plan_versions.c.version.desc())
@@ -771,8 +831,24 @@ def complete_run(
             .mappings()
             .one_or_none()
         )
+        materiality_keep = (
+            body.outcome == "KEEP_CURRENT_PLAN"
+            and materiality is not None
+            and not materiality.material
+            and current is not None
+            and materiality.affected_plan_id == current["plan_id"]
+            and materiality.affected_plan_version == current["version"]
+        )
+        if calculated is None and not materiality_keep:
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Run the deterministic tools before certifying a plan or no-purchase result",
+            )
         if current is None:
-            if body.outcome != "KEEP_CURRENT_PLAN" or calculated["lines"]:
+            if body.outcome != "KEEP_CURRENT_PLAN" or (
+                calculated is not None and calculated["lines"]
+            ):
                 raise ApiError(
                     409,
                     "NO_CURRENT_PLAN",
@@ -780,18 +856,19 @@ def complete_run(
                 )
         else:
             stored = read_plan(session, current["id"])
-            comparable = set(Candidate.model_fields) - {
-                "forecast_id",
-                "inventory_snapshot_id",
-            }
-            if Candidate.model_validate(calculated).model_dump(
-                include=comparable
-            ) != stored.model_dump(include=comparable):
-                raise ApiError(
-                    409,
-                    "PLAN_CHANGED",
-                    "Calculated purchases changed; publish a new pending version",
-                )
+            if calculated is not None:
+                comparable = set(Candidate.model_fields) - {
+                    "forecast_id",
+                    "inventory_snapshot_id",
+                }
+                if Candidate.model_validate(calculated).model_dump(
+                    include=comparable
+                ) != stored.model_dump(include=comparable):
+                    raise ApiError(
+                        409,
+                        "PLAN_CHANGED",
+                        "Calculated purchases changed; publish a new pending version",
+                    )
             if (
                 body.outcome == "REQUEST_HUMAN_APPROVAL"
                 and current["status"] != "PENDING_APPROVAL"
@@ -860,6 +937,7 @@ def complete_run(
             .all()
         )
         for old in active_versions:
+            old_plan = read_plan(session, old["id"])
             session.execute(
                 update(db.plan_versions)
                 .where(db.plan_versions.c.id == old["id"])
@@ -877,6 +955,15 @@ def complete_run(
                     "previous_status": old["status"],
                     "reason": "New recommendation replaces the restaurant's actionable plan",
                 },
+            )
+            transition_events.append(
+                _transition_audit(
+                    run,
+                    old_plan,
+                    old_plan.status,
+                    PlanStatus.SUPERSEDED,
+                    "REPLACED_BY_VALIDATED_RECOMMENDATION",
+                )
             )
         session.execute(
             insert(db.plan_versions).values(
@@ -905,6 +992,52 @@ def complete_run(
                 ]
             )
         )
+    if (
+        body.outcome is AgentOutcome.ESCALATE
+        and materiality is not None
+        and materiality.current_plan_unactionable
+        and materiality.affected_plan_id is not None
+        and materiality.affected_plan_version is not None
+    ):
+        old = (
+            session.execute(
+                select(db.plan_versions).where(
+                    db.plan_versions.c.plan_id == materiality.affected_plan_id,
+                    db.plan_versions.c.version == materiality.affected_plan_version,
+                    db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if old is not None:
+            old_plan = read_plan(session, old["id"])
+            session.execute(
+                update(db.plan_versions)
+                .where(db.plan_versions.c.id == old["id"])
+                .values(status="INVALIDATED")
+            )
+            record_event(
+                session,
+                "PLAN_INVALIDATED",
+                "backend",
+                {
+                    "plan_id": old_plan.plan_id,
+                    "version_id": old_plan.id,
+                    "version": old_plan.version,
+                    "previous_status": old_plan.status.value,
+                    "reason": "Selected supplier allocation is no longer actionable and no replacement was published.",
+                },
+            )
+            transition_events.append(
+                _transition_audit(
+                    run,
+                    old_plan,
+                    old_plan.status,
+                    PlanStatus.INVALIDATED,
+                    "SELECTED_SUPPLIER_OFFER_UNUSABLE",
+                )
+            )
     session.execute(
         update(db.planning_runs)
         .where(db.planning_runs.c.id == run_id)
@@ -917,7 +1050,9 @@ def complete_run(
             completed_at=datetime.now(UTC),
         )
     )
-    _persist_agent_audit(session, run, audit_events, version_id)
+    _persist_agent_audit(
+        session, run, [*audit_events, *transition_events], version_id
+    )
     session.commit()
     return get_run(session, run_id)
 
@@ -1083,6 +1218,36 @@ def publish_agent_completion(
     )
 
 
+def _record_approval_audit(
+    session: Session,
+    plan: PurchasePlanVersion,
+    actor: str,
+    *,
+    decision: str,
+    reason_code: str | None = None,
+) -> None:
+    """Append the existing Backend audit record for an approval attempt."""
+    run = get_run(session, plan.run_id)
+    event = AuditEvent(
+        audit_event_id=f"{plan.id}-APPROVAL-{uuid4()}",
+        timestamp=datetime.now(UTC),
+        actor=actor,
+        action=AuditAction.APPROVAL_RECORDED,
+        state_revision=current_state_revision(session),
+        trigger_id=run.trigger_event_id,
+        plan_id=plan.plan_id,
+        plan_version=plan.version,
+        run_id=run.id,
+        reason_codes=[reason_code] if reason_code is not None else [],
+        summary=(
+            f"Approval of exact plan version {plan.version} was rejected as stale."
+            if reason_code is not None
+            else f"Exact plan version {plan.version} was {decision.lower()}."
+        ),
+    )
+    _persist_agent_audit(session, run, [event], plan.id)
+
+
 def decide_plan(
     session: Session, version_id: str, body: PlanDecision, actor: str
 ) -> PurchasePlanVersion:
@@ -1115,6 +1280,20 @@ def decide_plan(
             )
         return plan
     if plan.status != "PENDING_APPROVAL":
+        if plan.status in (PlanStatus.SUPERSEDED, PlanStatus.INVALIDATED):
+            _record_approval_audit(
+                session,
+                plan,
+                actor,
+                decision=decision,
+                reason_code="PLAN_VERSION_STALE",
+            )
+            session.commit()
+            raise ApiError(
+                409,
+                "PLAN_VERSION_STALE",
+                "This plan version was replaced or invalidated by authoritative operational state.",
+            )
         raise ApiError(
             409,
             "PLAN_NOT_PENDING",
@@ -1133,6 +1312,14 @@ def decide_plan(
         .limit(1)
     ).scalar_one_or_none()
     if decision == "APPROVED" and _revision(session) != certified_revision:
+        _record_approval_audit(
+            session,
+            plan,
+            actor,
+            decision=decision,
+            reason_code="PLAN_VERSION_STALE",
+        )
+        session.commit()
         raise ApiError(
             409,
             "PLAN_VERSION_STALE",
@@ -1154,6 +1341,7 @@ def decide_plan(
             "instructions": body.instructions,
         },
     )
+    _record_approval_audit(session, plan, actor, decision=decision)
     session.commit()
     return read_plan(session, version_id)
 

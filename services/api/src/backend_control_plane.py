@@ -14,6 +14,7 @@ from src.agent_contracts import (
     EvidenceRef,
     EvidenceSource,
     InvocationMode,
+    MaterialityAssessment,
     PlanPublicationResult,
 )
 from src.coordinator import Coordinator, CoordinatorExecution, ManualRouteClassifier
@@ -23,6 +24,7 @@ from src.procurement_specialist import (
     ProcurementSpecialist,
     ProcurementToolPort,
 )
+from src.replanning import supplier_events_for_run, supplier_materiality
 
 
 class BackendCoordinatorControlPlane:
@@ -88,6 +90,24 @@ class BackendCoordinatorControlPlane:
             source=EvidenceSource.BACKEND,
             reference_id=invocation.trigger_id,
             state_revision=invocation.captured_state_revision,
+        )
+
+    def get_materiality(
+        self, invocation: AgentInvocation
+    ) -> MaterialityAssessment | None:
+        """Read Backend-owned supplier availability/status evidence for an event run."""
+        if invocation.invocation_mode is not InvocationMode.EVENT:
+            return None
+        active = (
+            planning.get_active_plan(self._session, invocation.affected_plan_id)
+            if invocation.affected_plan_id
+            else None
+        )
+        return supplier_materiality(
+            self._session,
+            planning.get_run(self._session, invocation.run_id),
+            active,
+            supplier_events_for_run(self._session, invocation.run_id),
         )
 
     def validate_final_plan(

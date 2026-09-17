@@ -34,6 +34,7 @@ EventType = Literal[
     "MANUAL_REASSESSMENT_REQUESTED",
     "PLAN_APPROVED",
     "PLAN_REJECTED",
+    "PLAN_INVALIDATED",
     "PLAN_SUPERSEDED",
     "ORDER_CYCLE_UPDATED",
 ]
@@ -306,7 +307,9 @@ class PlanDecisionEventPayload(BaseModel):
 
 class PlanDecisionEvent(BaseModel):
     id: str
-    type: Literal["PLAN_APPROVED", "PLAN_REJECTED", "PLAN_SUPERSEDED"]
+    type: Literal[
+        "PLAN_APPROVED", "PLAN_REJECTED", "PLAN_INVALIDATED", "PLAN_SUPERSEDED"
+    ]
     timestamp: AwareDatetime
     source: str
     payload: PlanDecisionEventPayload

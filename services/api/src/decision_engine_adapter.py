@@ -136,8 +136,15 @@ def run_first_slice_engine(session: Session, run) -> dict:
         DatedRequirement(bucket.start, bucket.end, calculate_requirements(bucket.expected_portions, menu, ingredients, recipes))
         for bucket in buckets
     ]
-    offers = [row.offer for row in contract.domain.offers]
-    offer_by_id = {row.offer_id: row.offer for row in contract.domain.offers}
+    eligible_domain_offers = [
+        row
+        for row in contract.domain.offers
+        if row.offer.current_status == "AVAILABLE"
+        and row.offer.available_quantity is not None
+        and row.offer.available_quantity > 0
+    ]
+    offers = [row.offer for row in eligible_domain_offers]
+    offer_by_id = {row.offer_id: row.offer for row in eligible_domain_offers}
     if any(
         offer.available_quantity is None
         or offer.pack_size is None
@@ -148,6 +155,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
     opportunities = [
         OrderingOpportunity(row.opportunity_id, row.offer_id, row.ordered_at, row.arrival_at, row.kind, row.expiry_date, SourceEvidence(row.source_revision, available, revision))
         for row in contract.domain.opportunities
+        if row.offer_id in offer_by_id
     ]
     inputs = ProcurementInputs(
         inventory=inventory,
@@ -155,7 +163,10 @@ def run_first_slice_engine(session: Session, run) -> dict:
         requirements=requirements,
         suppliers=[Supplier(id=row, name=row) for row in policy.approved_supplier_ids],
         offers=offers,
-        approved_offer_manifest=[(row.offer_id, row.supplier_id, row.ingredient_id) for row in contract.domain.offers],
+        approved_offer_manifest=[
+            (row.offer_id, row.supplier_id, row.ingredient_id)
+            for row in eligible_domain_offers
+        ],
         opportunities=opportunities,
         safety=policy.safety_stock,
         storage=policy.storage_limits,
@@ -165,23 +176,28 @@ def run_first_slice_engine(session: Session, run) -> dict:
         expiry_policy=policy.new_supply_expiry_policy,
         cash_policy=policy.objective_policy,
         policy_evidence={key: source for key in EVIDENCE},
-        offer_evidence={row.offer_id: SourceEvidence(row.source_revision, available, revision) for row in contract.domain.offers},
+        offer_evidence={
+            row.offer_id: SourceEvidence(row.source_revision, available, revision)
+            for row in eligible_domain_offers
+        },
         max_packs={
-            opportunity.opportunity_id: int(
+            opportunity.id: int(
                 cast(Decimal, offer_by_id[opportunity.offer_id].available_quantity)
                 // cast(Decimal, offer_by_id[opportunity.offer_id].pack_size)
             )
-            for opportunity in contract.domain.opportunities
+            for opportunity in opportunities
         },
         work_limit=10000,
         search_policy=policy.search_policy,
     )
     input_id = "engine-input:" + _identity(contract.model_dump(mode="json"))
     result = search_procurement(inputs)
-    if not result.search_complete or result.candidate is None:
-        raise ApiError(409, "CALCULATION_INCOMPLETE", "Decision Engine search did not complete")
     if result.status == "INFEASIBLE_IN_DOMAIN":
         raise ApiError(409, "NO_FEASIBLE_SUPPLIER", "Approved procurement domain is infeasible")
+    if not result.search_complete or result.candidate is None:
+        raise ApiError(
+            409, "CALCULATION_INCOMPLETE", "Decision Engine search did not complete"
+        )
     validation = validate_candidate(inputs, result.candidate)
     if not validation.complete or not validation.feasible or validation.cash is None:
         raise ApiError(409, "POLICY_VIOLATION", "Independent candidate validation failed")

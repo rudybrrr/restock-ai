@@ -23,6 +23,7 @@ from src.agent_contracts import (
     EvidenceRef,
     EvidenceSource,
     InvocationMode,
+    MaterialityAssessment,
     PlanPublicationResult,
     RecommendedNextStep,
     SpecialistDelegation,
@@ -90,6 +91,7 @@ EVENT_INITIAL_ROUTE: dict[EventType, SpecialistType | None] = {
     EventType.INVENTORY_WASTED: SpecialistType.INVENTORY,
     EventType.SUPPLIER_AVAILABILITY_CHANGED: SpecialistType.PROCUREMENT,
     EventType.SUPPLIER_PRICE_CHANGED: SpecialistType.PROCUREMENT,
+    EventType.SUPPLIER_STATUS_CHANGED: SpecialistType.PROCUREMENT,
     EventType.DELIVERY_DELAYED: SpecialistType.PROCUREMENT,
     EventType.DELIVERY_SHORT: SpecialistType.PROCUREMENT,
     EventType.DELIVERY_CANCELLED: SpecialistType.PROCUREMENT,
@@ -147,6 +149,28 @@ class Coordinator:
             )
 
         evidence_refs = _unique_refs([event_ref, *active_plan_refs])
+        try:
+            materiality = self._materiality(invocation)
+        except ControlPlaneFailure:
+            return self._finish(
+                invocation,
+                AgentOutcome.ESCALATE,
+                evidence_refs,
+                trace,
+                "Deterministic materiality evidence could not be retrieved.",
+                EscalationReason.TOOL_FAILURE,
+            )
+        if materiality is not None:
+            evidence_refs = _unique_refs([*evidence_refs, materiality.evidence_ref])
+            trace.append(self._materiality_trace(invocation, materiality))
+            if not materiality.material:
+                return self._finish(
+                    invocation,
+                    AgentOutcome.KEEP_CURRENT_PLAN,
+                    evidence_refs,
+                    trace,
+                    "Deterministic supplier materiality evidence leaves the current plan feasible.",
+                )
         initial = self._initial_routes(invocation, evidence_refs)
         if initial is None:
             return self._finish(
@@ -385,6 +409,39 @@ class Coordinator:
             )
         )
 
+    def _materiality(
+        self, invocation: AgentInvocation
+    ) -> MaterialityAssessment | None:
+        assessor = getattr(self._control_plane, "get_materiality", None)
+        if assessor is None:
+            return None
+        return self._retry_control_plane(lambda: assessor(invocation))
+
+    def _materiality_trace(
+        self, invocation: AgentInvocation, assessment: MaterialityAssessment
+    ) -> AuditEvent:
+        return AuditEvent(
+            audit_event_id=f"{invocation.run_id}-MATERIALITY",
+            timestamp=self._clock(),
+            actor="BACKEND",
+            action=AuditAction.MATERIALITY_ASSESSED,
+            state_revision=invocation.captured_state_revision,
+            trigger_id=invocation.trigger_id,
+            plan_id=assessment.affected_plan_id,
+            plan_version=assessment.affected_plan_version,
+            run_id=invocation.run_id,
+            invocation_mode=invocation.invocation_mode,
+            event_type=invocation.trigger_type,
+            evidence_refs=[assessment.evidence_ref],
+            reason_codes=assessment.reason_codes,
+            materiality=assessment,
+            summary=(
+                "Deterministic supplier materiality requires Procurement reassessment."
+                if assessment.material
+                else "Deterministic supplier materiality leaves the current plan unchanged."
+            ),
+        )
+
     def _delegation(
         self,
         invocation: AgentInvocation,
@@ -405,7 +462,16 @@ class Coordinator:
             materiality_evidence_refs=[
                 ref for ref in refs if ref.category is EvidenceCategory.MATERIALITY
             ],
-            context_refs=list(refs),
+            # A prior immutable plan is useful to the Coordinator for identity and
+            # audit, but its historical candidate evidence is not fresh input to a
+            # reassessment specialist.  Only evidence captured by this run's state
+            # revision may cross the specialist boundary.
+            context_refs=[
+                ref
+                for ref in refs
+                if ref.state_revision is None
+                or ref.state_revision == invocation.captured_state_revision
+            ],
             invocation_mode=invocation.invocation_mode,
             event_type=invocation.trigger_type,
         )

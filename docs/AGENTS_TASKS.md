@@ -371,11 +371,11 @@
 
 # 8. Coding Pass 6 — Full Dynamic Replanning
 
-- [ ] Integrate deterministic materiality kernel
-  - [ ] Affected IDs
-  - [ ] Threshold / feasibility evidence
-  - [ ] Evidence refs
-  - [ ] Freshness check
+- [x] Integrate deterministic materiality kernel for authoritative supplier availability/status changes
+  - [x] Affected IDs
+  - [x] Threshold / feasibility evidence
+  - [x] Evidence refs
+  - [x] Freshness check
 
 - [ ] Implement promotion route
   - [ ] Demand
@@ -386,21 +386,21 @@
   - [ ] Inventory
   - [ ] Procurement only if sourcing changes
 
-- [ ] Implement supplier-disruption route
-  - [ ] Procurement first
+- [x] Implement supplier-disruption route for authoritative availability/status changes
+  - [x] Procurement first
   - [ ] Inventory only if exposure needs reassessment
 
 - [ ] Implement complex multi-domain route
   - [ ] Demand -> Inventory -> Procurement when justified
   - [ ] Coordinator can perform bounded second investigation round
 
-- [ ] Implement `KEEP_CURRENT_PLAN`
-- [ ] Implement `REVISE_PLAN`
-  - [ ] Backend validates
-  - [ ] Backend invalidates / supersedes old version as appropriate
-  - [ ] Backend creates new `PENDING_APPROVAL` version
+- [x] Implement `KEEP_CURRENT_PLAN` for non-material supplier events
+- [x] Implement `REVISE_PLAN` for material supplier events
+  - [x] Backend validates
+  - [x] Backend invalidates / supersedes old version as appropriate
+  - [x] Backend creates new `PENDING_APPROVAL` version
 - [ ] Implement `REQUEST_HUMAN_APPROVAL`
-- [ ] Implement `ESCALATE` with correct reason / detail
+- [x] Implement `ESCALATE` with correct reason / detail for no feasible supplier replacement
 
 - [ ] Review and commit Pass 6
 
@@ -415,20 +415,19 @@
   - [x] timestamp
   - [x] decision
 
-- [ ] Implement stale-approval rejection
+- [x] Implement stale-approval rejection
   - [x] Old plan reviewed
   - [x] State changes
-  - [ ] New plan created
+  - [x] New plan created
   - [x] Old approval returns `PLAN_VERSION_STALE`
-  - Blocked: the full old-plan/new-plan acceptance scenario still requires the real deterministic replanning path.
 
-- [ ] Implement lifecycle transitions
+- [x] Implement lifecycle transitions required by supplier replanning
   - [x] `PENDING_APPROVAL -> APPROVED`
   - [x] `PENDING_APPROVAL -> REJECTED`
-  - [ ] `PENDING_APPROVAL -> INVALIDATED`
+  - [x] `PENDING_APPROVAL -> INVALIDATED`
   - [x] `PENDING_APPROVAL -> SUPERSEDED`
-  - [ ] `APPROVED -> INVALIDATED`
-  - [ ] `APPROVED -> SUPERSEDED`
+  - [x] `APPROVED -> INVALIDATED`
+  - [x] `APPROVED -> SUPERSEDED`
 
 - [x] Confirm no Agent approval authority
 - [x] Confirm no real order placement / payment
@@ -508,18 +507,18 @@
 
 - [ ] Persist business decision events
   - [x] Event
-  - [ ] Materiality evidence
+  - [x] Materiality evidence
   - [x] Routing
   - [x] Tool use
   - [x] Validation
-  - [ ] Plan transition
-  - [ ] Approval
+  - [x] Plan transition
+  - [x] Approval
   - [x] Final outcome
 
 - [x] Keep audit history append-only
 - [ ] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed verification now covers the checked run, specialist-call, tool-call, validation, and final-outcome fields, including atomic rollback when Agent audit persistence fails. Canonical materiality, supersession-transition, approval, and termination-detail audit coverage remains incomplete.
+  - PostgreSQL-backed supplier-replanning verification now covers deterministic materiality, Coordinator routing, Procurement tool calls, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. Promotion, inventory, delivery, and Demand audit paths remain open.
 
 - [ ] Review and commit Pass 9
 

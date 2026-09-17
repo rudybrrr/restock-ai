@@ -104,6 +104,7 @@ def test_event_types_and_specialist_next_steps_are_authoritative() -> None:
         "INVENTORY_WASTED",
         "SUPPLIER_AVAILABILITY_CHANGED",
         "SUPPLIER_PRICE_CHANGED",
+        "SUPPLIER_STATUS_CHANGED",
         "DELIVERY_DELAYED",
         "DELIVERY_SHORT",
         "DELIVERY_CANCELLED",

@@ -119,6 +119,7 @@ class EventType(StrEnum):
     INVENTORY_WASTED = "INVENTORY_WASTED"
     SUPPLIER_AVAILABILITY_CHANGED = "SUPPLIER_AVAILABILITY_CHANGED"
     SUPPLIER_PRICE_CHANGED = "SUPPLIER_PRICE_CHANGED"
+    SUPPLIER_STATUS_CHANGED = "SUPPLIER_STATUS_CHANGED"
     DELIVERY_DELAYED = "DELIVERY_DELAYED"
     DELIVERY_SHORT = "DELIVERY_SHORT"
     DELIVERY_CANCELLED = "DELIVERY_CANCELLED"
@@ -460,6 +461,7 @@ ToolErrorEnvelope = ErrorResponse
 class AuditAction(StrEnum):
     TRIGGER_RECEIVED = "TRIGGER_RECEIVED"
     AGENT_RUN_STARTED = "AGENT_RUN_STARTED"
+    MATERIALITY_ASSESSED = "MATERIALITY_ASSESSED"
     SPECIALIST_CALLED = "SPECIALIST_CALLED"
     TOOL_CALLED = "TOOL_CALLED"
     TOOL_RESULT_RECORDED = "TOOL_RESULT_RECORDED"
@@ -495,6 +497,7 @@ class AuditEvent(ContractModel):
     approval_id: Identifier | None = None
     final_outcome: AgentOutcome | None = None
     reason_codes: list[Identifier] = Field(default_factory=list)
+    materiality: "MaterialityAssessment | None" = None
     summary: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
     @model_validator(mode="after")
@@ -511,6 +514,34 @@ class AuditEvent(ContractModel):
             raise ValueError("attempt number requires a tool call id")
         if self.tool_name is not None and self.tool_call_id is None:
             raise ValueError("tool name requires a tool call id")
+        return self
+
+
+class MaterialityAssessment(ContractModel):
+    """Backend-owned evidence for the supported supplier replanning slice."""
+
+    source_event_ids: list[Identifier] = Field(min_length=1)
+    captured_state_revision: StateRevision
+    affected_plan_id: Identifier | None = None
+    affected_plan_version: PositiveInt | None = None
+    affected_ingredient_ids: list[Identifier] = Field(default_factory=list)
+    affected_supplier_ids: list[Identifier] = Field(default_factory=list)
+    affected_plan_line_ids: list[Identifier] = Field(default_factory=list)
+    material: bool
+    current_plan_unactionable: bool
+    reason_codes: list[Identifier] = Field(min_length=1)
+    evidence_ref: EvidenceRef
+
+    @model_validator(mode="after")
+    def validate_supplier_materiality(self) -> "MaterialityAssessment":
+        if (self.affected_plan_id is None) != (self.affected_plan_version is None):
+            raise ValueError("affected plan id and version must be supplied together")
+        if self.evidence_ref.category is not EvidenceCategory.MATERIALITY:
+            raise ValueError("materiality assessment needs MATERIALITY evidence")
+        if self.evidence_ref.state_revision != self.captured_state_revision:
+            raise ValueError("materiality evidence must use the captured state revision")
+        if self.current_plan_unactionable and not self.material:
+            raise ValueError("an unactionable plan must be material")
         return self
 
 
