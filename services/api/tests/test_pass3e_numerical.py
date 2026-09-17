@@ -45,7 +45,11 @@ def full(reference):
     recorded = dt("2026-09-17T00:00+08:00")
     rows = first_slice_seed_rows(recorded)
     contract = _build(
-        rows["policies"][0], rows["domains"][0], rows["offers"], rows["opportunities"]
+        rows["policies"][0],
+        rows["domains"][0],
+        rows["forecast_inputs"][0],
+        rows["offers"],
+        rows["opportunities"],
     )
     policy, domain = contract.policy.payload, contract.domain
     inv = reference.inventory.copy()
@@ -89,18 +93,16 @@ def full(reference):
         i.id: [l.id for l in lots if l.ingredient_id == i.id]
         for i in inv["ingredients"]
     }
-    portions = {
-        "chicken-rice": 100,
-        "fried-rice": 60,
-        "chicken-noodles": 80,
-        "tofu-bowl": 40,
-        "vegetable-noodles": 40,
-    }
     history = [
         DailySalesObservation(
-            date.fromisoformat(day), dt(day + "T22:00+08:00"), 1, portions, False, False
+            row.service_date,
+            row.available_at,
+            row.revision,
+            row.portions,
+            row.promotion,
+            row.censored,
         )
-        for day in ("2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09")
+        for row in contract.forecast_input.payload.history
     ]
     forecast = seasonal_baseline(
         history,

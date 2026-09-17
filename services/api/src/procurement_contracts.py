@@ -60,7 +60,11 @@ def _domain(session: Session, policy: dict) -> dict:
 
 
 def _build(
-    policy: dict, domain: dict, offers: list[dict], opportunities: list[dict]
+    policy: dict,
+    domain: dict,
+    forecast_input: dict,
+    offers: list[dict],
+    opportunities: list[dict],
 ) -> ProcurementContract:
     payload = policy["payload"]
     if domain["domain_id"] != payload["approved_domain_id"]:
@@ -99,12 +103,47 @@ def _build(
         raise ApiError(
             409, "MISSING_REQUIRED_DATA", "Every approved offer needs one opportunity"
         )
+    forecast_payload = forecast_input["payload"]
+    if forecast_input["policy_version_id"] != policy["id"]:
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "Forecast input policy identity does not match",
+        )
+    menu_item_ids = forecast_payload["menu_item_ids"]
+    history = forecast_payload["history"]
+    target_date = date.fromisoformat(str(forecast_payload["target_date"]))
+    if (
+        forecast_payload["target_date"] != payload["target_date"]
+        or forecast_input["effective_at"] != policy["effective_at"]
+        or len(history) != 4
+        or len(menu_item_ids) != len(set(menu_item_ids))
+        or len({str(row["service_date"]) for row in history}) != len(history)
+        or any(set(row["portions"]) != set(menu_item_ids) for row in history)
+        or any(
+            date.fromisoformat(str(row["service_date"])) >= target_date
+            for row in history
+        )
+        or any(
+            datetime.fromisoformat(str(row["available_at"]))
+            > datetime.fromisoformat(str(payload["issue_time"]))
+            for row in history
+        )
+    ):
+        raise ApiError(
+            409, "MISSING_REQUIRED_DATA", "Forecast input artifact is incomplete"
+        )
     return ProcurementContract.model_validate(
         {
             "as_of": policy["effective_at"],
-            "known_at": policy["recorded_at"],
+            "known_at": max(
+                policy["recorded_at"],
+                domain["recorded_at"],
+                forecast_input["recorded_at"],
+            ),
             "captured_state_revision": domain["source_revision"],
             "policy": {**policy, "payload": payload},
+            "forecast_input": forecast_input,
             "domain": {
                 key: domain[key]
                 for key in (
@@ -172,6 +211,19 @@ def read_policy_contract(
         "procurement policy version",
     )
     domain = _domain(session, policy)
+    forecast_input_row = (
+        session.execute(
+            select(db.procurement_forecast_inputs).where(
+                db.procurement_forecast_inputs.c.policy_version_id == policy["id"]
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    forecast_input = _row_or_missing(
+        dict(forecast_input_row) if forecast_input_row is not None else None,
+        "forecast input artifact",
+    )
     offers = [
         dict(row)
         for row in session.execute(
@@ -193,7 +245,7 @@ def read_policy_contract(
             .order_by(db.procurement_domain_opportunities.c.opportunity_id)
         ).mappings()
     ]
-    return _build(policy, domain, offers, opportunities)
+    return _build(policy, domain, forecast_input, offers, opportunities)
 
 
 def freeze_first_slice_contract(
@@ -207,6 +259,11 @@ def freeze_first_slice_contract(
     if as_of != datetime.fromisoformat(payload["issue_time"]):
         return None
     contract = read_policy_contract(session, policy["policy_id"], policy["version"])
+    if (
+        contract.forecast_input.effective_at > as_of
+        or contract.forecast_input.recorded_at > known_at
+    ):
+        return None
     return contract.model_copy(
         update={
             "as_of": as_of,
@@ -225,6 +282,7 @@ def first_slice_seed_rows(recorded_at: datetime) -> dict[str, list[dict]]:
     domain_version_id = "domain:CASH_SLICE_20260216_DOMAIN_V1:1"
     domain_id = "CASH_SLICE_20260216_DOMAIN_V1"
     source_revision = "CASH_SLICE_20260216_SOURCE_V1"
+    forecast_input_id = "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1"
     ingredients = [
         "chicken",
         "rice",
@@ -309,6 +367,39 @@ def first_slice_seed_rows(recorded_at: datetime) -> dict[str, list[dict]]:
             ],
         },
     }
+    portions = {
+        "chicken-rice": 100,
+        "fried-rice": 60,
+        "chicken-noodles": 80,
+        "tofu-bowl": 40,
+        "vegetable-noodles": 40,
+    }
+    forecast_input = {
+        "id": forecast_input_id,
+        "policy_version_id": policy_version_id,
+        "artifact_id": "CASH_SLICE_20260216_HISTORY_V1",
+        "version": 1,
+        "effective_at": issue_time,
+        "recorded_at": recorded_at,
+        "source_revision": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
+        "payload": {
+            "source_kind": "FIRST_SLICE_SYNTHETIC_HISTORY",
+            "forecast_method": "SEASONAL_BASELINE_V1",
+            "target_date": "2026-02-16",
+            "menu_item_ids": list(portions),
+            "history": [
+                {
+                    "service_date": day,
+                    "available_at": f"{day}T22:00:00+08:00",
+                    "revision": 1,
+                    "promotion": False,
+                    "censored": False,
+                    "portions": portions,
+                }
+                for day in ("2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09")
+            ],
+        },
+    }
     offers = []
     opportunities = []
     for supplier in ("fresh", "pantry", "market"):
@@ -364,6 +455,7 @@ def first_slice_seed_rows(recorded_at: datetime) -> dict[str, list[dict]]:
     return {
         "policies": [policy],
         "domains": [domain],
+        "forecast_inputs": [forecast_input],
         "offers": offers,
         "opportunities": opportunities,
     }
