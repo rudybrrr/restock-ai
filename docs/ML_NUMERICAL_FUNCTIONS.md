@@ -1,8 +1,274 @@
 # ReStock numerical functions and development datasets
 
-Latest addition: [promotion application and immutable comparison](#promotion-forecast-application-and-comparison--18-september-2026).
-It adds the Demand numerical seam; the Pass 3E inventory/procurement contracts below
-are unchanged.
+## Sales materiality implementation traceability — 18 September 2026
+
+Base: main `e179c758bba0c7d7d9db582ba98a0abae44fac6e`; focused
+`feat/ml-sales-materiality` worktree. Existing unfinished materiality work is
+preserved; compatible evidence, exact deviation and projector/safety arithmetic
+is reused. No backend persistence, queue, route or Agent implementation changes.
+
+| Requirement | Existing implementation / intended change | Acceptance |
+|---|---|---|
+| v2 §9 cumulative, two-sided deviation | Pure `materiality.py`; explicit versioned threshold and exposure input | equality, floor/percentage, sparse/zero/missing, cumulative batches |
+| v2 §§6.3, 7; current FORECAST_ACTIVITY_V1 | Reuse issued promotion `ForecastVersion`, canonical `ForecastInputArtifact`, selected frozen batches and daily revisions | immutable history, corrections replace, daily never adds batches, future-only remainder |
+| v3 §§5–7; unknown is not safe | Reuse `project_inventory`, accepted FEFO, exact recipes and fixed supply | safety/shortage overrides sales, incompatible/missing provenance stays incomplete |
+| Current main PR #28 | Consume actual frozen operational/commitment contract | canonical payload tests; as_of versus known_at; equivalent aware instants |
+
+The supported v2 demo threshold is max(5, 0.2 × expected-to-date). Exposure
+minimums and policy identity remain explicitly supplied: 20 expected portions is
+a test assumption, not an approved production default. Intraday sales do not
+enable the proposed clipped demand-spike adjustment or retraining. Implementation files:
+`src/materiality.py`, focused tests/fixture and existing ML handovers.
+
+Latest addition: sales materiality and immutable intraday remainder, documented
+below. Promotion application/comparison and accepted Pass 3E policies remain in use.
+
+## Authoritative sales materiality and frozen remainder
+
+`src.materiality.assess_sales_materiality(contract, *, issued_forecast,
+issued_input, issued_catalogue, snapshot_evidence, threshold_policy, risk)`
+is a pure numerical boundary. It accepts the actual canonical
+`ProcurementContract`, including PR #28's frozen operational state and
+`ForecastActivitySemantics`, alongside the resolved issued `ForecastVersion`,
+its original `ForecastInputArtifact` and `Catalogue`. It never loads a database,
+invokes an LLM, changes a queue, runs procurement search or recalibrates demand.
+The old unpublished `feat/ml-materiality` worktree is preserved; compatible
+evidence/deviation/projector/safety arithmetic was adapted, not published wholesale.
+
+### Policy, clocks and result meaning
+
+- `SalesThresholdPolicy` explicitly supplies `version`, `rule`,
+  `absolute_floor`, `relative_threshold`, `minimum_expected_portions`,
+  `minimum_complete_buckets` and `SourceEvidence`. Supported rule
+  `V2_DEMO_ABSOLUTE_OR_RELATIVE_V1` requires Decimal 5 and 0.2, following
+  v2 §9/ASM-06. Exposure values have **no default**. Unknown/missing policy
+  produces incomplete findings; negative/nonfinite values are invalid.
+  The fixture's version `EXPLICIT_TEST_EXPOSURE_20_V1`, 20 expected portions and
+  two covered buckets are supplied test assumptions, not production approval.
+- Compare cumulative served portions against the issued expectation for exactly
+  the same completed service half-hours. Test both signs with
+  `abs(observed - expected) >= max(5, 0.2 * expected)`.
+  Exact rational intermediates return lossless Decimals; no percentage division,
+  rounding of expected portions, or manual forecast fallback occurs.
+- `as_of` is operational time; `known_at` is the recording cutoff. Equivalent
+  UTC/Singapore representations compare as instants. Source references and capture
+  stamps must be compatible. Supplied reference strings do not certify persistence.
+- `material_change=True` establishes at least one supported sales or hard-risk
+  finding; it can coexist with `complete=False`. `False` requires every declared
+  sales/physical-shortage/safety check, exposure and required evidence to be complete.
+  `None` is unassessable, never non-material or KEEP.
+- `feasible_under_observed_state` is False for a known hard breach and otherwise
+  None: this component does not certify general purchase-plan feasibility.
+  `inventory_feasible=True` is only the complete remaining-day inventory/safety
+  scope, not approval. Missing required evidence prevents that True result.
+  Structural errors raise ValueError/TypeError (including canonical Pydantic
+  validation errors); unexpected execution failures remain tool failures.
+
+### Three distinct frozen inputs
+
+1. **Issued expectation:** supply a pre-service, complete promotion-aware
+   `ForecastVersion` from `apply_promotions`, including a complete empty promotion
+   context for a normal day. Its original baseline reference and history/model/
+   catalogue/recipe/profile/policy references remain unchanged. The history source
+   reference must equal `issued_input.id`; the supplied original artifact must
+   equal the contract's immutable forecast input. The caller resolves the issued
+   catalogue against those version references; the function compares its content
+   with the frozen current catalogue. An already reissued intraday forecast cannot
+   supply earlier elapsed expectation; missing original evidence is incomplete.
+2. **Observed evidence:** `frozen_state.sales_batches` uses actual Backend rows,
+   including `recorded_at`, canonical source/batch/row identity, revision,
+   `replaces_id`, bounds and quantities. Backend `fact_history.sales_at` already
+   selects authoritative revisions. The independently callable
+   `select_sales_revisions(rows, *, as_of, known_at)` also accepts several
+   revisions and chooses the latest visible replacement. Conflicting identities,
+   overlaps or inconsistent supplied correction chains reject; identical retries
+   count once. A Backend-selected revision may omit its historical predecessor:
+   this function does not reconstruct or certify the Backend's omitted history.
+   Current mutable `active` flags never rewrite an earlier recording cutoff.
+   Omitted dishes in a **present complete batch** are zero; absent intervals
+   are missing. Prior-day rows in the all-history snapshot do not enter today's
+   comparison. Zero batches outside service add no exposure. Aggregates spanning
+   multiple service buckets or partial cutoffs are explicitly unsupported; split
+   at the source, never prorate them.
+3. **Remaining demand:** `MaterialityResult.remainder` is an immutable
+   `RemainingDemand`, with selected `actuals` separate from
+   `future_buckets`, the original comparison/baseline references, frozen input
+   JSON/version, source references and current capture clocks. It is available
+   only with compatible forecast and complete observed service coverage.
+   Threshold/risk incompleteness does not by itself change valid future demand.
+   Forward **only** `future_buckets` into recipe/projection/procurement functions,
+   alongside the issued full-day profile. Do not deduct actuals again from the
+   already estimated opening stock. The projector now filters that profile to
+   remaining intervals; an opening inside a bucket is unsupported.
+
+These enforce `FORECAST_ACTIVITY_V1`:
+`VERSIONED_FORECAST_INPUT_IMMUTABLE`,
+`INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY`,
+`LATEST_DAILY_REVISION_AUTHORITATIVE`, `COMPARE_NEVER_ADD`.
+The proposed clipped spike adjustment in v2 §6.3 remains disabled.
+Existing promotions are not applied a second time.
+
+`select_daily_history(revisions, menu_items, *, as_of, known_at)` accepts canonical
+`DailyRevision` values, selects each day's latest visible closing revision and
+returns immutable `AuthoritativeDay` records, preserving reconciliation JSON.
+The main function checks these against `frozen_state.authoritative_daily_sales`.
+It accepts the actual snapshot's raw `daily_history` rows, where sales/counts
+are nested under `payload`, through the existing `DailyDraft`/`DailyRevision`
+models. Payload and row cutoffs must agree. Already flattened canonical revision
+values are also supported; neither representation changes authoritative selection.
+It never combines daily totals and batches or alters the versioned baseline history.
+Promotion/censor eligibility for a **new historical artifact** still needs explicit
+evidence; DailyRevision alone does not supply those flags, and this helper does not
+invent them or train a model.
+
+### Risk and canonical field mapping
+
+`RiskSnapshot` reuses `procurement.ProjectionInputs`; it supplies
+`plan_evidence`, complete Decimal `safety`, `safety_policy` and
+`safety_evidence`. Supported safety rule is `AFTER_EACH_SERVICE_BUCKET_V1`.
+The wrapper verifies current capture/time, opening rows, catalogue, profile,
+forecast identity, exact future buckets and fixed supply against the canonical
+contract, then calls the **existing** projector. Expected expiry/FEFO and all
+quantity conservation remain its implementation. Known stockout or safety
+breaches remain material when sales are sparse or policy is unavailable.
+Missing prior plan evidence prevents a complete non-material certification;
+it does not erase an otherwise supported physical shortage.
+
+| Required value | Existing source / owner mapping |
+|---|---|
+| Run/cutoffs/capture | `contract.run_id/as_of/known_at/captured_state_revision`; Backend freezes, Rudy passes unchanged |
+| Snapshot evidence | Resolvable claimed-run artifact reference with those clocks/revision; Backend persists, adapter maps |
+| Issued forecast and original input | Existing numerical `ForecastVersion` plus canonical `ForecastInputArtifact`; persist both immutable versions, never reforecast the triggering sales |
+| Catalogue/recipes | `frozen_state.menu_items/ingredients/recipes`; resolve issued source references and compare exact current content |
+| Sales | `frozen_state.sales_batches`, including raw `recorded_at`; do not discard metadata by parsing only SalesBatch |
+| Closing history | Raw `daily_history` rows with nested `payload`, or canonical flattened revisions, and `authoritative_daily_sales`; preserve reconciliation, never sum the two sales grains |
+| Opening projection | Frozen `inventory` canonical EstimatedInventoryLot values plus complete ingredient/lot and recipe manifests; absence of a row alone does not attest zero |
+| Supply | `commitment_projection` at the same capture; all deliveries in its manifest, received/cancelled/outstanding quantities and stable projected IDs; no new recommendation lines |
+| Expiry evidence | Preserve `expiry_evidence.reference/available_at` and original offer revision in the resolved frozen contract; projector SourceEvidence capture stamp binds it to this bundle |
+| Safety | `policy.payload.safety_stock` must match; explicit safety-rule/evidence mapping, not invented policy |
+| Threshold/exposure | No authoritative materiality-policy artifact was found on inspected main or #16; Backend must supply/persist owner-confirmed values and version. Test values are not a fallback |
+| Result evidence | Persist complete request/result, original forecast/input refs, selected batch revisions, deviations, first risk intervals and findings; Rudy/Backend own transport mapping |
+
+Current source facts were rechecked on main `e179c75` and
+[Chun Yang's PR #28 confirmation](https://github.com/rudybrrr/restock-ai/issues/16#issuecomment-5725271806).
+Activity-capable snapshots, immutable baseline semantics and nonempty commitment
+transport now exist. Earlier statements that they are absent are historical.
+The remote Agent branch inspected remains
+`764a27b9f89be86a36dd3d8dcc95079f77314239`; unpublished Pass 6 work cannot be
+verified from it. Its `EvidenceCategory.MATERIALITY`, `FORECAST_RESULT` and
+`INVENTORY_SNAPSHOT` categories with `EvidenceSource.DECISION_ENGINE` are the
+existing proposed consumer mapping, not newly merged transport fields.
+Main's `Completion` has no materiality/evidence payload; persistence/reference
+and completion mapping remain Backend/Rudy-owned.
+
+### Worked results and Rudy's next call
+
+The explicit test fixture uses current catalogue/recipes, canonical seeded
+contract constructors, the approved fourteen-bucket profile and a declared
+synthetic override of 150 daily portions per dish. At 16 February 12:00 Singapore,
+two completed lunch buckets imply 20 expected portions per dish. Recording cutoff
+is separately 18 September 09:00 Singapore. Every ingredient has an explicitly
+counted 1000 base units at noon; no commitments and zero safety are declared.
+These are numerical fixture assumptions, not restaurant observations.
+
+| Chicken-rice observed | Signed deviation / threshold | Result with other checks complete |
+|---|---|---|
+| 24 | +4 / 5 | complete, material_change=False |
+| 25 | +5 / 5 | complete, material_change=True |
+| 15 | −5 / 5 | complete, material_change=True |
+| Missing second interval | observed/deviation null | incomplete, material_change=None, remainder=None |
+| 24 with missing risk input | +4 / 5 | incomplete, material_change=None; no safe/KEEP certificate |
+
+All other dishes have 20 actual portions. Remaining demand is 130 portions per
+dish, with independently derived requirements: chicken 35.100 kg, rice 39.000 kg,
+noodles 39.000 kg, eggs 130 pieces, tofu 19.500 kg, vegetables 35.100 kg,
+oil 2.600 litres, soy-sauce 2.600 litres. These exclude the elapsed actuals.
+A separate chicken commitment example arranges 40 kg, receives 6 kg once into
+opening stock and leaves 34 outstanding: 12:30 arrival closes at 4.9 kg with no
+shortage; 17:00 arrival leaves 4.8 kg unmet during lunch and closes at 9.7 kg;
+cancelling the remainder leaves 29.1 kg unmet. Later supply never erases the
+earlier shortage. A multiplier-two issued chicken-rice promotion produces 40
+elapsed expected and 260 remaining portions, with no second uplift.
+
+Rudy should call:
+
+```python
+from src.materiality import assess_sales_materiality
+
+result = assess_sales_materiality(
+    frozen_contract,
+    issued_forecast=resolved_issued_forecast,
+    issued_input=resolved_original_input,
+    issued_catalogue=resolved_issued_catalogue,
+    snapshot_evidence=resolved_snapshot_evidence,
+    threshold_policy=resolved_materiality_policy,  # None fails incomplete
+    risk=resolved_risk_inputs,                    # None fails incomplete
+)
+```
+
+These names are caller-resolved values, not a new endpoint or standalone demo
+script. Material True calls for investigation even if another check is incomplete.
+Unknown calls for missing-evidence follow-up using existing MISSING_REQUIRED_DATA
+semantics; False is only evidence for the separate freshness/lifecycle decision.
+An accepted/queued SALES_UPDATED event is not this numerical result. Tool success
+is not calculation completeness, and no result here chooses KEEP_CURRENT_PLAN,
+approves, publishes, changes commitments or closes #7/#10/#16.
+
+Reproduce from `services/api`:
+`python -m pytest -q tests/test_materiality.py`.
+Current verification: **80 focused tests** (3.71 s) and **508 numerical regression
+tests** (54.56 s) passed, each with two existing dependency warnings. The numerical
+selection covers forecasting, promotions, requirements, service buckets, inventory,
+synthetic history, procurement, Pass 3E and materiality. Full API Ruff and Pyright
+passed; all three changed Python files passed formatting.
+Full locked Linux Python 3.12.12 / PostgreSQL 18 merge gate:
+**572 passed, 3 failed**, two dependency warnings, **615.61 s**.
+Python and PostgreSQL used the same Linux clock and disposable test databases.
+No assertion or test was weakened or skipped. These existing Backend snapshot-replay
+cases initially blocked the merge:
+
+- `test_supplier_and_promotion_history_survives_later_revisions`
+- `test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff`
+- `test_later_sales_and_daily_corrections_do_not_change_known_snapshot`
+
+All are in `tests/test_snapshot_history.py`. Replaying unchanged `as_of` and
+`known_at` after later activity changes the nested `captured_state_revision`
+(1 →3, 1 →8 and 1 →2 respectively); the other nineteen top-level items compare
+equal. `planning._snapshot` defaults an omitted capture revision to the live
+`_revision(session)`, while the replay test helper supplies the two clocks but
+not the original capture revision. This is a Backend replay-contract/test mismatch,
+not a Singapore-offset string comparison. Chun Yang must resolve whether replay
+requires the original captured revision explicitly or a historically derived
+revision; Aniq's code does not change that owner-controlled behavior.
+The same three tests were rerun in a clean detached worktree at unchanged main
+`e179c758bba0c7d7d9db582ba98a0abae44fac6e`, with the same Linux/PostgreSQL
+environment: **3 failed, 2 warnings, 30.18 s**, with the identical revision
+differences. The failure is therefore present without this ML change.
+The full command was `uv run --locked pytest -q -o cache_dir=/tmp/pytest-cache`;
+the base reproduction added the three fully qualified test names above.
+On 18 September 2026, after the identical failures on unchanged main and the
+feature branch were explained, Aniq explicitly instructed: "It is safe to ignore
+the failed testcases. You are to push to main." This authorizes proceeding with
+the normal PR #29 merge despite these three known failures. It does not change
+their recorded failed status or resolve the Backend replay contract/test mismatch.
+The earlier timestamp discussion is not the basis for this waiver. Application
+source/tests are unchanged; this documentation-only update reuses the recorded
+verification, with fresh staged/working diff checks and repository merge checks.
+The complete numerical selection used:
+
+```sh
+python -m pytest -q tests/test_forecasting.py tests/test_promotion_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_synthetic_history.py tests/test_procurement.py tests/test_pass3e_numerical.py tests/test_materiality.py
+python -m ruff check .
+python -m pyright
+python -m ruff format --check src/materiality.py src/inventory_projection.py tests/test_materiality.py
+```
+
+An initial host invocation mistakenly selected the database-facing
+`test_procurement_contract.py` instead of `test_pass3e_numerical.py`: 474 passed,
+seven setup errors because no host TEST_DATABASE_URL was supplied. The corrected
+pure selection is the 508-pass run above. All seven database cases are included
+in the configured full merge gate; no tests or assertions were skipped.
+No real forecast-accuracy, Agent-route or end-to-end publication claim follows.
 
 ## Pass 3E numerical compatibility — 17 September 2026
 
