@@ -115,7 +115,7 @@ def test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff(
     changed = client.post(
         path + "/update",
         json={
-            "expected_quantity": "10",
+            "expected_quantity": "8",
             "expected_at": "2026-02-16T12:00:00+08:00",
             "effective_at": "2026-02-16T11:00:00+08:00",
         },
@@ -184,8 +184,22 @@ def test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff(
     assert earlier["cycle_decisions"] == []
     later = snapshot(client, "2026-02-16T12:00:00+08:00")
     assert Decimal(later["commitments"][0]["received_quantity"]) == 6
-    assert Decimal(later["commitments"][0]["cancelled_quantity"]) == 4
+    assert Decimal(later["commitments"][0]["cancelled_quantity"]) == 2
     assert Decimal(later["commitments"][0]["outstanding_quantity"]) == 0
+    projection = earlier["procurement_contract"]["commitment_projection"]
+    assert projection["complete"] is True
+    assert projection["supply_manifest"] == [created.json()["id"]]
+    supply = projection["supplies"][0]
+    assert Decimal(supply["delivery"]["outstanding_quantity"]) == 8
+    assert supply["expiry_date"] == "2026-02-20"
+    assert supply["projected_lot_id"] == ("projected-delivery:" + created.json()["id"])
+    assert supply["expiry_evidence"]["captured_revision"]
+    closed = later["procurement_contract"]["commitment_projection"]["supplies"][0]
+    assert Decimal(closed["delivery"]["received_quantity"]) == 6
+    assert Decimal(closed["delivery"]["cancelled_quantity"]) == 2
+    assert Decimal(closed["delivery"]["outstanding_quantity"]) == 0
+    assert closed["expiry_date"] is None
+    assert closed["projected_lot_id"] is None
     assert len(later["cycle_decisions"]) == 1
     assert (
         snapshot(client, "2026-02-16T10:00:00+08:00", original["known_at"]) == original

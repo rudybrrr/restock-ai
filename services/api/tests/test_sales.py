@@ -47,6 +47,22 @@ def test_sales_batch_updates_an_estimate_without_mutating_physical_counts(
     assert chicken["chicken-01"]["coverage_complete"] is True
     physical = {lot["id"]: lot for lot in client.get("/api/v1/inventory").json()}
     assert physical["chicken-01"]["quantity"] == "12.000"
+    events = client.get("/api/v1/events").json()
+    assert len(events) == 1
+    assert events[0]["type"] == "SALES_UPDATED"
+    assert events[0]["payload"]["effective_at"] == body["period_end"]
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    run = client.post("/api/v1/runs/claim")
+    assert run.status_code == 200, run.text
+    snapshot = run.json()["snapshot"]
+    assert run.json()["trigger"] == "SALES_UPDATED"
+    assert snapshot["sales_batches"][0]["id"] == accepted.json()["id"]
+    semantics = snapshot["procurement_contract"]["activity_semantics"]
+    assert semantics["baseline_history_mode"] == ("VERSIONED_FORECAST_INPUT_IMMUTABLE")
+    assert semantics["intraday_sales_mode"] == (
+        "INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY"
+    )
+    assert semantics["closing_sales_mode"] == ("LATEST_DAILY_REVISION_AUTHORITATIVE")
 
 
 def test_equal_expiry_lots_use_receipt_time_before_lot_id(

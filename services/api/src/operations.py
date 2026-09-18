@@ -142,7 +142,9 @@ def record_daily_revision(
 ) -> dict:
     """Append a validated observation inside the caller's inventory transaction."""
     expire_lots(session, body.cutoff, actor)
-    revision = len(read_day(session, day)["revisions"]) + 1
+    history = read_day(session, day)["revisions"]
+    revision = len(history) + 1
+    replaces_revision_id = history[-1]["id"] if history else None
     row = {
         "id": str(uuid4()),
         "day": day,
@@ -172,10 +174,11 @@ def record_daily_revision(
         )
     record_event(
         session,
-        "DAILY_UPDATE_SUBMITTED",
+        "DAILY_UPDATE_CORRECTED" if replaces_revision_id else "DAILY_UPDATE_SUBMITTED",
         actor,
         {
             "revision_id": row["id"],
+            "replaces_revision_id": replaces_revision_id,
             "day": day.isoformat(),
             "revision": revision,
             "cutoff": body.cutoff.isoformat(),

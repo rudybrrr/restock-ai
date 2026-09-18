@@ -238,7 +238,7 @@ def test_run_does_not_capture_forecast_input_recorded_after_its_known_at(
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
 
 
-def test_first_slice_contract_refuses_nonempty_post_baseline_activity(
+def test_first_slice_contract_freezes_nonempty_post_baseline_activity(
     client: TestClient,
 ) -> None:
     sign_in(client)
@@ -259,8 +259,19 @@ def test_first_slice_contract_refuses_nonempty_post_baseline_activity(
     run = client.post("/api/v1/runs/claim")
     assert run.status_code == 200, run.text
     response = client.get(f"/api/v1/runs/{run.json()['id']}/procurement-contract")
-    assert response.status_code == 409, response.text
-    assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
-    assert run.json()["snapshot"]["procurement_contract_unavailable_reason"] == (
-        "FIRST_SLICE_ACTIVITY_NOT_EMPTY"
+    assert response.status_code == 200, response.text
+    contract = response.json()
+    assert contract["frozen_state"]["sales_batches"][0]["id"] == activity.json()["id"]
+    assert contract["activity_semantics"]["intraday_sales_mode"] == (
+        "INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY"
     )
+    assert contract["commitment_projection"] == {
+        "as_of": contract["as_of"],
+        "known_at": contract["known_at"],
+        "captured_state_revision": contract["captured_state_revision"],
+        "expiry_policy": "EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1",
+        "complete": True,
+        "findings": [],
+        "supply_manifest": [],
+        "supplies": [],
+    }

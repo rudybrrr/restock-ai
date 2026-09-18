@@ -1,9 +1,10 @@
 """Read-only canonical procurement-policy and approved-domain authority."""
 
 from collections.abc import Mapping
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -251,12 +252,16 @@ def read_policy_contract(
 def freeze_first_slice_contract(
     session: Session, as_of: datetime, known_at: datetime, captured_state_revision: int
 ) -> dict | None:
-    """Return an immutable selected contract only for its declared issue instant."""
+    """Select the immutable first-slice policy for an in-horizon operational run."""
     policy = _policy_at(session, as_of, known_at)
     if policy is None:
         return None
     payload = policy["payload"]
-    if as_of != datetime.fromisoformat(payload["issue_time"]):
+    if not (
+        datetime.fromisoformat(payload["issue_time"])
+        <= as_of
+        <= datetime.fromisoformat(payload["horizon_end"])
+    ):
         return None
     contract = read_policy_contract(session, policy["policy_id"], policy["version"])
     if (
@@ -269,6 +274,72 @@ def freeze_first_slice_contract(
             "as_of": as_of,
             "known_at": known_at,
             "captured_state_revision": str(captured_state_revision),
+        }
+    ).model_dump(mode="json")
+
+
+def freeze_operational_activity(contract: dict, frozen_state: dict) -> dict:
+    """Attach activity and adapter-ready fixed commitments to one run contract."""
+    selected = ProcurementContract.model_validate(contract)
+    offer_by_key = {
+        (row.supplier_id, row.ingredient_id): row for row in selected.domain.offers
+    }
+    findings = []
+    supplies = []
+    manifest = []
+    for raw in frozen_state["commitments"]:
+        delivery_id = raw["id"]
+        manifest.append(delivery_id)
+        outstanding = Decimal(str(raw["outstanding_quantity"]))
+        expiry_date = None
+        expiry_evidence = None
+        projected_lot_id = None
+        if outstanding:
+            projected_lot_id = f"projected-delivery:{delivery_id}"
+            offer = offer_by_key.get((raw["supplier_id"], raw["ingredient_id"]))
+            if offer is None:
+                findings.append(
+                    {"code": "MISSING_APPROVED_OFFER", "source": delivery_id}
+                )
+            elif offer.offer.shelf_life_days_on_arrival is None:
+                findings.append(
+                    {"code": "MISSING_EXPECTED_EXPIRY", "source": delivery_id}
+                )
+            else:
+                arrival_day = raw["expected_at"]
+                if isinstance(arrival_day, str):
+                    arrival_day = datetime.fromisoformat(arrival_day)
+                expiry_date = arrival_day.astimezone(
+                    ZoneInfo(selected.policy.payload.timezone)
+                ).date() + timedelta(days=offer.offer.shelf_life_days_on_arrival - 1)
+                expiry_evidence = {
+                    "reference": (f"{offer.offer_id}:shelf_life_days_on_arrival"),
+                    "available_at": selected.domain.recorded_at,
+                    "captured_revision": offer.source_revision,
+                }
+        supplies.append(
+            {
+                "delivery": raw,
+                "expiry_date": expiry_date,
+                "expiry_evidence": expiry_evidence,
+                "projected_lot_id": projected_lot_id,
+            }
+        )
+    projection = {
+        "as_of": selected.as_of,
+        "known_at": selected.known_at,
+        "captured_state_revision": selected.captured_state_revision,
+        "expiry_policy": "EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1",
+        "complete": not findings,
+        "findings": findings,
+        "supply_manifest": manifest,
+        "supplies": supplies,
+    }
+    return ProcurementContract.model_validate(
+        {
+            **selected.model_dump(mode="python"),
+            "frozen_state": frozen_state,
+            "commitment_projection": projection,
         }
     ).model_dump(mode="json")
 

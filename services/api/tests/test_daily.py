@@ -101,5 +101,13 @@ def test_closing_submission_preserves_draft_and_records_zero(
     assert [r["counts"][lots[0]["id"]] for r in history] == ["7.5", "8"]
     assert client.get("/api/v1/inventory").json()[0]["quantity"] == "8.000"
     events = client.get("/api/v1/events").json()
-    assert [e["type"] for e in events] == ["DAILY_UPDATE_SUBMITTED"] * 2
+    assert [e["type"] for e in events] == [
+        "DAILY_UPDATE_SUBMITTED",
+        "DAILY_UPDATE_CORRECTED",
+    ]
+    assert events[0]["payload"]["replaces_revision_id"] is None
+    assert events[1]["payload"]["replaces_revision_id"] == history[0]["id"]
+    queued = client.post("/api/v1/assessments", json={"as_of": draft["cutoff"]})
+    triggers = client.get(f"/api/v1/runs/{queued.json()['id']}/triggers").json()
+    assert len(triggers) == 2
     assert len(client.get("/api/v1/audit").json()) == 2
