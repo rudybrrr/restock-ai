@@ -1,5 +1,9 @@
 # ReStock numerical functions and development datasets
 
+Latest addition: [promotion application and immutable comparison](#promotion-forecast-application-and-comparison--18-september-2026).
+It adds the Demand numerical seam; the Pass 3E inventory/procurement contracts below
+are unchanged.
+
 ## Pass 3E numerical compatibility — 17 September 2026
 
 This section supersedes historical policy/waiting statements below. Governing
@@ -1061,3 +1065,256 @@ exhaustive oracles, full fixture cash, expiry boundaries, cross-source ties,
 applicability guards and generation/evaluation limits. The original checkout is
 preserved. Backend policy tags are implemented on main; historical `sales.py`
 still sorts expiry/ID and must not be described as receipt-aware parity.
+
+# Promotion forecast application and comparison — 18 September 2026
+
+Implementation traceability recorded before runtime changes. This focused slice
+uses main `40876fc20270bc3426e15c65a36c60578c66ac80`; unfinished materiality work
+is excluded. The canonical `PromotionEvent.payload.demand_multiplier` is a
+dimensionless multiplier, with inclusive Singapore campaign dates and a separate
+revision `effective_at`. Event `timestamp` is recording time. A promotion name
+(including 1-for-1) supplies no numerical factor. Pure internal evidence types
+below do not establish another Backend transport.
+
+| Requirement | Source | Implementation | Acceptance test | Outstanding dependency |
+| --- | --- | --- | --- | --- |
+| Served portions; explicit assumption; normal eligibility unchanged | v2 §§5, 6.1; v3 §§3–4 | `apply_promotions`, existing baseline/allocator | `test_normal_and_explicit_multiplier_recipe_oracle`, `test_name_does_not_double_demand_without_factor`, `test_decimal_conservation_independent_of_ambient_context` | Backend freezes manager/scenario assumption source |
+| Operational/knowledge time; future context; revisions/cancellation | v2 §§5.2, 6.3, 10.1; canonical PromotionEvent | `_visible_events`; revision selection per interval | `test_later_recording_cannot_change_frozen_result`, `test_known_future_effective_revision_changes_only_dinner`, `test_revisions_cancellation_and_input_order` | Complete frozen revision history, not live promotion rows |
+| Preserve actual elapsed sales; no second consumption | v2 §§6.3, 7, 12.2 T02/T12 | `_actuals`; future buckets separate | `test_actual_lunch_preserved_only_future_adjusted`, `test_actual_coverage_errors_explicit` | Backend resolves active batch revisions and complete coverage |
+| No compounded uplift or invented overlap/partial-bucket policy | v2 §§5.3, 6.1; v3 §7 | original unadjusted basis; explicit findings | `test_repeated_frozen_inputs_and_mutation`, `test_overlapping_promotions_explicitly_incomplete`, `test_partial_bucket_cancellation_is_not_silently_ignored` | Additional timing/stacking policies remain unsupported |
+| Immutable diff and overlap evidence, no lifecycle decision | v2 §§9, 10.4, 12.2 | `compare_forecast_versions`; overlap evidence | `test_immutable_comparison_deltas_and_initial_forecast`, `test_negative_and_zero_baseline_deltas`, `test_incompatible_source_versions`, `test_changed_history_disallows_promotion_only_attribution` | Rudy maps evidence; Backend persists immutable versions |
+| Existing recipes/projection/cash slice preserved | v3 §§3–8; accepted Pass 3E tags | reuse numerical functions, no policy changes | `test_downstream_projector_receives_only_adjusted_portions`; existing `test_pass3e_numerical.py` | Activity-capable frozen snapshots and publication remain separate |
+
+Reversible implementation choices: one-day, half-hour numerical scope; exact
+Decimal quantities via rational intermediates; relative deltas alone rounded to
+28 significant digits, half-even. Full promotion revision history and complete
+resolved elapsed half-hour batches are explicit input requirements. No threshold,
+approval, procurement policy, holiday uplift or learned promotion effect is added.
+
+## Callable promotion interface and frozen evidence
+
+`src.promotion_forecasting` exposes:
+
+- `apply_promotions(basis: ForecastVersion, menu_items, *, events:
+  Sequence[PromotionEvent], context_evidence: SourceEvidence | None,
+  context_complete: bool, as_of, known_at, result_reference, sales=(),
+  actual_coverage=None) -> PromotionApplication`.
+- `compare_forecast_versions(previous: ForecastVersion | None,
+  current: ForecastVersion, menu_items) -> ForecastComparison`.
+
+Construct an original `ForecastVersion` from the unchanged `seasonal_baseline`
+and `allocate_service_buckets` outputs. It contains an immutable reference,
+operational `as_of`, real recording cutoff `known_at`, target date, complete dated
+profile, complete projected bucket vectors and source evidence. Set
+`promotion_state="EXCLUDED"` and `base_reference=reference` only when the resolved
+original basis excludes promotion adjustments. Insufficient baseline history
+remains insufficient: do not replace `None` with zero. An already-adjusted or
+unknown basis is incomplete. Amendments/cancellations must use the original
+basis again, never the prior adjusted result.
+
+`sources` is a tuple of named `SourceEvidence` values for exactly `catalogue`,
+`recipe`, `history`, `model`, `profile`, `policy`, and `other_context`.
+Each needs a resolvable immutable reference, availability time and captured revision.
+The caller must bind catalogue/recipe versions to the actual canonical inputs;
+the kernel cannot prove storage immutability or repair source selection from an
+arbitrary reference string. Use an explicit empty-context artifact for
+`other_context` when appropriate, not an omitted value.
+`EXPLICIT_PORTION_MULTIPLIER_V1` names this numerical interpretation and
+fail-closed behavior; it is not a newly approved Backend policy record.
+Quantities use `PORTIONS`, canonical dish IDs and Decimal values.
+
+`events` reuses **canonical `operations_schemas.PromotionEvent`**, not a new
+API payload. `timestamp` is when a revision was recorded, `source` identifies
+the explicit manager/scenario assumption, and the payload supplies identity,
+revision, inclusive Singapore campaign dates, affected dishes, dimensionless
+`demand_multiplier`, active state and operational revision `effective_at`.
+For each promotion, the supported frozen input contains the complete visible
+revision prefix starting at 1; duplicate/gapped or non-monotone revisions fail.
+`context_complete=True` plus evidence is required even for an empty event list.
+Events recorded after `known_at` do not enter this calculation or its output.
+Visible future-effective revisions apply at the applicable future bucket, so
+the adapter must not discard them merely because they follow run `as_of`.
+The highest visible effective revision at the bucket start wins; inactive means
+cancelled. Full-day campaign dates do not imply that a revision was effective
+before its own operational clock.
+
+The supported application period is each complete half-hour `[start, end)`.
+A revision at a bucket start applies there; one at its end applies to the next
+bucket. A relevant revision strictly inside a future bucket is incomplete.
+The canonical campaign model has no partial-day start/end fields: an arbitrary
+partial-day campaign is not supported by inventing those fields. Date windows
+and explicitly timestamped revision effects are distinct. Overlapping active
+promotions on the same dish/bucket are incomplete, even if their factors happen
+to be one; different dishes or disjoint periods are supported. No stacking
+policy or holiday effect is inferred.
+
+The basis allocator already apportions residual millionths. Application multiplies
+those **existing** bucket quantities exactly using rational intermediates and
+returns finite Decimals without another rounding pass. Thus 100 portions at 1.2
+sum to exactly 120; four lunch buckets are 8.0000004 and two are 7.9999992,
+while each dinner bucket is 9. This preserves the original allocation and the
+exact total, rather than silently rerounding each bucket to whole portions.
+
+For intraday calls, `sales` contains caller-resolved active canonical
+`SalesBatch` plus availability/revision evidence for each elapsed service
+half-hour, and `actual_coverage` attests complete resolution. The canonical
+complete-batch contract makes omitted dishes explicit zero. Duplicate identities,
+unresolved revisions, missing intervals, partial-bucket cutoffs and late evidence
+are incomplete. The kernel does not replay corrections, add daily final totals,
+or infer observations in service gaps. Broader/irregular batch intervals need a
+separately supported allocation contract. Actual quantities are copied unchanged
+to `forecast.actuals`; **only `forecast.buckets` (future projected demand) goes to
+recipe conversion / `project_inventory`**, using opening inventory at the same
+operational cutoff. This avoids consuming elapsed sales twice.
+
+`PromotionApplication.complete=False` has `forecast=None` and concrete findings;
+it is not zero demand, no risk, or an approvable candidate. Complete results retain
+the original basis reference, all visible revision/event references (including
+cancellations), applied bucket overlaps, context evidence and actual coverage.
+Repeated identical frozen inputs produce equal outputs; reference persistence
+and collision prevention across runs remain Backend/adapter responsibilities.
+Overlap records may support reassessment independently of a sales-deviation
+threshold. They do not return KEEP/REVISE, freshness, approval or publication.
+
+## Immutable comparison semantics
+
+Comparison validates both artifacts and matching one-day time coverage, units,
+semantic dated profile, and catalogue/recipe/model/profile/policy source versions.
+Different forecast IDs are expected. Reusing one immutable reference for different
+content is rejected. Different history, other context, promotion revisions,
+knowledge cutoffs, actual evidence and original basis references are recorded in
+`changed_context`; attribution is explicitly `NO_CAUSAL_CLAIM`.
+
+`COMPARED` returns one `ForecastDelta` per future bucket/dish: `old`, `new`,
+signed `delta=new-old`, `absolute_delta=abs(delta)` and signed fractional
+`relative_delta=delta/old`. Only relative values are rounded (28 significant
+digits, half-even). A zero old value gives `None` and `ZERO_BASELINE`, including
+zero-to-zero. `INCOMPATIBLE` returns no deltas and findings.
+`NO_PREVIOUS_VERSION` retains the valid current artifact with no deltas; it is
+not a failed initial forecast. Both full immutable artifacts remain attached
+to the comparison, including their evidence. No forecast is recomputed.
+
+## Worked examples and usage
+
+`tests/fixtures/promotion_forecast_v1.json` is explicitly synthetic. It reuses the
+canonical v3 history and service-profile fixtures. At 15 February 22:00 Singapore,
+the known manager/scenario assumption for 16 February chicken-rice is **1.2**.
+The promotion's 1-for-1 name does not supply an additional factor.
+
+| Dish | Original portions | Adjusted portions |
+| --- | ---: | ---: |
+| chicken-rice | 100 | 120 |
+| fried-rice | 60 | 60 |
+| chicken-noodles | 80 | 80 |
+| tofu-bowl | 40 | 40 |
+| vegetable-noodles | 40 | 40 |
+
+Independent recipe totals are chicken **27.600 kg**, rice **22.000 kg**, noodles
+**18.000 kg**, eggs **60 pieces**, tofu **6.000 kg**, vegetables **11.800 kg**,
+oil **1.000 litres**, soy-sauce **2.000 litres**. The added 20 chicken-rice portions
+consume 3 kg chicken, 2 kg rice and 0.2 litres soy-sauce. Tests pass the actual
+calculated quantities through both existing recipe arithmetic and projection.
+The 17:00 bucket changes from 7.5 to 9 chicken-rice portions: signed/absolute
+delta 1.5; relative delta 0.2.
+
+At an intraday 14:00 cutoff with six complete lunch batches of 7 actual
+chicken-rice portions, retain **42 actual** and project **72 future** dinner
+portions. Neither 42 nor an adjusted lunch forecast enters future projection.
+A known revision becoming effective at 17:00 yields 40 normal lunch +72 dinner
+if issued before the service day. A cancellation at 17:00 after the earlier 1.2
+revision gives 48 projected lunch +60 dinner from the same original basis.
+
+Incomplete example: two visible active promotions affecting chicken-rice in the
+same bucket return `complete=False`, `forecast=None`,
+`INCOMPLETE_PROMOTION_INPUT: Unsupported overlapping promotion stacking`.
+An input basis already marked `APPLIED` also returns incomplete. Neither case
+can be passed onward as a new purchase candidate.
+
+From `services/api`, using the prepared environment (PowerShell shown):
+
+```powershell
+.venv/Scripts/python.exe -m pytest tests/test_promotion_forecasting.py -q
+.venv/Scripts/python.exe -m pytest tests/test_promotion_forecasting.py tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_synthetic_history.py tests/test_procurement.py tests/test_pass3e_numerical.py -q
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m pyright
+.venv/Scripts/python.exe -m ruff format --check src/promotion_forecasting.py tests/test_promotion_forecasting.py
+```
+
+The fixture-building example is the `case` fixture in
+`tests/test_promotion_forecasting.py`; it calls the actual baseline and allocator.
+Use its constructor sequence with resolved production artifacts, not its
+synthetic evidence IDs. There is no database loader or new public endpoint.
+
+## Consumer boundary and verification
+
+**Rudy:** resolve the unchanged seasonal baseline into an original
+`ForecastVersion`, call `apply_promotions`, then optionally
+`compare_forecast_versions` against the prior persisted result. Preserve explicit
+incomplete findings and the no-previous state. Forward only future buckets to the
+existing recipe/projector/validated procurement path. Persist/read evidence via
+the agreed Backend seam; do not treat a local reference string as persistence.
+No full materiality engine or threshold decision is included.
+
+**Chun Yang:** freeze complete promotion revision/event evidence and assumption
+source with real recording times, catalogue/recipe/history/model/profile/policy
+references, original unadjusted forecast identity, and complete resolved actual
+batch coverage at the operational cutoff. Persist immutable result references.
+Current `fact_history.promotions_at` returns selected promotion state and filters
+revision effects at operational `as_of`; it does not by itself provide the full
+recording/source-event evidence or known future-effective revision history required
+here. The first-slice `forecast_input` artifact supplies baseline history only.
+Activity-capable procurement snapshots, commitment-aware projection, closing-count
+correction routing and sales-batch reassessment remain Backend work. No endpoint
+or existing snapshot contract is silently extended by this numerical module.
+
+Inspected current main: `40876fc20270bc3426e15c65a36c60578c66ac80` (PR #26,
+intraday evidence workspace), including PR #25's versioned baseline input. The
+published **unmerged** agent branch inspected is
+`764a27b9f89be86a36dd3d8dcc95079f77314239`; its tool names
+`forecast_demand`/`compare_forecast_versions` and `FORECAST_RESULT` evidence
+category describe the consumer seam, not completed adapters. Rudy's supplied
+18 September message establishes the priority, not evidence of unpublished code.
+Existing #16 confirmations and Pass 3E policy tags remain unchanged.
+
+Fresh verification: **428 numerical tests passed** (51.59 s), including 61 new
+promotion/comparison cases and the synthetic service-profile correction. Ruff
+passed, Pyright reported zero errors/warnings, and the two new Python files passed
+format checks. Full disposable-PostgreSQL merge-gate results are recorded below.
+Synthetic tests establish numerical behavior, not real uplift
+accuracy, backend snapshot correctness or live Agent integration.
+
+Full merge gate: **494 passed, 2 dependency warnings, 611.49 s** using locked
+dependencies, Python 3.12.12 and PostgreSQL 18 in disposable local containers on
+the same Linux clock. Command inside the Python container:
+`uv run --locked pytest -q -o cache_dir=/tmp/pytest-cache`.
+The source worktree was mounted read-only at `/workspace`, working directory
+`/workspace/services/api`, with `UV_PROJECT_ENVIRONMENT=/tmp/promotion-venv`.
+The Python image was `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, digest
+`sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58`.
+PostgreSQL used a private tmpfs container; `TEST_DATABASE_URL` referenced its
+disposable administrative database. The standard fixture created/dropped a unique
+test database per test. No shared database, backend source, assertions or host
+clock settings were changed.
+
+The initial Windows Python + Docker PostgreSQL full command
+`.venv/Scripts/python.exe -m pytest -q` produced **489 passed, 5 failed,
+2 warnings, 419.88 s**. Failing tests:
+
+- `test_audit_guards.py::test_complete_sparse_batches_and_strict_correction_identity`
+- `test_sales.py::test_sales_batch_updates_an_estimate_without_mutating_physical_counts`
+- `test_sales.py::test_receipt_does_not_restore_pre_receipt_consumption`
+- `test_snapshot_history.py::test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff`
+- `test_snapshot_history.py::test_later_sales_and_daily_corrections_do_not_change_known_snapshot`
+
+Targeted Windows reproduction on clean unchanged main `40876fc` yielded one
+coverage failure (8.28 s), then three failures/one pass for the other four cases
+(27.66 s); the first sales test passed on retry and snapshot assertion locations
+varied. A bracketed measurement found PostgreSQL **0.489–0.491 seconds ahead**
+of Windows. Server-generated `recorded_at` versus Python `known_at` explains
+the observed immediate-visibility race; no timezone-string assertion was changed.
+In the Linux run, Python and PostgreSQL were within the measured request interval
+(-0.000124 to +0.000791 s), and **all the same tests passed**. This supports an
+environment clock problem, not a promotion regression or a waiver of failed tests.
+Clock consistency remains an operational concern; these tests do not establish
+correctness of every future multi-host deployment. No frontend, Bedrock or live
+Agent end-to-end checks were run.

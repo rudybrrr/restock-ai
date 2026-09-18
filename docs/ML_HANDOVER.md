@@ -2,10 +2,53 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.7, 17 September 2026<br>
-**Status:** Pass 3E numerical compatibility implemented; Aniq authorized normal PR #22 merge with the two known timestamp-test failures deferred following Chun Yang's response. Live adapter/publication is separate.
+**Version:** 1.8, 18 September 2026<br>
+**Status:** Promotion application and immutable forecast comparison implemented on a focused branch. Live adapters/publication and full materiality remain separate.
 
-## Current Pass 3E handoff
+## Current promotion handoff
+
+Use [feat/ml-promotion-forecast](https://github.com/rudybrrr/restock-ai/tree/feat/ml-promotion-forecast)
+for this focused change based on main `40876fc20270bc3426e15c65a36c60578c66ac80`.
+The [numerical interface and traceability](ML_NUMERICAL_FUNCTIONS.md#promotion-forecast-application-and-comparison--18-september-2026)
+define `src.promotion_forecasting.apply_promotions` and
+`compare_forecast_versions`, their internal immutable artifacts, frozen evidence
+requirements, worked examples and tests. This section supersedes historical next
+actions below; it does not reactivate deferred policy questions already confirmed.
+
+- **Rudy:** use an identifiable unadjusted baseline, explicit canonical promotion
+  events and frozen evidence. Consume only future projected buckets downstream;
+  elapsed actual sales are returned separately. `complete=False` means no forecast,
+  never zero risk or an actionable candidate. Comparison is a diff, not reforecasting;
+  `NO_PREVIOUS_VERSION` does not invalidate the first forecast. Preserve evidence
+  and findings through your adapters; this numerical change does not implement them.
+- **Chun Yang:** supply/persist complete promotion revision history with recording
+  times and manager/scenario assumption source, future-effective known changes,
+  immutable original forecast and catalogue/recipe/model/profile/policy references,
+  and resolved actual-batch coverage. Current selected promotion rows and the
+  baseline-only first-slice input do not provide all this evidence. Activity-capable
+  snapshots, receipt/commitment handling and reassessment routing remain your work.
+- Record remaining mapping/contract responses in [issue #16](https://github.com/rudybrrr/restock-ai/issues/16).
+  Accepted FEFO/expiry/search/tie policies are preserved, with no renewed approval request.
+
+Worked synthetic example: explicit 1.2 multiplier on chicken-rice changes 100 to
+120 portions, leaving other dishes unchanged. Current recipes require chicken
+27.600 kg, rice 22.000 kg, noodles 18.000 kg, eggs 60 pieces, tofu 6.000 kg,
+vegetables 11.800 kg, oil 1.000 litres and soy-sauce 2.000 litres. A 1-for-1 name
+does not cause a second multiplier. Overlapping promotions on the same dish/bucket
+return incomplete rather than a guessed stacking rule. A 14:00 intraday example
+preserves 42 actual lunch portions and projects only 72 dinner portions.
+
+Verification for this contribution: 428 numerical tests passed, including 61
+promotion/comparison cases; Ruff, Pyright and two-file formatting passed.
+The full isolated Linux/PostgreSQL gate passed **494 tests** (611.49 s).
+An initial Windows/Docker run had five existing timing-sensitive failures;
+unchanged-main reproduction and measured host/database clock skew are recorded
+in the numerical document. The same unchanged tests all passed with Python and
+PostgreSQL sharing the Linux clock. No claim of real forecast accuracy or
+connected Agent publication.
+Unfinished `feat/ml-materiality` work remains isolated and is excluded.
+
+## Historical Pass 3E handoff
 
 Read [Pass 3E numerical compatibility](ML_NUMERICAL_FUNCTIONS.md#pass-3e-numerical-compatibility--17-september-2026)
 first. It supersedes historical policy proposals and waiting instructions below.
@@ -404,6 +447,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.8 | 18 September 2026 | Added pure promotion application, immutable comparison, exact portion/recipe and intraday examples, frozen evidence requirements and owner handoff. Preserved unfinished materiality and accepted Pass 3E policies. |
 | 1.7 | 17 September 2026 | Recorded Aniq's explicit proceed instruction following Chun Yang's relayed acceptance of deferred timestamp correction; preserved actual failing-test evidence and normal PR protections. |
 | 1.6 | 17 September 2026 | Ran full isolated PostgreSQL suite: 426 passed, 2 existing backend timestamp failures reproduced on main; refreshed static checks. Replaces the Docker-unavailable blocker; PR #22 remains open. |
 | 1.5 | 17 September 2026 | Pass 3E FEFO/expiry compatibility, guarded complete reduction, semantic ties, canonical backend-domain fixture tests and outstanding combined-test/live integration gates. |

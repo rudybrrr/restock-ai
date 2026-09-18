@@ -1,0 +1,42 @@
+{
+  "description": "Synthetic multiplier assumption, not observed uplift or production policy approval. Reuses canonical v3 menu, recipes, history and dated service profile.",
+  "catalogue_history_fixture": "seasonal_baseline_v3.json",
+  "service_profile_fixture": "service_profile_v2.json",
+  "result_reference": "fixture/forecast/promotion-1",
+  "context_reference": "fixture/promotion-context/1",
+  "captured_revision": "fixture-state-1",
+  "event": {
+    "id": "fixture-event-promo-1",
+    "type": "PROMOTION_CREATED",
+    "timestamp": "2026-02-15T21:00:00+08:00",
+    "source": "synthetic-manager-assumption/explicit-20-percent-more-portions",
+    "payload": {
+      "promotion_id": "fixture-promotion-chicken",
+      "revision": 1,
+      "name": "1-for-1, explicit served-portion assumption",
+      "start_date": "2026-02-16",
+      "end_date": "2026-02-16",
+      "menu_item_ids": ["chicken-rice"],
+      "demand_multiplier": "1.2",
+      "active": true,
+      "effective_at": "2026-02-15T20:00:00+08:00"
+    }
+  },
+  "expected_daily_portions": {
+    "chicken-rice": "120",
+    "fried-rice": "60",
+    "chicken-noodles": "80",
+    "tofu-bowl": "40",
+    "vegetable-noodles": "40"
+  },
+  "expected_ingredient_quantities": {
+    "chicken": "27.600",
+    "rice": "22.000",
+    "noodles": "18.000",
+    "eggs": "60",
+    "tofu": "6.000",
+    "vegetables": "11.800",
+    "oil": "1.000",
+    "soy-sauce": "2.000"
+  }
+}
