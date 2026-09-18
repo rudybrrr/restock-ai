@@ -76,3 +76,6 @@ An immutable, dated definition of when cumulative intraday sales deviation has e
 
 **Sales materiality assessment**:
 The immutable, hashed engine request and result associated with one sales-triggered planning run. It records the frozen contract, issued forecast, catalogue, policy, evidence, and three-state materiality result without treating unknown as safe.
+
+**Inventory adjustment assessment**:
+The immutable, hashed deterministic result for one or more closing-count corrections attached to a planning run. It binds the canonical adjustment events, corrected inventory snapshot, plan reference, clocks, and state revision; only a complete non-material result can certify that the current plan remains unchanged.

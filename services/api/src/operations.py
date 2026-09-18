@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -9,7 +10,12 @@ from sqlalchemy.orm import Session
 from src import database as db
 from src.assessment_queue import EXPLICIT_TRIGGERS, enqueue_event
 from src.errors import ApiError
-from src.operations_schemas import DailyDraft, EventType
+from src.operations_schemas import (
+    DailyDraft,
+    EventType,
+    InventoryAdjustmentEventPayload,
+    InventoryAdjustmentLine,
+)
 from src.reconciliation import reconcile_sales
 
 
@@ -145,6 +151,7 @@ def record_daily_revision(
     history = read_day(session, day)["revisions"]
     revision = len(history) + 1
     replaces_revision_id = history[-1]["id"] if history else None
+    previous_counts = history[-1]["counts"] if history else {}
     row = {
         "id": str(uuid4()),
         "day": day,
@@ -172,6 +179,53 @@ def record_daily_revision(
                 sequence=sequence,
             )
         )
+    if replaces_revision_id:
+        lot_rows = {
+            item["id"]: item
+            for item in session.execute(
+                select(
+                    db.inventory_lots.c.id,
+                    db.inventory_lots.c.ingredient_id,
+                    db.ingredients.c.unit,
+                )
+                .join(
+                    db.ingredients,
+                    db.ingredients.c.id == db.inventory_lots.c.ingredient_id,
+                )
+                .where(db.inventory_lots.c.id.in_(body.counts))
+            ).mappings()
+        }
+        adjustments = []
+        for lot_id, corrected in sorted(body.counts.items()):
+            previous_raw = previous_counts.get(lot_id)
+            previous = Decimal(str(previous_raw)) if previous_raw is not None else None
+            if previous == corrected:
+                continue
+            lot = lot_rows[lot_id]
+            adjustments.append(
+                InventoryAdjustmentLine(
+                    lot_id=lot_id,
+                    ingredient_id=lot["ingredient_id"],
+                    unit=lot["unit"],
+                    previous_quantity=previous,
+                    corrected_quantity=corrected,
+                    delta=corrected - previous if previous is not None else None,
+                )
+            )
+        if adjustments:
+            adjustment = InventoryAdjustmentEventPayload(
+                revision_id=row["id"],
+                replaces_revision_id=replaces_revision_id,
+                day=day,
+                effective_at=body.cutoff,
+                adjustments=adjustments,
+            )
+            record_event(
+                session,
+                "INVENTORY_ADJUSTED",
+                actor,
+                adjustment.model_dump(mode="json"),
+            )
     record_event(
         session,
         "DAILY_UPDATE_CORRECTED" if replaces_revision_id else "DAILY_UPDATE_SUBMITTED",

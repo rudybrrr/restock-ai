@@ -68,6 +68,21 @@ The result must identify the same run, clocks, state revision, snapshot, forecas
 
 Sales-triggered runs require this persisted result before completion. An incomplete result can only lead to escalation; a material result cannot keep the plan unchanged; a complete non-material result may certify `KEEP_CURRENT_PLAN` without running the procurement optimiser. Manager approval and external order recording remain separate.
 
+## Promotion and inventory-correction events
+
+The frozen `promotions` collection contains complete canonical `PromotionEvent` records rather than flattened current state. Every entry has the event ID, type, recording timestamp, source, and strict `PromotionEventPayload`. The full known revision history is retained, including a known future-effective revision, because the numerical promotion function selects the effective revision for each service bucket. Assumption provenance belongs in the event `source`; it is not an extra payload field.
+
+A closing correction that changes at least one physical lot count emits a canonical `INVENTORY_ADJUSTED` event in addition to `DAILY_UPDATE_CORRECTED`. Its payload identifies both daily revisions and each changed lot's ingredient, unit, previous quantity, corrected quantity, and delta. The exact events that requested a run are frozen through `trigger_event_ids`.
+
+Agent-only inventory-correction routes are:
+
+| Step | Route |
+| --- | --- |
+| Read the frozen correction events and corrected inventory | `GET /api/v1/runs/{run_id}/inventory-adjustment-context` |
+| Persist or read the deterministic result | `PUT` or `GET /api/v1/runs/{run_id}/inventory-adjustment-assessment` |
+
+The result is bound to the run clocks, state revision, snapshot, corrected inventory snapshot, trigger event IDs, plan reference, and evidence references. It is hash-bound and immutable with exact idempotent retries. A stale run cannot accept a first result. An incomplete result must escalate, a material result cannot keep the plan, and a complete non-material result may certify `KEEP_CURRENT_PLAN` without procurement optimisation. Backend persists and validates this boundary; the Agent or numerical tool determines materiality.
+
 ## Adapter rules
 
 The Agent adapter may translate the persisted transport into the engine's typed input, but every mapped value must come from this contract or another explicitly versioned artifact. Policy identifier differences must be handled explicitly and tested; an adapter must not silently rename a policy, fetch newer supplier facts, or invent a fallback.

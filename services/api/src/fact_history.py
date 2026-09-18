@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
-from src.operations_schemas import Delivery
+from src.operations_schemas import Delivery, InventoryAdjustmentEvent, PromotionEvent
 
 
 def record_offer_version(session: Session, row: dict) -> None:
@@ -70,9 +70,10 @@ def offers_at(
     )
 
 
-def promotions_at(session: Session, as_of: datetime, known_at: datetime) -> list[dict]:
-    latest = {}
-    for event in session.execute(
+def promotions_at(session: Session, known_at: datetime) -> list[dict]:
+    """Return complete canonical history, including known future-effective revisions."""
+    events = []
+    for row in session.execute(
         select(db.events)
         .where(
             db.events.c.type.in_(("PROMOTION_CREATED", "PROMOTION_CHANGED")),
@@ -80,10 +81,33 @@ def promotions_at(session: Session, as_of: datetime, known_at: datetime) -> list
         )
         .order_by(db.events.c.timestamp, db.events.c.id)
     ).mappings():
-        payload = event["payload"]
-        if datetime.fromisoformat(payload["effective_at"]) <= as_of:
-            latest[payload["promotion_id"]] = {"id": payload["promotion_id"], **payload}
-    return [value for _, value in sorted(latest.items())]
+        event = PromotionEvent.model_validate(row)
+        events.append(event.model_dump(mode="json"))
+    return sorted(
+        events,
+        key=lambda event: (
+            event["payload"]["promotion_id"],
+            event["payload"]["revision"],
+        ),
+    )
+
+
+def inventory_adjustments_at(
+    session: Session, as_of: datetime, known_at: datetime
+) -> list[dict]:
+    events = []
+    for row in session.execute(
+        select(db.events)
+        .where(
+            db.events.c.type == "INVENTORY_ADJUSTED",
+            db.events.c.timestamp <= known_at,
+        )
+        .order_by(db.events.c.timestamp, db.events.c.id)
+    ).mappings():
+        event = InventoryAdjustmentEvent.model_validate(row)
+        if event.payload.effective_at <= as_of:
+            events.append(event.model_dump(mode="json"))
+    return events
 
 
 def delivery_activity_at(session: Session, delivery_id: str) -> datetime:

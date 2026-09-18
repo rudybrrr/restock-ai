@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 Quantity = Annotated[
     Decimal,
@@ -31,6 +31,7 @@ EventType = Literal[
     "DELIVERY_RECEIVED",
     "DELIVERY_CANCELLED",
     "SALES_UPDATED",
+    "INVENTORY_ADJUSTED",
     "INVENTORY_LOT_EXPIRED",
     "MANUAL_REASSESSMENT_REQUESTED",
     "PLAN_APPROVED",
@@ -139,6 +140,52 @@ class DailyEventPayload(BaseModel):
     day: date
     revision: int
     cutoff: AwareDatetime
+
+
+class InventoryAdjustmentLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lot_id: str
+    ingredient_id: str
+    unit: Literal["kg", "litres", "pieces"]
+    previous_quantity: Quantity | None
+    corrected_quantity: Quantity
+    delta: Decimal | None
+
+    @model_validator(mode="after")
+    def exact_delta(self) -> "InventoryAdjustmentLine":
+        expected = (
+            self.corrected_quantity - self.previous_quantity
+            if self.previous_quantity is not None
+            else None
+        )
+        if self.delta != expected:
+            raise ValueError("Adjustment delta must exactly match the observations")
+        return self
+
+
+class InventoryAdjustmentEventPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision_id: str
+    replaces_revision_id: str
+    day: date
+    effective_at: AwareDatetime
+    adjustments: list[InventoryAdjustmentLine] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_lots(self) -> "InventoryAdjustmentEventPayload":
+        lot_ids = [item.lot_id for item in self.adjustments]
+        if len(lot_ids) != len(set(lot_ids)):
+            raise ValueError("Inventory adjustment lots must be unique")
+        return self
+
+
+class InventoryAdjustmentEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    type: Literal["INVENTORY_ADJUSTED"]
+    timestamp: AwareDatetime
+    source: str
+    payload: InventoryAdjustmentEventPayload
 
 
 class DeliveryCreate(BaseModel):
@@ -332,6 +379,7 @@ class CycleEvent(BaseModel):
 
 
 class PromotionEventPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     promotion_id: str
     revision: int
     name: str
@@ -344,6 +392,7 @@ class PromotionEventPayload(BaseModel):
 
 
 class PromotionEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: str
     type: Literal["PROMOTION_CREATED", "PROMOTION_CHANGED"]
     timestamp: AwareDatetime
@@ -376,6 +425,7 @@ class SupplierEvent(BaseModel):
 
 Event = Annotated[
     DailyEvent
+    | InventoryAdjustmentEvent
     | DeliveryEvent
     | SalesBatchEvent
     | ExpiryEvent

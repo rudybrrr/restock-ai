@@ -580,7 +580,6 @@ def test_promotion_aware_expectation_and_no_second_uplift(case):
                 "end_date": "2026-02-16",
                 "menu_item_ids": ["chicken-rice"],
                 "demand_multiplier": "2",
-                "assumption_source": "EXPLICIT_SYNTHETIC_TEST",
             },
         }
     )
