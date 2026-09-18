@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from src.operations_schemas import Delivery
 from src.schemas import SupplierOffer
 
 
@@ -141,6 +142,65 @@ class ForecastInputArtifact(BaseModel):
     payload: ForecastInputPayload
 
 
+class ForecastActivitySemantics(BaseModel):
+    """How live operational activity relates to immutable forecast evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["FORECAST_ACTIVITY_V1"] = "FORECAST_ACTIVITY_V1"
+    baseline_history_mode: Literal["VERSIONED_FORECAST_INPUT_IMMUTABLE"] = (
+        "VERSIONED_FORECAST_INPUT_IMMUTABLE"
+    )
+    intraday_sales_mode: Literal["INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY"] = (
+        "INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY"
+    )
+    closing_sales_mode: Literal["LATEST_DAILY_REVISION_AUTHORITATIVE"] = (
+        "LATEST_DAILY_REVISION_AUTHORITATIVE"
+    )
+    reconciliation_mode: Literal["COMPARE_NEVER_ADD"] = "COMPARE_NEVER_ADD"
+
+
+class FrozenSourceEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference: str
+    available_at: AwareDatetime
+    captured_revision: str
+
+
+class FrozenExpectedSupply(BaseModel):
+    """Adapter-ready fixed supply; received stock remains in opening inventory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    delivery: Delivery
+    expiry_date: date | None
+    expiry_evidence: FrozenSourceEvidence | None
+    projected_lot_id: str | None
+
+
+class CommitmentProjectionFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["MISSING_APPROVED_OFFER", "MISSING_EXPECTED_EXPIRY"]
+    source: str
+
+
+class FrozenCommitmentProjection(BaseModel):
+    """Commitments selected at the same operational and knowledge cutoffs as the run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    as_of: AwareDatetime
+    known_at: AwareDatetime
+    captured_state_revision: str
+    expiry_policy: Literal["EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1"]
+    complete: bool
+    findings: list[CommitmentProjectionFinding]
+    supply_manifest: list[str]
+    supplies: list[FrozenExpectedSupply]
+
+
 class ProcurementContract(BaseModel):
     """Exact backend evidence an Agent adapter may pass to pure numerical code."""
 
@@ -153,6 +213,10 @@ class ProcurementContract(BaseModel):
     policy: ProcurementPolicyVersion
     domain: ApprovedProcurementDomain
     forecast_input: ForecastInputArtifact
+    activity_semantics: ForecastActivitySemantics = Field(
+        default_factory=ForecastActivitySemantics
+    )
+    commitment_projection: FrozenCommitmentProjection | None = None
     frozen_state: dict | None = None
 
 

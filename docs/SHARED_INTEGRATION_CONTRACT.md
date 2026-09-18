@@ -42,9 +42,11 @@ Both routes require the Agent bearer credential.
 | Inspect the policy and complete approved domain | `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1` |
 | Read the exact input frozen for a claimed run | `GET /api/v1/runs/{run_id}/procurement-contract` |
 
-The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, versioned `forecast_input`, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, and sales batches. The forecast input must be effective by `as_of` and recorded by `known_at`; the complete contract is saved in the claimed run snapshot under the captured state revision.
+The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, versioned `forecast_input`, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, authoritative daily sales, sales batches, promotions, holidays, order-cycle decisions, and current supplier observations. The forecast input must be effective by `as_of` and recorded by `known_at`; the complete contract is saved in the claimed run snapshot under the captured state revision.
 
-This first fixture is available only at its declared issue time and with its explicit empty commitments and post-count activity. Other activity returns `409 MISSING_REQUIRED_DATA` instead of producing a partially inferred contract.
+The first-slice policy can be selected from its declared issue time through its horizon end. The policy's explicit-empty flags describe the original seeded baseline; they do not prohibit later operational activity in a run snapshot. `activity_semantics` states that the versioned forecast history remains immutable, intraday batches affect inventory and reassessment only, and the latest closing revision is authoritative for daily forecasting. Reconciliation compares the two sources and never adds them.
+
+`commitment_projection` is selected at the same `as_of` / `known_at` / state-revision boundary. Its manifest includes every frozen external delivery. Outstanding supply carries the latest expected arrival, quantity after receipts/shortfall/cancellation, a stable projected-lot ID, and expected expiry derived from the approved offer's shelf-life revision. Closed commitments remain in the manifest with zero outstanding quantity and no projected lot. Missing expiry or approved-offer evidence marks the projection incomplete instead of inventing a value.
 
 ## Adapter rules
 
