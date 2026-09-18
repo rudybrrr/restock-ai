@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -151,7 +153,8 @@ def test_live_agent_claim_uses_current_revision_for_stale_protection(
     claimed = client.post("/api/v1/runs/claim")
     assert claimed.status_code == 200, claimed.text
     run = claimed.json()
-    with Session(client.app.state.engine) as session:
+    app = cast(Any, client.app)
+    with Session(app.state.engine) as session:
         assert current_state_revision(session) == str(run["input_revision"])
 
     del client.headers["Authorization"]
