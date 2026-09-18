@@ -25,3 +25,46 @@ deterministic evidence, business-metric availability, failure/escalation
 details, and local timing, followed by aggregate summaries. Local token and
 live model-call metrics are explicitly `pending`; unavailable simulator
 business metrics are explicitly `unsupported`, never zero-filled.
+
+## Golden/demo preparation
+
+The local golden pass selects five runnable scenarios from the canonical suite:
+
+- supplier replanning (`development-supplier-availability-001`)
+- promotion routing (`development-promotion-001`)
+- inventory correction (`development-inventory-correction-001`)
+- delivery disruption (`development-delivery-delay-001`)
+- exact-version approval/stale-version handling (`development-stale-approval-001`)
+
+Prepare a reviewable, evaluator-truth-free scenario sheet with:
+
+```powershell
+.venv\Scripts\python.exe -m src.evaluation.local_demo prepare `
+  --manifest tests/fixtures/evaluation/scenarios_v1.json `
+  --output .tmp/golden-demo.json
+```
+
+To execute the five scenarios through the real Backend planning kernel,
+Coordinator, local specialists, and evaluation adapters, first migrate a
+dedicated database whose name begins with `restock_demo_`. The runner resets and
+reseeds only that explicitly dedicated database before every system/scenario
+run, then writes per-system results and aggregate metrics:
+
+```powershell
+$demoDatabase = "postgresql+psycopg://.../restock_demo_local"
+$env:DATABASE_URL = $demoDatabase
+.venv\Scripts\python.exe -m alembic upgrade head
+.venv\Scripts\python.exe -m src.evaluation.local_demo run `
+  --manifest tests/fixtures/evaluation/scenarios_v1.json `
+  --database-url $demoDatabase `
+  --output .tmp/golden-evaluation.json
+```
+
+The output contains separate `evaluation` and `approval_flow` sections. The
+approval section uses the real local Agent publication path, changes an
+authoritative input, attempts approval of the exact old version, and records
+the resulting stale error plus the persisted audit reference. The output
+preserves failures, routing, specialist/tool counts, validation and approval
+outcomes, plus explicit `pending`/`unsupported` metrics. It does not include
+evaluator-only expectations, private prompts, scratchpads, or raw frozen state.
+The sales-materiality scenario remains open and is not selected.

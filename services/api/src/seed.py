@@ -39,8 +39,9 @@ class IngredientSeed:
     shelf_life_days: int
 
 
-def seed() -> None:
-    engine = create_engine(Settings().database_url)
+def seed(database_url: str | None = None) -> None:
+    settings = Settings(database_url=database_url) if database_url else Settings()
+    engine = create_engine(settings.database_url)
     observed = datetime.fromisoformat("2026-02-15T22:00:00+08:00")
     policy_recorded_at = datetime.now(UTC)
     dishes = [
