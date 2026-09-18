@@ -1,0 +1,34 @@
+{
+  "fixture_id": "sales-materiality-development.v1",
+  "status": "SYNTHETIC_EXPLICIT_TEST_POLICY_NOT_PRODUCTION_DEFAULT",
+  "base_contract": "first_slice_seed_rows + freeze_operational_activity canonical Backend models",
+  "catalogue_fixture": "seasonal_baseline_v3.json",
+  "issue_time": "2026-02-15T22:00:00+08:00",
+  "as_of": "2026-02-16T12:00:00+08:00",
+  "known_at": "2026-09-18T09:00:00+08:00",
+  "captured_state_revision": "synthetic-sales-capture-1",
+  "daily_portions_per_dish": "150",
+  "opening_per_ingredient": "1000.000",
+  "threshold": {
+    "version": "EXPLICIT_TEST_EXPOSURE_20_V1",
+    "rule": "V2_DEMO_ABSOLUTE_OR_RELATIVE_V1",
+    "absolute_floor": "5",
+    "relative_threshold": "0.2",
+    "minimum_expected_portions": "20",
+    "minimum_complete_buckets": 2
+  },
+  "expected": {
+    "elapsed_per_dish": "20",
+    "future_per_dish": "130",
+    "nonmaterial_observed": "24",
+    "material_observed": "25",
+    "future_chicken_kg": "35.100",
+    "future_rice_kg": "39.000",
+    "future_noodles_kg": "39.000",
+    "future_eggs_pieces": "130",
+    "future_tofu_kg": "19.500",
+    "future_vegetables_kg": "35.100",
+    "future_oil_litres": "2.600",
+    "future_soy_sauce_litres": "2.600"
+  }
+}

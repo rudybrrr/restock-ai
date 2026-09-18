@@ -234,7 +234,11 @@ def project_inventory(
         target_date=target_date,
         profile=service_profile,
     )
-    intervals = {(b.start, b.end) for b in expected}
+    # A frozen full-day profile also defines a residual projection. Actual
+    # activity belongs in the opening estimate, never in future consumption.
+    intervals = {(b.start, b.end) for b in expected if b.start >= as_of}
+    if any(b.start < as_of < b.end for b in expected):
+        findings.add(Finding("UNSUPPORTED_OPENING_CUTOFF", "opening"))
     ordered = sorted(buckets, key=lambda b: _aware(b.start))
     actual = []
     for b in ordered:
