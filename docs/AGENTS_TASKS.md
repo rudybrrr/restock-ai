@@ -552,43 +552,44 @@
 
 > Use Aniq's shared scenario manifests, simulator truth, and business metrics.
 
-- [ ] Freeze scenario manifest format
-  - [ ] Inputs
-  - [ ] Events
-  - [ ] Expected deterministic truth
-  - [ ] Expected routing
-  - [ ] Expected outcome
-  - [ ] Expected escalation reason / detail
+- [x] Freeze scenario manifest format
+  - [x] Inputs
+  - [x] Events
+  - [x] Expected deterministic truth
+  - [x] Expected routing
+  - [x] Expected outcome
+  - [x] Expected escalation reason / detail
 
 - [ ] Cover scenario families
-  - [ ] Normal planning
-  - [ ] Promotion
-  - [ ] Demand spike / drop
-  - [ ] Inventory correction
-  - [ ] Wastage / expiry
-  - [ ] Supplier shortage / delay / cancellation
-  - [ ] Price change
-  - [ ] Complex combined events
-  - [ ] Missing data
-  - [ ] No feasible supplier
-  - [ ] Optimiser search limit
-  - [ ] Prompt injection
-  - [ ] Stale approval
+  - [x] Normal planning
+  - [x] Promotion
+  - [ ] Demand spike / drop (sales-materiality contract remains ML-owned)
+  - [x] Inventory correction
+  - [ ] Wastage / expiry (no canonical evaluation fixture yet)
+  - [x] Supplier shortage / delay / cancellation
+  - [x] Price change
+  - [ ] Complex combined events (no canonical combined-event fixture yet)
+  - [x] Missing data
+  - [x] No feasible supplier
+  - [x] Optimiser search limit
+  - [x] Prompt injection
+  - [x] Stale approval
 
-- [ ] Build Static baseline
-- [ ] Build Rule-based baseline
-- [ ] Run adaptive ReStock with same tools / observed data
+- [x] Build Static baseline
+- [x] Build Rule-based baseline
+- [x] Run adaptive ReStock with same tools / observed data
 
 - [ ] Measure Agent metrics
-  - [ ] Routing accuracy
-  - [ ] Unnecessary specialist-call rate
-  - [ ] Structured-output validity
-  - [ ] Keep / revise / approval / escalation accuracy
-  - [ ] Missed replans
-  - [ ] Unnecessary replans
-  - [ ] Prompt-injection resistance
-  - [ ] Policy-violation rate
-  - [ ] Calls / latency / token usage
+  - [x] Routing accuracy
+  - [x] Unnecessary specialist-call rate
+  - [x] Structured-output validity
+  - [x] Keep / revise / approval / escalation accuracy
+  - [x] Missed replans
+  - [x] Unnecessary replans
+  - [x] Prompt-injection resistance
+  - [x] Policy-violation rate
+  - [x] Calls / latency / retries
+  - [ ] Token usage / live model-call metrics (pending live model)
 
 - [ ] Measure business metrics
   - [ ] Food waste
@@ -599,9 +600,9 @@
   - [ ] Total operational cost
   - [ ] Manual interventions
 
-- [ ] Separate development and held-out cases
-- [ ] Freeze evaluated config before held-out run
-- [ ] Preserve failures honestly
+- [x] Separate development and held-out cases
+- [x] Freeze evaluated config before held-out run
+- [x] Preserve failures honestly
 - [ ] Reach 30–50 benchmark scenarios
 
 - [ ] Review and commit Pass 10
