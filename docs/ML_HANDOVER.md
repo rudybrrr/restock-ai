@@ -2,10 +2,86 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.8, 18 September 2026<br>
-**Status:** Promotion application and immutable forecast comparison implemented on a focused branch. Live adapters/publication and full materiality remain separate.
+**Version:** 1.9, 18 September 2026<br>
+**Status:** Pure authoritative sales materiality and frozen future-demand handoff
+implemented on `feat/ml-sales-materiality`. Agent routing, persisted result
+mapping and live freshness/lifecycle integration remain owner-controlled.
+The required full backend merge gate currently has three snapshot-replay failures;
+the numerical component is reviewable, but has not landed on main.
 
-## Current promotion handoff
+## Current sales-driven replanning handoff
+
+Base main: `e179c758bba0c7d7d9db582ba98a0abae44fac6e`, including PR #27
+promotion functions and PR #28 activity/commitment contracts. See
+[the callable numerical contract](ML_NUMERICAL_FUNCTIONS.md#authoritative-sales-materiality-and-frozen-remainder)
+and [focused implementation branch](https://github.com/rudybrrr/restock-ai/tree/feat/ml-sales-materiality).
+This section supersedes earlier statements that those Backend inputs are absent.
+The original checkout and unpublished `feat/ml-materiality` draft remain preserved.
+
+**Rudy:** call `src.materiality.assess_sales_materiality` with the canonical
+claimed-run `ProcurementContract`, resolved pre-service promotion-aware
+`ForecastVersion`, its original `ForecastInputArtifact` and catalogue, snapshot
+evidence, explicit `SalesThresholdPolicy` and `RiskSnapshot`. The latter reuses
+the existing projector input bundle; do not recalculate an expectation from the
+same triggering sales. Use current frozen rows' `recorded_at` as well as batch
+identity/revision and bounds. Preserve actuals separately and forward only
+`result.remainder.future_buckets`, using the issued full-day profile, to future
+recipe/projection/procurement calculations. A missing remainder is not zero demand.
+
+- Material True establishes a deviation or hard risk even if another check is
+  incomplete. Inspect `material_findings`, `findings`, first shortage/safety
+  intervals, affected IDs and evidence references.
+- Material False requires the complete declared sales/inventory/safety scope.
+  It never independently chooses KEEP_CURRENT_PLAN or grants approval.
+- Material None or any incomplete required evidence calls for missing-data
+  follow-up. Keep calculation completeness separate from tool execution and Agent
+  outcome. Persist the request/result and references before lifecycle decisions.
+- `select_sales_revisions` and `select_daily_history` are independently callable
+  pure helpers. Corrections replace; authoritative daily totals never add batches;
+  the original versioned forecast input remains unchanged.
+
+**Chun Yang:** PR #28 already supplies frozen operational activity, immutable
+baseline-history semantics and complete outstanding-commitment transport.
+Remaining mappings are precise: persisted issued forecast/result and original
+input references; authoritative materiality policy/version and exposure values;
+complete opening/recipe manifests including explicit zeros; resolved plan/safety
+evidence; and a persisted materiality request/result reference accepted through
+freshness/completion checks. Supply the existing frozen rows, not current facts.
+No schemas, persistence, queue or publication endpoints were changed here.
+
+**Both:** record remaining contract/mapping responses in
+[issue #16](https://github.com/rudybrrr/restock-ai/issues/16). The inspected remote
+Agent branch remains `764a27b`; Rudy's newer unpublished Pass 6 work was not
+available for verification. Its existing MATERIALITY / FORECAST_RESULT /
+INVENTORY_SNAPSHOT evidence categories are documented as the consumer mapping,
+not falsely described as merged main schemas. The current main Completion schema
+does not carry a numerical materiality result directly.
+
+Source traceability: v2 §§6.3, 7, 9, as qualified by v3 §§5–7 and the current
+`FORECAST_ACTIVITY_V1` contract. The supported demo threshold is
+`max(5, 0.2 * expected-to-date)` in either direction. Adequate exposure and
+policy identity are explicit inputs. The 20-portion/two-bucket test policy is
+not production approval, and no clipped intraday demand adjustment is enabled.
+
+Worked synthetic example: two elapsed lunch buckets total expected 20 portions
+per dish. With complete risk evidence, chicken-rice actual 24 is non-material;
+25 is material at the exact five-portion threshold; 15 is also material.
+A missing second batch makes observed/deviation and materiality unknown and
+returns no remainder. Missing risk prevents non-material certification even if
+the observed deviation is only four. Known stockout remains material despite
+missing exposure policy. Original 150 daily portions per dish leave 130 future
+portions per dish; chicken requirement is exactly 35.100 kg, excluding actuals.
+Daily correction 20 →21 selects 21, never 41 or 61.
+
+Verification: 80 focused cases and 508 numerical regressions pass; the full
+same-clock Linux/PostgreSQL gate is 572 passed, 3 failed. Failures concern replayed
+capture revisions in `test_snapshot_history.py`, detailed in the numerical
+document, and all three reproduce on unchanged main `e179c75`. Chun Yang owns
+the replay contract/test resolution; no earlier timestamp waiver is applied.
+Synthetic fixture correctness
+does not prove real restaurant demand accuracy or the completed Agent sales route.
+
+## Historical promotion handoff
 
 Use [feat/ml-promotion-forecast](https://github.com/rudybrrr/restock-ai/tree/feat/ml-promotion-forecast)
 for this focused change based on main `40876fc20270bc3426e15c65a36c60578c66ac80`.
@@ -26,7 +102,8 @@ actions below; it does not reactivate deferred policy questions already confirme
   immutable original forecast and catalogue/recipe/model/profile/policy references,
   and resolved actual-batch coverage. Current selected promotion rows and the
   baseline-only first-slice input do not provide all this evidence. Activity-capable
-  snapshots, receipt/commitment handling and reassessment routing remain your work.
+  snapshots, receipt/commitment handling and reassessment routing were pending
+  at this historical handoff; PR #28 now provides them as described above.
 - Record remaining mapping/contract responses in [issue #16](https://github.com/rudybrrr/restock-ai/issues/16).
   Accepted FEFO/expiry/search/tie policies are preserved, with no renewed approval request.
 
@@ -46,7 +123,8 @@ unchanged-main reproduction and measured host/database clock skew are recorded
 in the numerical document. The same unchanged tests all passed with Python and
 PostgreSQL sharing the Linux clock. No claim of real forecast accuracy or
 connected Agent publication.
-Unfinished `feat/ml-materiality` work remains isolated and is excluded.
+The older `feat/ml-materiality` draft remains isolated; this task reuses compatible
+logic in the current sales component without publishing its unrelated draft content.
 
 ## Historical Pass 3E handoff
 
@@ -448,6 +526,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.8 | 18 September 2026 | Added pure promotion application, immutable comparison, exact portion/recipe and intraday examples, frozen evidence requirements and owner handoff. Preserved unfinished materiality and accepted Pass 3E policies. |
+| 1.9 | 18 September 2026 | Added authoritative sales materiality, explicit policy/exposure, immutable forecast/history and future-only remainder semantics, canonical PR #28 contract tests and Backend/Agent consumer mapping. Preserved owner integration boundaries. |
 | 1.7 | 17 September 2026 | Recorded Aniq's explicit proceed instruction following Chun Yang's relayed acceptance of deferred timestamp correction; preserved actual failing-test evidence and normal PR protections. |
 | 1.6 | 17 September 2026 | Ran full isolated PostgreSQL suite: 426 passed, 2 existing backend timestamp failures reproduced on main; refreshed static checks. Replaces the Docker-unavailable blocker; PR #22 remains open. |
 | 1.5 | 17 September 2026 | Pass 3E FEFO/expiry compatibility, guarded complete reduction, semantic ties, canonical backend-domain fixture tests and outstanding combined-test/live integration gates. |
