@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from src.operations_schemas import Delivery
+from src.sales_threshold_schemas import FrozenSalesThresholdPolicy
 from src.schemas import SupplierOffer
 
 
@@ -216,6 +217,7 @@ class ProcurementContract(BaseModel):
     activity_semantics: ForecastActivitySemantics = Field(
         default_factory=ForecastActivitySemantics
     )
+    sales_threshold_policy: FrozenSalesThresholdPolicy | None = None
     commitment_projection: FrozenCommitmentProjection | None = None
     frozen_state: dict | None = None
 

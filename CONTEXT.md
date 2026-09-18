@@ -70,3 +70,9 @@ The complete set of frozen supplier-offer revisions and dated purchasing opportu
 
 **Procurement contract**:
 The Backend-owned read artifact that combines a frozen procurement policy version, its approved procurement domain, the run's operational and knowledge cutoffs, and captured state revision. The agent passes it to deterministic tools; it does not create or alter it.
+
+**Sales threshold policy version**:
+An immutable, dated definition of when cumulative intraday sales deviation has enough exposure to be assessed as material. A run uses the exact Backend-selected version and revision-bound evidence; the agent does not supply fallback thresholds.
+
+**Sales materiality assessment**:
+The immutable, hashed engine request and result associated with one sales-triggered planning run. It records the frozen contract, issued forecast, catalogue, policy, evidence, and three-state materiality result without treating unknown as safe.

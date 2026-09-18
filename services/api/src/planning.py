@@ -43,8 +43,8 @@ def _json(value):
     return value
 
 
-def _revision(session: Session) -> int:
-    return session.execute(
+def state_revision(session: Session, known_at: datetime | None = None) -> int:
+    statement = (
         select(func.count())
         .select_from(db.events)
         .where(
@@ -52,7 +52,10 @@ def _revision(session: Session) -> int:
                 ("PLAN_APPROVED", "PLAN_REJECTED", "PLAN_SUPERSEDED")
             )
         )
-    ).scalar_one()
+    )
+    if known_at is not None:
+        statement = statement.where(db.events.c.timestamp <= known_at)
+    return session.execute(statement).scalar_one()
 
 
 def _snapshot(
@@ -64,7 +67,7 @@ def _snapshot(
 ) -> dict:
     known_at = known_at or datetime.now(UTC)
     captured_state_revision = (
-        _revision(session)
+        state_revision(session, known_at)
         if captured_state_revision is None
         else captured_state_revision
     )
@@ -224,7 +227,7 @@ def request_run(
     if (
         running
         and as_of <= running["as_of"]
-        and _revision(session) == running["input_revision"]
+        and state_revision(session) == running["input_revision"]
         and running["snapshot"].get("revises_plan_id") == revises_plan_id
     ):
         session.commit()
@@ -235,7 +238,7 @@ def request_run(
         "status": "QUEUED",
         "trigger": "MANUAL_REASSESSMENT_REQUESTED",
         "as_of": as_of,
-        "input_revision": _revision(session),
+        "input_revision": state_revision(session),
         "snapshot": {"revises_plan_id": revises_plan_id},
         "created_at": datetime.now(UTC),
     }
@@ -324,7 +327,7 @@ def claim_run(session: Session) -> PlanningRun:
         session.commit()
         raise ApiError(409, "NO_QUEUED_RUN", "There is no queued assessment")
     now = datetime.now(UTC)
-    captured_state_revision = _revision(session)
+    captured_state_revision = state_revision(session)
     snapshot = {
         **row["snapshot"],
         **_snapshot(
@@ -594,7 +597,7 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         raise ApiError(
             409, "RUN_EXPIRED", "Assessment deadline elapsed before completion"
         )
-    if _revision(session) != run.input_revision:
+    if state_revision(session) != run.input_revision:
         session.execute(
             update(db.planning_runs)
             .where(db.planning_runs.c.id == run_id)
@@ -616,10 +619,39 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         raise ApiError(
             422, "INVALID_OUTCOME", "REVISE_PLAN requires exactly one candidate"
         )
+    from src.sales_materiality_contracts import result_for_completion
+
+    materiality = result_for_completion(session, run_id)
+    materiality_keep = bool(
+        materiality is not None
+        and materiality.complete
+        and materiality.material_change is False
+    )
+    if materiality is not None:
+        if materiality.material_change is None and body.outcome != "ESCALATE":
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Incomplete sales materiality must be escalated",
+            )
+        if materiality.material_change is True and body.outcome == "KEEP_CURRENT_PLAN":
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Material sales or stock risk cannot keep the current plan unchanged",
+            )
+        if materiality_keep and body.outcome == "REVISE_PLAN":
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "A complete non-material result cannot publish a revision",
+            )
     version_id = None
     if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
         calculated = run.snapshot.get("calculated_candidate")
-        if calculated is None:
+        if calculated is None and not (
+            body.outcome == "KEEP_CURRENT_PLAN" and materiality_keep
+        ):
             raise ApiError(
                 409,
                 "UNCERTIFIED_OUTCOME",
@@ -640,26 +672,30 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
             .one_or_none()
         )
         if current is None:
-            if body.outcome != "KEEP_CURRENT_PLAN" or calculated["lines"]:
+            calculated_lines = calculated["lines"] if calculated is not None else []
+            if not materiality_keep and (
+                body.outcome != "KEEP_CURRENT_PLAN" or calculated_lines
+            ):
                 raise ApiError(
                     409,
                     "NO_CURRENT_PLAN",
                     "There is no current plan matching this decision",
                 )
         else:
-            stored = read_plan(session, current["id"])
-            comparable = set(Candidate.model_fields) - {
-                "forecast_id",
-                "inventory_snapshot_id",
-            }
-            if Candidate.model_validate(calculated).model_dump(
-                include=comparable
-            ) != stored.model_dump(include=comparable):
-                raise ApiError(
-                    409,
-                    "PLAN_CHANGED",
-                    "Calculated purchases changed; publish a new pending version",
-                )
+            if not materiality_keep:
+                stored = read_plan(session, current["id"])
+                comparable = set(Candidate.model_fields) - {
+                    "forecast_id",
+                    "inventory_snapshot_id",
+                }
+                if Candidate.model_validate(calculated).model_dump(
+                    include=comparable
+                ) != stored.model_dump(include=comparable):
+                    raise ApiError(
+                        409,
+                        "PLAN_CHANGED",
+                        "Calculated purchases changed; publish a new pending version",
+                    )
             if (
                 body.outcome == "REQUEST_HUMAN_APPROVAL"
                 and current["status"] != "PENDING_APPROVAL"
@@ -826,7 +862,7 @@ def decide_plan(
         .order_by(db.planning_runs.c.completed_at.desc())
         .limit(1)
     ).scalar_one_or_none()
-    if decision == "APPROVED" and _revision(session) != certified_revision:
+    if decision == "APPROVED" and state_revision(session) != certified_revision:
         raise ApiError(
             409, "PLAN_STALE", "Operational inputs changed; reassess before approval"
         )
