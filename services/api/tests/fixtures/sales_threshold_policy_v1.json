@@ -1,0 +1,10 @@
+{
+  "status": "APPROVED_DEMO_POLICY_SYNTHETIC_EVIDENCE_ONLY",
+  "version": "SALES_MATERIALITY_V1",
+  "rule": "V2_DEMO_ABSOLUTE_OR_RELATIVE_V1",
+  "absolute_floor": "5",
+  "relative_threshold": "0.2",
+  "minimum_expected_portions": "20",
+  "minimum_complete_buckets": 2,
+  "scope": "One Singapore service day; per-dish cumulative complete half-hours; issued promotion-aware expectation; no spike adjustment"
+}

@@ -1,6 +1,6 @@
 {
   "fixture_id": "sales-materiality-development.v1",
-  "status": "SYNTHETIC_EXPLICIT_TEST_POLICY_NOT_PRODUCTION_DEFAULT",
+  "status": "SYNTHETIC_INPUTS_WITH_EXPLICIT_APPROVED_DEMO_POLICY",
   "base_contract": "first_slice_seed_rows + freeze_operational_activity canonical Backend models",
   "catalogue_fixture": "seasonal_baseline_v3.json",
   "issue_time": "2026-02-15T22:00:00+08:00",
@@ -10,7 +10,7 @@
   "daily_portions_per_dish": "150",
   "opening_per_ingredient": "1000.000",
   "threshold": {
-    "version": "EXPLICIT_TEST_EXPOSURE_20_V1",
+    "version": "SALES_MATERIALITY_V1",
     "rule": "V2_DEMO_ABSOLUTE_OR_RELATIVE_V1",
     "absolute_floor": "5",
     "relative_threshold": "0.2",
