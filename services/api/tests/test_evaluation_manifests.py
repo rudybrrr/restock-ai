@@ -22,7 +22,7 @@ def test_canonical_suite_is_strict_and_separates_splits() -> None:
         scenario.scenario_id
         for scenario in suite.scenarios
         if scenario.family == "sales_materiality"
-    } == {"open-sales-materiality-001"}
+    } == {"development-sales-materiality-001"}
 
 
 def test_runtime_projection_excludes_expectations_and_hidden_truth() -> None:
@@ -44,19 +44,22 @@ def test_runtime_projection_excludes_expectations_and_hidden_truth() -> None:
     assert "future_stockouts" not in json.dumps(projected, sort_keys=True)
 
 
-def test_manifest_rejects_unknown_fields_and_open_sales_contract() -> None:
+def test_manifest_rejects_unknown_fields_and_accepts_landed_sales_contract() -> None:
     raw = json.loads(MANIFEST.read_text(encoding="utf-8"))["scenarios"][0]
     raw["unexpected"] = True
     with pytest.raises(ValidationError):
         ScenarioManifest.model_validate(raw)
 
-    sales = json.loads(MANIFEST.read_text(encoding="utf-8"))["scenarios"][0]
-    sales["scenario_id"] = "sales-open"
-    sales["family"] = "sales_materiality"
-    with pytest.raises(ValidationError):
-        ScenarioManifest.model_validate(sales)
+    sales = next(
+        scenario
+        for scenario in json.loads(MANIFEST.read_text(encoding="utf-8"))["scenarios"]
+        if scenario["family"] == "sales_materiality"
+    )
+    assert ScenarioManifest.model_validate(sales).status.value == "runnable"
 
-    sales["status"] = "open"
-    sales["open_reason"] = "ML-owned sales materiality contract is not landed"
-    sales["expected"] = None
-    assert ScenarioManifest.model_validate(sales).expected is None
+    inventory = next(
+        scenario
+        for scenario in json.loads(MANIFEST.read_text(encoding="utf-8"))["scenarios"]
+        if scenario["family"] == "inventory_correction"
+    )
+    assert ScenarioManifest.model_validate(inventory).status.value == "open"

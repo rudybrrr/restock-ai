@@ -149,6 +149,7 @@ class BackendInventoryTools:
                             "DAILY_UPDATE_CORRECTED",
                             "PROMOTION_CREATED",
                             "PROMOTION_CHANGED",
+                            "SALES_UPDATED",
                             "DELIVERY_DELAYED",
                             "DELIVERY_SHORT",
                             "DELIVERY_CANCELLED",
@@ -205,12 +206,32 @@ class BackendInventoryTools:
                 )
             if request.tool is AgentToolName.CALCULATE_STOCKOUT_RISK:
                 shortages = projection.first_shortages or ()
+                stockout_exposure = bool(shortages)
+                if run.trigger == "SALES_UPDATED":
+                    from src.sales_materiality_contracts import result_for_completion
+
+                    materiality = result_for_completion(self._session, run.id)
+                    if (
+                        materiality is None
+                        or not materiality.complete
+                        or materiality.material_change is None
+                    ):
+                        raise ApiError(
+                            409,
+                            "MISSING_REQUIRED_DATA",
+                            "Sales materiality is incomplete",
+                        )
+                    stockout_exposure = (
+                        materiality.inventory_feasible is not True
+                        or materiality.first_stockout_interval is not None
+                        or bool(materiality.safety_breaches)
+                    )
                 return self._result(
                     request,
                     EvidenceCategory.STOCKOUT_RISK,
                     EvidenceSource.DECISION_ENGINE,
                     f"stockout:{projection_id}",
-                    {"stockout_exposure": bool(shortages), "provenance": "PROJECTED"},
+                    {"stockout_exposure": stockout_exposure, "provenance": "PROJECTED"},
                 )
             raise ApiError(422, "TOOL_NOT_SUPPORTED", "Unsupported Inventory tool")
         except ApiError as error:

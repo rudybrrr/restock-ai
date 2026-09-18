@@ -129,8 +129,6 @@ class ScenarioManifest(BaseModel):
             raise ValueError("runnable scenarios cannot have an open_reason")
         if self.status is ScenarioStatus.RUNNABLE and self.expected is None:
             raise ValueError("runnable scenarios require expected results")
-        if self.family == "sales_materiality" and self.status is not ScenarioStatus.OPEN:
-            raise ValueError("sales materiality remains open pending the ML contract")
         return self
 
     def runtime_boundary(self) -> ObservedBoundary:

@@ -33,6 +33,7 @@ from src.evaluation.contracts import (
 from src.evaluation.manifests import assert_no_evaluator_truth
 from src.operations import record_event
 from src.operations_schemas import EventType as BackendEventType
+from src.operations_schemas import SalesBatchCreate
 from src.planning import PlanningRun, claim_run, request_run
 from src.procurement_specialist import (
     ProcurementDecisionAction,
@@ -234,6 +235,17 @@ class SeededBackendScenarioPreparer:
     def prepare(self, session: Session, boundary: ObservedBoundary) -> PlanningRun:
         for event in boundary.observed_events:
             payload = dict(event.payload)
+            if event.event_type == "SALES_UPDATED" and "batch" in payload:
+                # Exercise the authoritative sales write path so the event and
+                # frozen sales batch share the Backend's canonical identity.
+                from src.sales import create_sales_batch
+
+                create_sales_batch(
+                    session,
+                    SalesBatchCreate.model_validate(payload["batch"]),
+                    "evaluation",
+                )
+                continue
             payload.setdefault("effective_at", event.occurred_at.isoformat())
             record_event(
                 session,

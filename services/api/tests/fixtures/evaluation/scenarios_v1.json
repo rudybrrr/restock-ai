@@ -22,7 +22,7 @@
       "split": "development",
       "family": "promotion",
       "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00"},
-      "observed_events": [{"event_id": "promo-001", "event_type": "PROMOTION_CHANGED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"promotion_id": "fixture-promotion-chicken", "effective_at": "2026-02-15T20:00:00+08:00"}}],
+      "observed_events": [{"event_id": "promo-001", "event_type": "PROMOTION_CREATED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"promotion_id": "fixture-promotion-chicken", "revision": 1, "name": "1-for-1, explicit served-portion assumption", "start_date": "2026-02-16", "end_date": "2026-02-16", "menu_item_ids": ["chicken-rice"], "demand_multiplier": "1.2", "active": true, "effective_at": "2026-02-15T20:00:00+08:00"}}],
       "policy_config_versions": {"procurement": "seed-policy-v1", "forecast": "promotion-v1"},
       "expected": {"relevant_domains": ["DEMAND"], "routing": ["DEMAND"], "final_outcome": "REVISE_PLAN"},
       "fixture_refs": ["tests/fixtures/promotion_forecast_v1.json"]
@@ -33,10 +33,12 @@
       "scenario_version": "1",
       "split": "development",
       "family": "inventory_correction",
+      "status": "open",
       "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00"},
       "observed_events": [{"event_id": "inventory-001", "event_type": "INVENTORY_ADJUSTED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"effective_at": "2026-02-15T20:00:00+08:00"}}],
       "policy_config_versions": {"procurement": "seed-policy-v1", "inventory": "projection-v1"},
-      "expected": {"relevant_domains": ["INVENTORY"], "routing": ["INVENTORY"], "final_outcome": "KEEP_CURRENT_PLAN"},
+      "expected": null,
+      "open_reason": "Authoritative inventory-adjustment event contract is not landed",
       "fixture_refs": ["tests/fixtures/inventory_projection_v1.json"]
     },
     {
@@ -209,17 +211,15 @@
     },
     {
       "schema_version": "restock-evaluation-scenario/1",
-      "scenario_id": "open-sales-materiality-001",
+      "scenario_id": "development-sales-materiality-001",
       "scenario_version": "1",
       "split": "development",
       "family": "sales_materiality",
-      "status": "open",
-      "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00"},
-      "observed_events": [{"event_id": "sales-open-001", "event_type": "SALES_UPDATED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"effective_at": "2026-02-15T20:00:00+08:00"}}],
-      "policy_config_versions": {"forecast": "open-contract"},
-      "expected": null,
-      "open_reason": "ML-owned sales materiality contract is not landed",
-      "fixture_refs": ["tests/fixtures/history_development_v1.json"]
+      "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-16T12:00:00+08:00"},
+      "observed_events": [{"event_id": "sales-materiality-001", "event_type": "SALES_UPDATED", "occurred_at": "2026-02-16T04:00:00Z", "payload": {"batch": {"source": "evaluation", "batch_id": "sales-materiality-001", "period_start": "2026-02-16T11:00:00+08:00", "period_end": "2026-02-16T12:00:00+08:00", "sales": {"chicken-rice": 25, "fried-rice": 12, "chicken-noodles": 16, "tofu-bowl": 8, "vegetable-noodles": 8}}}}],
+      "policy_config_versions": {"forecast": "SALES_MATERIALITY_V1"},
+      "expected": {"relevant_domains": ["DEMAND"], "routing": [], "final_outcome": "ESCALATE", "escalation_reason": "MISSING_REQUIRED_DATA"},
+      "fixture_refs": ["tests/fixtures/sales_materiality_v1.json", "tests/fixtures/sales_threshold_policy_v1.json"]
     }
   ]
 }

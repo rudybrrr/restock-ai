@@ -5,7 +5,7 @@ import pytest
 MANIFEST = Path(__file__).parent / "fixtures" / "evaluation" / "scenarios_v1.json"
 
 
-def test_golden_demo_selects_the_five_requested_operational_flows():
+def test_golden_demo_selects_the_requested_operational_flows():
     from src.evaluation.local_demo import select_golden_scenarios
     from src.evaluation.manifests import load_manifest
 
@@ -14,15 +14,15 @@ def test_golden_demo_selects_the_five_requested_operational_flows():
     assert [item.label for item in selected] == [
         "supplier_replanning",
         "promotion_route",
-        "inventory_correction",
         "delivery_disruption",
+        "sales_materiality",
         "approval_stale_version",
     ]
     assert [item.scenario.scenario_id for item in selected] == [
         "development-supplier-availability-001",
         "development-promotion-001",
-        "development-inventory-correction-001",
         "development-delivery-delay-001",
+        "development-sales-materiality-001",
         "development-stale-approval-001",
     ]
 

@@ -174,6 +174,29 @@ class LocalDemandReasoning:
                     interpreted_impact="Authoritative sales context is unknown.",
                     summary="Demand investigation cannot establish sales context.",
                 )
+            if facts.get("sales_materiality_supported") is True:
+                if facts.get("sales_materiality_complete") is not True:
+                    return self._decision(
+                        context,
+                        DemandDecisionAction.COMPLETE,
+                        missing_information=["sales_materiality"],
+                        interpreted_impact="Authoritative sales materiality is incomplete.",
+                        summary="Demand investigation cannot establish sales materiality.",
+                    )
+                if facts.get("sales_material") is True:
+                    return self._decision(
+                        context,
+                        DemandDecisionAction.COMPLETE,
+                        recommended_next_step=RecommendedNextStep.CHECK_INVENTORY,
+                        interpreted_impact="The frozen sales materiality result requires inventory exposure assessment.",
+                        summary="Route the material sales change to Inventory.",
+                    )
+                return self._decision(
+                    context,
+                    DemandDecisionAction.COMPLETE,
+                    interpreted_impact="The frozen sales materiality result is non-material.",
+                    summary="Keep the current plan.",
+                )
             if facts.get("forecast_required") is not True:
                 return self._decision(
                     context,

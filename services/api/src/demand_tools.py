@@ -81,6 +81,46 @@ class BackendDemandTools:
                 )
             snapshot = run.snapshot
             if request.tool is AgentToolName.GET_SALES_CONTEXT:
+                if run.trigger == "SALES_UPDATED":
+                    from src.sales_materiality_contracts import result_for_completion
+
+                    result = result_for_completion(self._session, run.id)
+                    if result is None or not result.complete or result.material_change is None:
+                        return self._result(
+                            request,
+                            self._ref(
+                                request,
+                                EvidenceCategory.SALES_CONTEXT,
+                                EvidenceSource.BACKEND,
+                                f"{run.id}:sales-materiality",
+                            ),
+                            {
+                                "missing_required_data": True,
+                                "sales_materiality_supported": True,
+                            },
+                        )
+                    has_stock_exposure = (
+                        result.inventory_feasible is not True
+                        or result.first_stockout_interval is not None
+                        or bool(result.safety_breaches)
+                    )
+                    return self._result(
+                        request,
+                        self._ref(
+                            request,
+                            EvidenceCategory.SALES_CONTEXT,
+                            EvidenceSource.BACKEND,
+                            f"{run.id}:sales-materiality",
+                        ),
+                        {
+                            "forecast_required": result.material_change,
+                            "sales_materiality_supported": True,
+                            "sales_materiality_complete": True,
+                            "sales_material": result.material_change,
+                            "inventory_required": result.material_change,
+                            "stockout_exposure": has_stock_exposure,
+                        },
+                    )
                 promotion_context_required = run.trigger in {
                     "PROMOTION_CREATED",
                     "PROMOTION_CHANGED",
@@ -94,10 +134,6 @@ class BackendDemandTools:
                         f"{run.id}:sales-context",
                     ),
                     {
-                        # The Backend handover explicitly leaves sales-driven
-                        # materiality to the ML-owned contract.  A sales batch
-                        # therefore gets a bounded context read, but must not
-                        # trigger a guessed forecast/replanning chain here.
                         "forecast_required": promotion_context_required,
                         "promotion_context_required": promotion_context_required,
                         "sales_materiality_supported": False,

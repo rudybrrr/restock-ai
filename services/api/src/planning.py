@@ -820,7 +820,15 @@ def complete_run(
     sales_materiality_keep = bool(
         sales_materiality is not None
         and sales_materiality.complete
-        and sales_materiality.material_change is False
+        and (
+            sales_materiality.material_change is False
+            or (
+                sales_materiality.material_change is True
+                and sales_materiality.inventory_feasible is True
+                and sales_materiality.first_stockout_interval is None
+                and not sales_materiality.safety_breaches
+            )
+        )
     )
     if sales_materiality is not None:
         if sales_materiality.material_change is None and body.outcome != "ESCALATE":
@@ -832,11 +840,12 @@ def complete_run(
         if (
             sales_materiality.material_change is True
             and body.outcome == "KEEP_CURRENT_PLAN"
+            and not sales_materiality_keep
         ):
             raise ApiError(
                 409,
                 "UNCERTIFIED_OUTCOME",
-                "Material sales or stock risk cannot keep the current plan unchanged",
+                "Sales or stock materiality with unresolved exposure cannot keep the current plan unchanged",
             )
         if sales_materiality_keep and body.outcome == "REVISE_PLAN":
             raise ApiError(

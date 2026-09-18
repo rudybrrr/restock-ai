@@ -43,6 +43,7 @@ from src.procurement_specialist import (
     ProcurementToolPort,
 )
 from src.replanning import supplier_events_for_run, supplier_materiality
+from src.sales_materiality_contracts import read_assessment, result_for_completion
 
 
 class _SpecialistExecutor(Protocol):
@@ -130,9 +131,48 @@ class BackendCoordinatorControlPlane:
     def get_materiality(
         self, invocation: AgentInvocation
     ) -> MaterialityAssessment | None:
-        """Read Backend-owned supplier availability/status evidence for an event run."""
+        """Read the authoritative materiality evidence for the event family."""
         if invocation.invocation_mode is not InvocationMode.EVENT:
             return None
+        if invocation.trigger_type == "SALES_UPDATED":
+            result = result_for_completion(self._session, invocation.run_id)
+            assessment = read_assessment(self._session, invocation.run_id)
+            if (
+                result is None
+                or
+                not result.complete
+                or result.material_change is None
+                or assessment.result_reference is None
+            ):
+                raise ApiError(
+                    409,
+                    "MISSING_REQUIRED_DATA",
+                    "Sales materiality is incomplete and cannot route a plan",
+                )
+            has_stock_exposure = (
+                result.inventory_feasible is not True
+                or result.first_stockout_interval is not None
+                or bool(result.safety_breaches)
+            )
+            return MaterialityAssessment(
+                source_event_ids=[invocation.trigger_id],
+                captured_state_revision=invocation.captured_state_revision,
+                affected_plan_id=invocation.affected_plan_id,
+                affected_plan_version=invocation.affected_plan_version,
+                affected_ingredient_ids=result.affected_ids,
+                material=result.material_change,
+                current_plan_unactionable=result.material_change and has_stock_exposure,
+                reason_codes=(
+                    [finding.code for finding in result.material_findings]
+                    or ["SALES_MATERIALITY_ASSESSED"]
+                ),
+                evidence_ref=EvidenceRef(
+                    category=EvidenceCategory.MATERIALITY,
+                    source=EvidenceSource.BACKEND,
+                    reference_id=assessment.result_reference,
+                    state_revision=invocation.captured_state_revision,
+                ),
+            )
         active = (
             planning.get_active_plan(self._session, invocation.affected_plan_id)
             if invocation.affected_plan_id

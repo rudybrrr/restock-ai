@@ -32,6 +32,7 @@ from src.agent_contracts import (
     SpecialistType,
     StateRevisionStaleError,
 )
+from src.errors import ApiError
 
 MAX_SPECIALIST_ROUNDS = 2
 MAX_SPECIALIST_CALLS = 6
@@ -157,14 +158,27 @@ class Coordinator:
         evidence_refs = _unique_refs([event_ref, *active_plan_refs])
         try:
             materiality = self._materiality(invocation)
-        except ControlPlaneFailure:
+        except ControlPlaneFailure as error:
+            cause = error.__cause__
+            missing_materiality = isinstance(cause, ApiError) and cause.detail.code in {
+                "MISSING_REQUIRED_DATA",
+                "MATERIALITY_RESULT_REQUIRED",
+            }
             return self._finish(
                 invocation,
                 AgentOutcome.ESCALATE,
                 evidence_refs,
                 trace,
-                "Deterministic materiality evidence could not be retrieved.",
-                EscalationReason.TOOL_FAILURE,
+                (
+                    "Authoritative sales materiality evidence is incomplete."
+                    if missing_materiality
+                    else "Deterministic materiality evidence could not be retrieved."
+                ),
+                (
+                    EscalationReason.MISSING_REQUIRED_DATA
+                    if missing_materiality
+                    else EscalationReason.TOOL_FAILURE
+                ),
             )
         if materiality is not None:
             evidence_refs = _unique_refs([*evidence_refs, materiality.evidence_ref])

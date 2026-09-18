@@ -62,14 +62,14 @@ _GOLDEN_SELECTION: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("promotion event", "demand routing", "plan revision"),
     ),
     (
-        "inventory_correction",
-        "development-inventory-correction-001",
-        ("inventory event", "inventory routing", "validation"),
-    ),
-    (
         "delivery_disruption",
         "development-delivery-delay-001",
         ("delivery event", "inventory routing", "replanning"),
+    ),
+    (
+        "sales_materiality",
+        "development-sales-materiality-001",
+        ("sales batch", "materiality contract", "fail-closed routing"),
     ),
     (
         "approval_stale_version",
@@ -336,7 +336,7 @@ def run_golden_demo(
     output_path: str | Path,
     database_url: str,
 ) -> EvaluationResult:
-    """Run the five golden scenarios through isolated real local adapters."""
+    """Run the five supported golden scenarios through isolated local adapters."""
 
     manifest = load_manifest(manifest_path)
     selected = select_golden_scenarios(manifest)
