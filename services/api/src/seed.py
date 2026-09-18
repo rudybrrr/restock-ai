@@ -21,12 +21,14 @@ from src.database import (
     procurement_policy_domains,
     procurement_policy_versions,
     recipes,
+    sales_threshold_policy_versions,
     stock_counts,
     supplier_offer_versions,
     supplier_offers,
     suppliers,
 )
 from src.procurement_contracts import first_slice_seed_rows
+from src.sales_materiality_contracts import seed_policy
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,9 @@ def seed(database_url: str | None = None) -> None:
             insert_if_absent(procurement_domain_offer_revisions, first_slice["offers"])
             insert_if_absent(
                 procurement_domain_opportunities, first_slice["opportunities"]
+            )
+            insert_if_absent(
+                sales_threshold_policy_versions, [seed_policy(policy_recorded_at)]
             )
             insert_if_absent(
                 supplier_offers,

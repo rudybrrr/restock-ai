@@ -79,6 +79,9 @@ def _revision(session: Session, known_at: datetime | None = None) -> int:
     if known_at is not None:
         statement = statement.where(db.events.c.timestamp <= known_at)
     return session.execute(statement).scalar_one()
+def state_revision(session: Session, known_at: datetime | None = None) -> int:
+    """Compatibility name used by the persisted sales-materiality boundary."""
+    return _revision(session, known_at)
 
 
 def current_state_revision(session: Session) -> str:
@@ -182,8 +185,6 @@ def validate_human_review_request(
         or active.status is not PlanStatus.PENDING_APPROVAL
     ):
         raise ApiError(409, "PLAN_NOT_PENDING", "Only the exact pending version can be reviewed")
-
-
 def _snapshot(
     session: Session,
     as_of: datetime,
@@ -369,7 +370,7 @@ def request_run(
     if (
         running
         and as_of <= running["as_of"]
-        and _revision(session) == running["input_revision"]
+        and state_revision(session) == running["input_revision"]
         and running["snapshot"].get("revises_plan_id") == revises_plan_id
     ):
         session.commit()
@@ -380,7 +381,7 @@ def request_run(
         "status": "QUEUED",
         "trigger": "MANUAL_REASSESSMENT_REQUESTED",
         "as_of": as_of,
-        "input_revision": _revision(session),
+        "input_revision": state_revision(session),
         "snapshot": {"revises_plan_id": revises_plan_id},
         "created_at": datetime.now(UTC),
     }
@@ -469,7 +470,7 @@ def claim_run(session: Session) -> PlanningRun:
         session.commit()
         raise ApiError(409, "NO_QUEUED_RUN", "There is no queued assessment")
     now = datetime.now(UTC)
-    captured_state_revision = _revision(session)
+    captured_state_revision = state_revision(session)
     snapshot = {
         **row["snapshot"],
         **_snapshot(
@@ -813,6 +814,36 @@ def complete_run(
             422, "INVALID_OUTCOME", "REVISE_PLAN requires exactly one candidate"
         )
     materiality = _materiality_from_audit(audit_events)
+    from src.sales_materiality_contracts import result_for_completion
+
+    sales_materiality = result_for_completion(session, run_id)
+    sales_materiality_keep = bool(
+        sales_materiality is not None
+        and sales_materiality.complete
+        and sales_materiality.material_change is False
+    )
+    if sales_materiality is not None:
+        if sales_materiality.material_change is None and body.outcome != "ESCALATE":
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Incomplete sales materiality must be escalated",
+            )
+        if (
+            sales_materiality.material_change is True
+            and body.outcome == "KEEP_CURRENT_PLAN"
+        ):
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Material sales or stock risk cannot keep the current plan unchanged",
+            )
+        if sales_materiality_keep and body.outcome == "REVISE_PLAN":
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "A complete non-material result cannot publish a revision",
+            )
     transition_events: list[AuditEvent] = []
     version_id = None
     if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
@@ -830,7 +861,7 @@ def complete_run(
             .mappings()
             .one_or_none()
         )
-        materiality_keep = (
+        materiality_keep = sales_materiality_keep or (
             body.outcome == "KEEP_CURRENT_PLAN"
             and materiality is not None
             and not materiality.material
@@ -845,8 +876,9 @@ def complete_run(
                 "Run the deterministic tools before certifying a plan or no-purchase result",
             )
         if current is None:
-            if body.outcome != "KEEP_CURRENT_PLAN" or (
-                calculated is not None and calculated["lines"]
+            calculated_lines = calculated["lines"] if calculated is not None else []
+            if not materiality_keep and (
+                body.outcome != "KEEP_CURRENT_PLAN" or calculated_lines
             ):
                 raise ApiError(
                     409,
@@ -854,8 +886,8 @@ def complete_run(
                     "There is no current plan matching this decision",
                 )
         else:
-            stored = read_plan(session, current["id"])
-            if calculated is not None:
+            if not materiality_keep:
+                stored = read_plan(session, current["id"])
                 comparable = set(Candidate.model_fields) - {
                     "forecast_id",
                     "inventory_snapshot_id",

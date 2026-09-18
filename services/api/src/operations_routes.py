@@ -13,6 +13,7 @@ from src import (
     planning,
     procurement_contracts,
     sales,
+    sales_materiality_contracts,
 )
 from src import database as db
 from src.auth import (
@@ -53,6 +54,13 @@ from src.procurement_contract_schemas import (
     ProcurementDisplay,
     ProcurementPolicyVersion,
 )
+from src.sales_materiality_schemas import (
+    SalesMaterialityAssessment,
+    SalesMaterialityContext,
+    SalesMaterialityRequestCreate,
+    SalesMaterialityResultWrite,
+)
+from src.sales_threshold_schemas import SalesThresholdPolicyVersion
 from src.schemas import EstimatedInventoryLot, Identity, SupplierOffer
 
 router = APIRouter(
@@ -302,6 +310,69 @@ def read_frozen_procurement_contract(run_id: str, session: SessionDep, agent: Ag
             + (f": {reason}" if reason else ""),
         )
     return ProcurementContract.model_validate(contract)
+
+
+@router.get(
+    "/sales-threshold-policies/{version}",
+    response_model=SalesThresholdPolicyVersion,
+)
+def read_sales_threshold_policy(version: str, session: SessionDep, agent: Agent):
+    return sales_materiality_contracts.read_policy(session, version)
+
+
+@router.get(
+    "/runs/{run_id}/sales-materiality-context",
+    response_model=SalesMaterialityContext,
+)
+def read_sales_materiality_context(run_id: str, session: SessionDep, agent: Agent):
+    run = planning.get_run(session, run_id)
+    raw = run.snapshot.get("procurement_contract")
+    if raw is None:
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "Run has no frozen procurement contract",
+        )
+    return sales_materiality_contracts.context_from_contract(
+        ProcurementContract.model_validate(raw)
+    )
+
+
+@router.post(
+    "/runs/{run_id}/sales-materiality-requests",
+    response_model=SalesMaterialityAssessment,
+    status_code=201,
+)
+def create_sales_materiality_request(
+    run_id: str,
+    body: SalesMaterialityRequestCreate,
+    session: SessionDep,
+    agent: Agent,
+):
+    return sales_materiality_contracts.create_request(session, run_id, body)
+
+
+@router.get(
+    "/runs/{run_id}/sales-materiality-assessment",
+    response_model=SalesMaterialityAssessment,
+)
+def read_sales_materiality_assessment(run_id: str, session: SessionDep, agent: Agent):
+    planning.get_run(session, run_id)
+    return sales_materiality_contracts.read_assessment(session, run_id)
+
+
+@router.put(
+    "/runs/{run_id}/sales-materiality-requests/{request_id}/result",
+    response_model=SalesMaterialityAssessment,
+)
+def save_sales_materiality_result(
+    run_id: str,
+    request_id: str,
+    body: SalesMaterialityResultWrite,
+    session: SessionDep,
+    agent: Agent,
+):
+    return sales_materiality_contracts.save_result(session, run_id, request_id, body)
 
 
 @router.get("/runs", response_model=list[PlanningRun])

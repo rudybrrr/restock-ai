@@ -80,6 +80,19 @@ procurement_forecast_inputs = Table(
     UniqueConstraint("artifact_id", "version"),
 )
 
+sales_threshold_policy_versions = Table(
+    "sales_threshold_policy_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("version", String, nullable=False, unique=True),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False, unique=True),
+    Column("payload", JSON, nullable=False),
+    CheckConstraint("expires_at >= effective_at"),
+)
+
 procurement_domain_offer_revisions = Table(
     "procurement_domain_offer_revisions",
     metadata,
@@ -318,6 +331,34 @@ assessment_requests = Table(
     Column("event_id", ForeignKey("events.id"), primary_key=True),
     Column("run_id", ForeignKey("planning_runs.id"), nullable=False),
     Column("effective_at", DateTime(timezone=True), nullable=False),
+)
+
+sales_materiality_assessments = Table(
+    "sales_materiality_assessments",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("run_id", ForeignKey("planning_runs.id"), nullable=False, unique=True),
+    Column(
+        "policy_version_id",
+        ForeignKey("sales_threshold_policy_versions.id"),
+        nullable=False,
+    ),
+    Column("captured_state_revision", String, nullable=False),
+    Column("as_of", DateTime(timezone=True), nullable=False),
+    Column("known_at", DateTime(timezone=True), nullable=False),
+    Column("request_reference", String, nullable=False, unique=True),
+    Column("request_sha256", String(64), nullable=False),
+    Column("request_payload", JSON, nullable=False),
+    Column("result_reference", String, unique=True),
+    Column("result_sha256", String(64)),
+    Column("result_payload", JSON),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "(result_reference IS NULL AND result_sha256 IS NULL AND result_payload IS NULL AND completed_at IS NULL) "
+        "OR (result_reference IS NOT NULL AND result_sha256 IS NOT NULL AND result_payload IS NOT NULL AND completed_at IS NOT NULL)",
+        name="sales_materiality_result_all_or_none",
+    ),
 )
 
 purchase_plans = Table(

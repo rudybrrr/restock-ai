@@ -269,11 +269,17 @@ def freeze_first_slice_contract(
         or contract.forecast_input.recorded_at > known_at
     ):
         return None
+    from src.sales_materiality_contracts import select_frozen_policy
+
+    sales_policy = select_frozen_policy(
+        session, as_of, known_at, str(captured_state_revision)
+    )
     return contract.model_copy(
         update={
             "as_of": as_of,
             "known_at": known_at,
             "captured_state_revision": str(captured_state_revision),
+            "sales_threshold_policy": sales_policy,
         }
     ).model_dump(mode="json")
 

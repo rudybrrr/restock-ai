@@ -252,6 +252,27 @@ cannot use the deliberately empty first-slice baseline. The adapter must use thi
 artifact instead of injecting test history, fetching current supplier facts, or
 inventing defaults.
 
+### Sales-materiality Backend boundary
+
+Aniq's approved `SALES_MATERIALITY_V1` policy is persisted and frozen into each
+eligible claimed run. With the Agent bearer token, use:
+
+```text
+GET  /api/v1/sales-threshold-policies/SALES_MATERIALITY_V1
+GET  /api/v1/runs/{run_id}/sales-materiality-context
+POST /api/v1/runs/{run_id}/sales-materiality-requests
+GET  /api/v1/runs/{run_id}/sales-materiality-assessment
+PUT  /api/v1/runs/{run_id}/sales-materiality-requests/{request_id}/result
+```
+
+The POST stores the exact issued forecast, versioned forecast input, catalogue,
+risk inputs, policy and revision-bound evidence before the Agent calls the pure
+numerical function. The PUT accepts its exact typed result only when the run,
+clocks, state revision, artifacts, policy and evidence still match. Both writes
+are immutable and support exact idempotent retries. A sales-triggered run cannot
+complete without the saved result; incomplete evidence must escalate and a
+material result cannot certify `KEEP_CURRENT_PLAN`.
+
 ## Audit safeguards and database upgrade
 
 Pull the current code, then run `python -m alembic upgrade head` and rerun
@@ -281,6 +302,6 @@ line. `GET /plans/{version_id}/lines` exposes `linked_quantity` and
 `uncommitted_quantity`; record actual deviations with no `source_plan_line_id`.
 
 See the [shared integration contract](../../docs/SHARED_INTEGRATION_CONTRACT.md)
-before connecting the real engine or Agent. The first-slice policy, domain and fee
-grouping are frozen; engine result publication, materiality and contingency
-acceptance still need teammate integration.
+before connecting the real engine or Agent. The first-slice policy, domain, fee
+grouping and Backend sales-materiality exchange are frozen; the real Agent call,
+full plan publication and contingency acceptance still need teammate integration.
