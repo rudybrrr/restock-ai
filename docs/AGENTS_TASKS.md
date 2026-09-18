@@ -310,7 +310,7 @@
   - [x] Promotion context
   - [x] Historical demand context
   - [x] Forecast demand
-  - [ ] Compare forecast versions
+  - [x] Compare forecast versions through the Backend-owned deterministic adapter
 
 - [x] Support demand cases
   - [x] Promotion
@@ -353,7 +353,7 @@
   - [x] Wastage / manual adjustment
   - [x] Expiry risk
   - [ ] Safety stock
-  - [ ] Incoming deliveries
+  - [x] Incoming deliveries through the frozen commitment projection
   - [x] Estimated stock between stocktakes
   - [ ] Storage constraints
 
@@ -371,18 +371,13 @@
 
 # 8. Coding Pass 6 — Full Dynamic Replanning
 
-> Local contract audit (2026-09-18): only supplier availability/status has a
-> complete frozen event → materiality → Decision Engine contract in this
-> checkout. Promotion revisions are persisted, but the frozen forecasting
-> contract neither applies the active promotion revision nor exposes an
-> immutable forecast-comparison artifact. Closing-count corrections emit
-> `DAILY_UPDATE_SUBMITTED`, not `INVENTORY_ADJUSTED`, and activity-bearing runs
-> intentionally lack the first-slice procurement contract. Delivery changes
-> preserve event history, but the Inventory adapter rejects commitment-bearing
-> snapshots until a commitment-aware projection contract exists. Sales batches
-> are revisioned but are not assessment-queue triggers and do not feed the
-> frozen forecast input. Do not mark the corresponding routes complete or
-> synthesize local semantics around these backend-owned gaps.
+> Local contract audit (2026-09-18, after merging `origin/main`): promotion
+> application/comparison, canonical daily-correction events, activity-aware
+> procurement snapshots, and commitment-aware delivery projection are present
+> in the merged Backend contracts. The local Agent adapters now consume those
+> contracts and preserve deterministic ownership. Sales-driven materiality is
+> still explicitly ML-owned in the Backend handover, so this pass does not
+> invent a sales threshold or run a full chain for every sales batch.
 
 - [x] Integrate deterministic materiality kernel for authoritative supplier availability/status changes
   - [x] Affected IDs
@@ -390,22 +385,31 @@
   - [x] Evidence refs
   - [x] Freshness check
 
-- [ ] Implement promotion route
-  - [ ] Demand
-  - [ ] Inventory if needed
-  - [ ] Procurement if needed
+- [x] Implement promotion route
+  - [x] Demand uses the frozen promotion application and forecast comparison
+  - [x] Inventory receives the adjusted demand only when comparison is material
+  - [x] Procurement remains conditional on projected stock exposure
 
-- [ ] Implement inventory-correction route
-  - [ ] Inventory
-  - [ ] Procurement only if sourcing changes
+- [x] Implement inventory-correction route
+  - [x] Canonical daily correction routes to Inventory
+  - [x] Procurement is conditional on projected stock exposure
 
 - [x] Implement supplier-disruption route for authoritative availability/status changes
   - [x] Procurement first
   - [ ] Inventory only if exposure needs reassessment
 
 - [ ] Implement complex multi-domain route
-  - [ ] Demand -> Inventory -> Procurement when justified
-  - [ ] Coordinator can perform bounded second investigation round
+  - [x] Demand -> Inventory -> Procurement routing is implemented
+  - [x] Coordinator can perform bounded second investigation round
+  - [ ] PostgreSQL-backed promotion-to-publication acceptance is pending a local test database
+
+- [ ] Implement sales-trigger materiality route
+  - [ ] ML-owned material threshold / forecast-input contract
+  - [x] Sales runs do not guess a threshold or invoke the full chain
+
+- [x] Implement delivery-disruption route
+  - [x] Inventory consumes frozen received/cancelled/outstanding commitments once
+  - [x] Procurement is conditional on incremental shortage exposure
 
 - [x] Implement `KEEP_CURRENT_PLAN` for non-material supplier events
 - [x] Implement `REVISE_PLAN` for material supplier events
@@ -473,7 +477,7 @@
   - [x] Promotion details
   - [x] Inventory freshness
   - [x] Forecast/history and policy/version evidence
-  - Missing values remain `MISSING_REQUIRED_DATA` / incomplete; they are never defaulted into a feasible or approved plan. Unsupported promotion/inventory/delivery replanning routes remain blocked by their Pass 6 contracts.
+  - Missing values remain `MISSING_REQUIRED_DATA` / incomplete; they are never defaulted into a feasible or approved plan. Sales materiality remains blocked by its explicitly ML-owned contract.
 
 - [x] Test prompt injection
   - [x] Manager text tries to override policy
@@ -538,7 +542,7 @@
 - [x] Enforce persisted audit-entry append-only history in PostgreSQL
 - [ ] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed supplier-replanning verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. Audit payloads retain concise structured metadata/evidence refs only. Promotion, inventory, delivery, and Demand *replanning* audit paths remain open with their blocked Pass 6 contracts.
+  - PostgreSQL-backed supplier-replanning verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. The local promotion, correction, and delivery adapters preserve the same append-only evidence path; their PostgreSQL execution remains pending the test database in this environment. Sales materiality remains explicitly ML-owned.
 
 - [x] Review and commit Pass 9
 
