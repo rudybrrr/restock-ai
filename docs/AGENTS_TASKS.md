@@ -607,26 +607,45 @@
 
 - [ ] Review and commit Pass 10
 
+Closure verification (2026-09-18): the real local demo was prepared and run
+twice against disposable PostgreSQL database `restock_demo_closure_9043632c0c40448091fdd51d82f04948`.
+The machine-readable outputs were valid and repeatable; promotion failures
+remained failures, live model metrics remained `pending`, business metrics
+remained `unsupported`, and evaluator truth stayed separate from runtime
+evidence. Promotion and inventory-correction acceptance remain open because
+the current authoritative backend contracts do not support those fixtures.
+
 ---
 
 # 13. Frontend Agent Evidence
 
-- [ ] Show active plan / status / version
+- [x] Show active plan / status / version
 - [ ] Show plan history
-- [ ] Show exact pending approval version
-- [ ] Show stale approval errors
+- [x] Show exact pending approval version
+- [x] Show stale approval errors
 - [ ] Show event timeline
-- [ ] Show Coordinator routing
-- [ ] Show specialist calls
-- [ ] Show tool-call summaries
-- [ ] Show validation result
-- [ ] Show concise decision explanation
+- [x] Show Coordinator routing
+- [x] Show specialist calls
+- [x] Show tool-call summaries
+- [x] Show validation result
+- [x] Show concise decision explanation
 - [ ] Show benchmark results
 - [ ] Review end-to-end UI with Ethan
+
+Closure verification (2026-09-18): manager-safe evidence API and browser
+assertions passed with screenshots disabled. The projection exposed plan,
+approval, routing, specialist/tool, validation, decision, and evaluation
+summary fields without raw frozen state, prompts, scratchpads, or secrets.
 
 ---
 
 # 14. Golden Acceptance Scenario
+
+Closure status (2026-09-18): not complete. Supplier, delivery-disruption,
+and stale-approval paths exercised on the real local runner; promotion is
+blocked by an incomplete authoritative `PromotionEventPayload`, and inventory
+correction is blocked by the missing authoritative inventory-adjustment event
+contract. No substitute semantics were added.
 
 - [ ] Start with `PLAN-v2` pending or approved
 - [ ] Supplier availability falls
@@ -647,6 +666,11 @@
 ---
 
 # 15. Hero Demo
+
+Closure status (2026-09-18): remains open until the promotion and inventory
+authoritative contracts land. The local reset/prepare/run mechanism itself was
+verified twice from the same dedicated demo database without carry-over plans,
+events, commitments, or revision drift.
 
 - [ ] Monday: normal scheduled planning
   - [ ] Demand -> Inventory -> Procurement
@@ -751,10 +775,10 @@
 
 # 18. Final Hardening
 
-- [ ] Run full test suite
+- [x] Run full test suite
 - [ ] Run Agent permission suite
 - [ ] Run prompt-injection suite
-- [ ] Run approval / stale-version suite
+- [x] Run approval / stale-version suite
 - [ ] Run optimiser termination suite
 - [ ] Run full benchmark
 - [ ] Run golden acceptance scenario
@@ -772,7 +796,13 @@
   - [ ] No unnecessary permissions
   - [ ] No decorative specialists
   - [ ] No stale enums / statuses
-  - [ ] No target metrics presented as achieved results
+  - [x] No target metrics presented as achieved results
+
+Closure verification (2026-09-18): full PostgreSQL suite passed (724 tests),
+database-independent suite passed (635 tests), and static/database checks
+passed: Pyright, Ruff, Alembic check, frontend lint/typecheck/build, and
+`git diff --check`. The full golden acceptance and hero demo remain open as
+noted above.
 
 - [ ] Freeze submission build
 - [ ] Record final commit SHA
