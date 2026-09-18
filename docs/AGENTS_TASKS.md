@@ -445,48 +445,54 @@
 - [x] Confirm no Agent approval authority
 - [x] Confirm no real order placement / payment
 
-- [ ] Review and commit Pass 7
+- [x] Review and commit Pass 7
 
 ---
 
 # 10. Coding Pass 8 — Safety and Prompt Injection
 
-- [ ] Enforce business rules outside prompts
-  - [ ] Approved suppliers only
-  - [ ] MOQ
-  - [ ] Pack size
-  - [ ] Lead time
-  - [ ] Delivery cutoff
-  - [ ] Storage limits
-  - [ ] Safety-stock bounds
-  - [ ] Approval policy
-  - [ ] State freshness
-  - [ ] Plan-version validity
+- [x] Enforce business rules outside prompts
+  - [x] Approved suppliers only
+  - [x] MOQ
+  - [x] Pack size
+  - [x] Lead time
+  - [x] Delivery cutoff
+  - [x] Storage limits
+  - [x] Safety-stock bounds
+  - [x] Approval policy
+  - [x] State freshness
+  - [x] Plan-version validity
+  - Deterministic procurement validation and Backend publication own these checks; local scripted reasoning receives only typed routing facts and evidence references.
 
-- [ ] Implement fail-closed unknown-data handling
+- [x] Implement fail-closed unknown-data handling
   - [x] Supplier availability at the Coordinator / Procurement orchestration boundary
-  - [ ] Shelf life
-  - [ ] Recipe quantity
+  - [x] Shelf life
+  - [x] Recipe quantity
   - [x] MOQ / pack size at the Coordinator / Procurement orchestration boundary
   - [x] Lead time at the Coordinator / Procurement orchestration boundary
-  - [ ] Promotion details
-  - [ ] Inventory freshness
+  - [x] Promotion details
+  - [x] Inventory freshness
+  - [x] Forecast/history and policy/version evidence
+  - Missing values remain `MISSING_REQUIRED_DATA` / incomplete; they are never defaulted into a feasible or approved plan. Unsupported promotion/inventory/delivery replanning routes remain blocked by their Pass 6 contracts.
 
-- [ ] Test prompt injection
+- [x] Test prompt injection
   - [x] Manager text tries to override policy
   - [x] Supplier text contains instructions
-  - [ ] Promotion text contains instructions
-  - [ ] Attempt to add unapproved supplier
+  - [x] Promotion text contains instructions
+  - [x] Attempt to add unapproved supplier
   - [x] Attempt to change MOQ / budget
   - [x] Attempt to bypass approval
   - [x] Attempt to treat unknown as available
+  - [x] Attempt to force outcome, trigger a sibling, or inject fake evidence/state revision
 
-- [ ] Test tool permissions
-  - [x] Procurement cannot use another domain's tools
-  - [x] Procurement cannot call agents
-  - [x] Procurement cannot mutate plan state
+- [x] Test tool permissions
+  - [x] Coordinator alone invokes specialists
+  - [x] Specialists cannot invoke agents
+  - [x] Demand / Inventory / Procurement cross-domain tools fail closed
+  - [x] Specialists cannot mutate plan state or approve
+  - [x] No generic DB mutation tool exists; allowlists are exact and fail closed
 
-- [ ] Review and commit Pass 8
+- [x] Review and commit Pass 8
 
 ---
 
@@ -500,25 +506,25 @@
   - [x] start/end
   - [x] outcome / reason
 
-- [ ] Persist specialist calls
+- [x] Persist specialist calls
   - [x] `agent_call_id`
   - [x] parent run
-  - [ ] objective
+  - [x] objective
   - [x] context refs
-  - [ ] structured result
-  - [ ] status / timing
+  - [x] structured result evidence refs
+  - [x] status / timing where canonical timestamps are supported
 
 - [ ] Persist tool calls
   - [x] `tool_call_id`
   - [x] parent agent call
   - [x] tool name
-  - [ ] request schema version
+  - [x] request schema version
   - [x] evidence / result refs
   - [x] success / failure
-  - [ ] duration
-  - [ ] error / termination code
+  - [ ] duration — no canonical duration contract; not invented locally.
+  - [x] error / termination code
 
-- [ ] Persist business decision events
+- [x] Persist business decision events
   - [x] Event
   - [x] Materiality evidence
   - [x] Routing
@@ -529,11 +535,12 @@
   - [x] Final outcome
 
 - [x] Keep audit history append-only
+- [x] Enforce persisted audit-entry append-only history in PostgreSQL
 - [ ] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed supplier-replanning verification now covers deterministic materiality, Coordinator routing, Procurement tool calls, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. Promotion, inventory, delivery, and Demand audit paths remain open.
+  - PostgreSQL-backed supplier-replanning verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. Audit payloads retain concise structured metadata/evidence refs only. Promotion, inventory, delivery, and Demand *replanning* audit paths remain open with their blocked Pass 6 contracts.
 
-- [ ] Review and commit Pass 9
+- [x] Review and commit Pass 9
 
 ---
 
