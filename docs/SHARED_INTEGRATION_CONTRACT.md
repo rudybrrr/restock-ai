@@ -1,6 +1,6 @@
 # Backend and Agent integration contract
 
-The first Pass 3E procurement input is implemented and frozen. This contract defines the Backend-owned input that the Agent adapter may send to the deterministic engine. It does not claim that the adapter, result publication, materiality checks, or contingency flow are complete.
+The first Pass 3E procurement input and the Backend-owned sales-materiality boundary are implemented and frozen. This contract defines the authoritative input that the Agent adapter may send to the deterministic engine. It does not claim that the Agent adapter or contingency flow is complete.
 
 ## Ownership
 
@@ -41,6 +41,8 @@ Both routes require the Agent bearer credential.
 | --- | --- |
 | Inspect the policy and complete approved domain | `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1` |
 | Read the exact input frozen for a claimed run | `GET /api/v1/runs/{run_id}/procurement-contract` |
+| Inspect the approved sales threshold policy | `GET /api/v1/sales-threshold-policies/SALES_MATERIALITY_V1` |
+| Read the policy and references frozen for a claimed run | `GET /api/v1/runs/{run_id}/sales-materiality-context` |
 
 The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, versioned `forecast_input`, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, authoritative daily sales, sales batches, promotions, holidays, order-cycle decisions, and current supplier observations. The forecast input must be effective by `as_of` and recorded by `known_at`; the complete contract is saved in the claimed run snapshot under the captured state revision.
 
@@ -48,10 +50,28 @@ The first-slice policy can be selected from its declared issue time through its 
 
 `commitment_projection` is selected at the same `as_of` / `known_at` / state-revision boundary. Its manifest includes every frozen external delivery. Outstanding supply carries the latest expected arrival, quantity after receipts/shortfall/cancellation, a stable projected-lot ID, and expected expiry derived from the approved offer's shelf-life revision. Closed commitments remain in the manifest with zero outstanding quantity and no projected lot. Missing expiry or approved-offer evidence marks the projection incomplete instead of inventing a value.
 
+## Sales-materiality request and result
+
+`SALES_MATERIALITY_V1` is stored as a versioned Backend policy and selected by `as_of`, `known_at`, and captured state revision. It freezes Aniq's approved rule: cumulative per-dish deviation is material when it is at least `max(5, 0.2 × expected)`, after at least 20 expected portions and two complete half-hour buckets in the one-day Singapore demo scope. The policy endpoint contains the persisted definition; the run context adds the selected-policy and snapshot evidence references.
+
+The Agent owns the numerical call but uses Backend as the immutable record boundary:
+
+| Step | Route |
+| --- | --- |
+| Persist the exact engine request | `POST /api/v1/runs/{run_id}/sales-materiality-requests` |
+| Read the persisted exchange | `GET /api/v1/runs/{run_id}/sales-materiality-assessment` |
+| Persist the exact engine result | `PUT /api/v1/runs/{run_id}/sales-materiality-requests/{request_id}/result` |
+
+The request combines the issued forecast, versioned forecast input, catalogue, plan/safety references, risk input, snapshot evidence, and selected threshold policy with its evidence. Backend hashes and stores the canonical request. One request is allowed per run; an identical retry is idempotent and a different retry returns `409 MATERIALITY_REQUEST_CONFLICT`.
+
+The result must identify the same run, clocks, state revision, snapshot, forecast input, policy version, coverage horizon, and required evidence references. Backend hashes and stores it once. An identical retry is idempotent and a changed result returns `409 MATERIALITY_RESULT_CONFLICT`. A new operational event makes the running contract stale and prevents request/result persistence or publication.
+
+Sales-triggered runs require this persisted result before completion. An incomplete result can only lead to escalation; a material result cannot keep the plan unchanged; a complete non-material result may certify `KEEP_CURRENT_PLAN` without running the procurement optimiser. Manager approval and external order recording remain separate.
+
 ## Adapter rules
 
 The Agent adapter may translate the persisted transport into the engine's typed input, but every mapped value must come from this contract or another explicitly versioned artifact. Policy identifier differences must be handled explicitly and tested; an adapter must not silently rename a policy, fetch newer supplier facts, or invent a fallback.
 
 Only a completed search with a complete, feasible independent validation may proceed to Backend freshness and publication checks. Incomplete calculations retain their findings and null results. Existing external purchases remain fixed commitments and are never recreated as recommendation lines.
 
-The remaining integration gate is the real adapter and result path: connect this input to the deterministic engine, persist the exact request/result evidence, map outcomes consistently, then replay the normal-plan and contingency scenarios end to end.
+The remaining sales-materiality integration gate is Rudy's adapter: fetch the context, persist the exact request, call Aniq's pure function, map its result without collapsing `None`/`False`/`True`, and persist that result. The wider project still needs the normal-plan and contingency scenarios replayed end to end.

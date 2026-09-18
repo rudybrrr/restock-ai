@@ -78,6 +78,7 @@ class Completion(BaseModel):
             "NO_FEASIBLE_SUPPLIER",
             "UNRESOLVED_SHORTAGE",
             "POLICY_VIOLATION",
+            "CALCULATION_INCOMPLETE",
             "TOOL_FAILURE",
         ]
         | None
