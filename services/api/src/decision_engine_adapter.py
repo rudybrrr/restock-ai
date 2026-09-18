@@ -19,9 +19,10 @@ from src.agent_contracts import (
     ToolRequest,
     ToolResult,
 )
+from src.demand_tools import BackendDemandTools
 from src.errors import ApiError, ErrorDetail, ErrorResponse
-from src.forecasting import DailySalesObservation, seasonal_baseline
 from src.inventory_projection import SourceEvidence
+from src.inventory_tools import _commitment_supplies
 from src.planning_schemas import Candidate, PlanLine
 from src.procurement import (
     EVIDENCE,
@@ -33,6 +34,7 @@ from src.procurement import (
     validate_candidate,
 )
 from src.procurement_contract_schemas import ProcurementContract
+from src.promotion_forecasting import apply_promotions
 from src.requirements import calculate_requirements
 from src.schemas import (
     EstimatedInventoryLot,
@@ -41,7 +43,6 @@ from src.schemas import (
     RecipeItem,
     Supplier,
 )
-from src.service_buckets import ServicePeriod, allocate_service_buckets
 
 
 def _identity(value: object) -> str:
@@ -75,38 +76,42 @@ def run_first_slice_engine(session: Session, run) -> dict:
     if contract.run_id != run.id or contract.captured_state_revision != str(run.input_revision):
         raise ApiError(409, "MISSING_REQUIRED_DATA", "Frozen contract revision mismatch")
     frozen = contract.frozen_state
-    if frozen is None or frozen.get("commitments") or frozen.get("sales_batches"):
+    if frozen is None:
         raise ApiError(409, "MISSING_REQUIRED_DATA", "Frozen baseline is incomplete")
 
     policy = contract.policy.payload
-    history = [
-        DailySalesObservation(
-            row.service_date,
-            row.available_at,
-            row.revision,
-            row.portions,
-            row.promotion,
-            row.censored,
-        )
-        for row in contract.forecast_input.payload.history
-    ]
     menu = [MenuItem.model_validate(row) for row in frozen["menu_items"]]
     ingredients = [Ingredient.model_validate(row) for row in frozen["ingredients"]]
     recipes = [RecipeItem.model_validate(row) for row in frozen["recipes"]]
-    forecast = seasonal_baseline(
-        history, menu, issue_time=policy.issue_time, target_date=policy.target_date
-    )
-    if any(row.expected_portions is None for row in forecast.values()):
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Forecast history is insufficient")
-    daily = {
-        key: row.expected_portions
-        for key, row in forecast.items()
-        if row.expected_portions is not None
-    }
-    if len(daily) != len(forecast):
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Forecast output is incomplete")
-    profile = [ServicePeriod(item.start, item.end, item.weight) for item in policy.service_profile]
-    buckets = allocate_service_buckets(daily, menu, target_date=policy.target_date, profile=profile)
+    forecast_adapter = BackendDemandTools(session)
+    normal = forecast_adapter._normal_forecast(contract, f"{run.id}:forecast:normal")
+    if run.trigger in {"PROMOTION_CREATED", "PROMOTION_CHANGED"}:
+        application = apply_promotions(
+            normal,
+            menu,
+            events=forecast_adapter._promotion_events(run.id, contract.known_at),
+            context_evidence=SourceEvidence(
+                f"{run.id}:promotion-context",
+                contract.known_at,
+                contract.captured_state_revision,
+            ),
+            context_complete=isinstance(frozen.get("promotions"), list),
+            as_of=contract.as_of,
+            known_at=contract.known_at,
+            result_reference=f"{run.id}:forecast:promotion",
+        )
+        if not application.complete or application.forecast is None:
+            raise ApiError(
+                409,
+                "CALCULATION_INCOMPLETE",
+                "Frozen promotion forecast application is incomplete",
+            )
+        buckets = list(application.forecast.buckets)
+        profile = list(application.forecast.profile)
+    else:
+        buckets = list(normal.buckets)
+        profile = list(normal.profile)
+    supplies, supply_manifest = _commitment_supplies(contract.commitment_projection)
     revision = contract.captured_state_revision
     available = contract.known_at
     source = SourceEvidence(contract.forecast_input.source_revision, available, revision)
@@ -116,7 +121,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
         "menu_items": menu,
         "ingredients": ingredients,
         "recipes": recipes,
-        "supplies": [],
+        "supplies": supplies,
         "as_of": contract.as_of,
         "target_date": policy.target_date,
         "horizon_end": policy.horizon_end,
@@ -126,7 +131,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
             item.id: [lot["id"] for lot in frozen["inventory"] if lot["ingredient_id"] == item.id]
             for item in ingredients
         },
-        "supply_manifest": [],
+        "supply_manifest": supply_manifest,
         "recipe_manifest": [(item.menu_item_id, item.ingredient_id) for item in recipes],
         "service_profile": profile,
         "evidence": {key: source for key in ("snapshot", "opening", "supply", "catalogue", "recipe", "forecast", "profile")},

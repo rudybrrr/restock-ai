@@ -217,6 +217,8 @@ def test_coordinator_outcomes_always_cross_the_publication_boundary(
     [
         (EventType.PROMOTION_CHANGED, SpecialistType.DEMAND),
         (EventType.INVENTORY_ADJUSTED, SpecialistType.INVENTORY),
+        (EventType.DAILY_UPDATE_CORRECTED, SpecialistType.INVENTORY),
+        (EventType.DELIVERY_DELAYED, SpecialistType.INVENTORY),
         (EventType.SUPPLIER_AVAILABILITY_CHANGED, SpecialistType.PROCUREMENT),
     ],
 )

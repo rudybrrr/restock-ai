@@ -64,6 +64,7 @@ class Tools:
             AgentToolName.GET_PROMOTION_CONTEXT: EvidenceCategory.PROMOTION_CONTEXT,
             AgentToolName.GET_HISTORICAL_DEMAND: EvidenceCategory.DEMAND_HISTORY,
             AgentToolName.FORECAST_DEMAND: EvidenceCategory.FORECAST_RESULT,
+            AgentToolName.COMPARE_FORECAST_VERSIONS: EvidenceCategory.FORECAST_RESULT,
         }[request.tool]
         source = (
             EvidenceSource.DECISION_ENGINE
@@ -111,6 +112,10 @@ def test_promotion_revision_uses_context_history_and_real_forecast_path() -> Non
             },
             AgentToolName.GET_HISTORICAL_DEMAND: {"history_available": True},
             AgentToolName.FORECAST_DEMAND: {"forecast_complete": True},
+            AgentToolName.COMPARE_FORECAST_VERSIONS: {
+                "comparison_complete": True,
+                "forecast_material": True,
+            },
         }
     )
     result = specialist(tools).execute(delegation())
@@ -119,7 +124,59 @@ def test_promotion_revision_uses_context_history_and_real_forecast_path() -> Non
         AgentToolName.GET_PROMOTION_CONTEXT,
         AgentToolName.GET_HISTORICAL_DEMAND,
         AgentToolName.FORECAST_DEMAND,
+        AgentToolName.COMPARE_FORECAST_VERSIONS,
     ]
+    assert result.recommended_next_step is RecommendedNextStep.CHECK_INVENTORY
+
+
+def test_non_material_promotion_compares_frozen_forecasts_and_keeps_plan() -> None:
+    tools = Tools(
+        {
+            AgentToolName.GET_SALES_CONTEXT: {
+                "forecast_required": True,
+                "promotion_context_required": True,
+            },
+            AgentToolName.GET_PROMOTION_CONTEXT: {"missing_required_data": False},
+            AgentToolName.GET_HISTORICAL_DEMAND: {"history_available": True},
+            AgentToolName.FORECAST_DEMAND: {"forecast_complete": True},
+            AgentToolName.COMPARE_FORECAST_VERSIONS: {
+                "comparison_complete": True,
+                "forecast_material": False,
+            },
+        }
+    )
+
+    result = specialist(tools).execute(delegation())
+
+    assert [call.tool for call in tools.calls] == [
+        AgentToolName.GET_SALES_CONTEXT,
+        AgentToolName.GET_PROMOTION_CONTEXT,
+        AgentToolName.GET_HISTORICAL_DEMAND,
+        AgentToolName.FORECAST_DEMAND,
+        AgentToolName.COMPARE_FORECAST_VERSIONS,
+    ]
+    assert result.recommended_next_step is RecommendedNextStep.NONE
+
+
+def test_material_promotion_comparison_routes_inventory() -> None:
+    tools = Tools(
+        {
+            AgentToolName.GET_SALES_CONTEXT: {
+                "forecast_required": True,
+                "promotion_context_required": True,
+            },
+            AgentToolName.GET_PROMOTION_CONTEXT: {"missing_required_data": False},
+            AgentToolName.GET_HISTORICAL_DEMAND: {"history_available": True},
+            AgentToolName.FORECAST_DEMAND: {"forecast_complete": True},
+            AgentToolName.COMPARE_FORECAST_VERSIONS: {
+                "comparison_complete": True,
+                "forecast_material": True,
+            },
+        }
+    )
+
+    result = specialist(tools).execute(delegation())
+
     assert result.recommended_next_step is RecommendedNextStep.CHECK_INVENTORY
 
 

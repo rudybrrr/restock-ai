@@ -14,20 +14,63 @@ from src.agent_contracts import (
     ToolRequest,
     ToolResult,
 )
+from src.demand_tools import BackendDemandTools
 from src.errors import ApiError, ErrorDetail, ErrorResponse
-from src.forecasting import DailySalesObservation, seasonal_baseline
-from src.inventory_projection import SourceEvidence, project_inventory
+from src.inventory_projection import ExpectedSupply, SourceEvidence, project_inventory
+from src.operations_schemas import Delivery
 from src.planning import get_run
 from src.procurement_contract_schemas import ProcurementContract
+from src.promotion_forecasting import apply_promotions
 from src.sales import estimated_inventory
 from src.schemas import EstimatedInventoryLot, Ingredient, MenuItem, RecipeItem
-from src.service_buckets import ServicePeriod, allocate_service_buckets
 
 
 def _identity(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, default=str, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _commitment_supplies(projection) -> tuple[list[ExpectedSupply], list[str]]:
+    """Adapt Backend's frozen commitment projection without re-counting receipts."""
+    if projection is None or not projection.complete:
+        raise ApiError(
+            409,
+            "MISSING_REQUIRED_DATA",
+            "Frozen commitment projection is incomplete",
+        )
+    supplies: list[ExpectedSupply] = []
+    for frozen in projection.supplies:
+        delivery = Delivery.model_validate(frozen.delivery)
+        evidence = frozen.expiry_evidence
+        expiry_evidence = (
+            SourceEvidence(
+                evidence.reference,
+                evidence.available_at,
+                evidence.captured_revision,
+            )
+            if evidence is not None
+            else None
+        )
+        if delivery.outstanding_quantity and (
+            frozen.expiry_date is None
+            or expiry_evidence is None
+            or frozen.projected_lot_id is None
+        ):
+            raise ApiError(
+                409,
+                "MISSING_REQUIRED_DATA",
+                "Outstanding commitment is missing projected-lot evidence",
+            )
+        supplies.append(
+            ExpectedSupply(
+                delivery,
+                frozen.expiry_date,
+                expiry_evidence,
+                frozen.projected_lot_id,
+            )
+        )
+    return supplies, list(projection.supply_manifest)
 
 
 class BackendInventoryTools:
@@ -102,6 +145,10 @@ class BackendInventoryTools:
                         in {
                             "INVENTORY_ADJUSTED",
                             "INVENTORY_WASTED",
+                            "DAILY_UPDATE_SUBMITTED",
+                            "DAILY_UPDATE_CORRECTED",
+                            "PROMOTION_CREATED",
+                            "PROMOTION_CHANGED",
                             "DELIVERY_DELAYED",
                             "DELIVERY_SHORT",
                             "DELIVERY_CANCELLED",
@@ -184,51 +231,42 @@ class BackendInventoryTools:
 
     def _projection(self, run, snapshot: dict, revision: str):
         contract = self._contract(snapshot, run.id, revision)
-        if snapshot.get("commitments"):
-            raise ApiError(
-                409,
-                "MISSING_REQUIRED_DATA",
-                "Frozen commitments need an inventory projection contract",
-            )
-        history = [
-            DailySalesObservation(
-                row.service_date,
-                row.available_at,
-                row.revision,
-                row.portions,
-                row.promotion,
-                row.censored,
-            )
-            for row in contract.forecast_input.payload.history
-        ]
         frozen = contract.frozen_state or snapshot
+        supplies, supply_manifest = _commitment_supplies(contract.commitment_projection)
         menu = [MenuItem.model_validate(row) for row in frozen.get("menu_items", [])]
         ingredients = [
             Ingredient.model_validate(row) for row in frozen.get("ingredients", [])
         ]
         recipes = [RecipeItem.model_validate(row) for row in frozen.get("recipes", [])]
         policy = contract.policy.payload
-        forecast = seasonal_baseline(
-            history, menu, issue_time=policy.issue_time, target_date=policy.target_date
-        )
-        if any(item.expected_portions is None for item in forecast.values()):
-            raise ApiError(
-                409, "MISSING_REQUIRED_DATA", "Forecast history is insufficient"
+        forecast_adapter = BackendDemandTools(self._session)
+        normal = forecast_adapter._normal_forecast(contract, f"{run.id}:forecast:normal")
+        if run.trigger in {"PROMOTION_CREATED", "PROMOTION_CHANGED"}:
+            application = apply_promotions(
+                normal,
+                menu,
+                events=forecast_adapter._promotion_events(run.id, contract.known_at),
+                context_evidence=SourceEvidence(
+                    f"{run.id}:promotion-context",
+                    contract.known_at,
+                    contract.captured_state_revision,
+                ),
+                context_complete=isinstance(snapshot.get("promotions"), list),
+                as_of=contract.as_of,
+                known_at=contract.known_at,
+                result_reference=f"{run.id}:forecast:promotion",
             )
-        profile = [
-            ServicePeriod(item.start, item.end, item.weight)
-            for item in policy.service_profile
-        ]
-        buckets = allocate_service_buckets(
-            {
-                key: value.expected_portions
-                for key, value in forecast.items()
-                if value.expected_portions is not None
-            },
-            menu,
-            target_date=policy.target_date,
-            profile=profile,
-        )
+            if not application.complete or application.forecast is None:
+                raise ApiError(
+                    409,
+                    "CALCULATION_INCOMPLETE",
+                    "Frozen promotion forecast application is incomplete",
+                )
+            buckets = list(application.forecast.buckets)
+            profile = list(application.forecast.profile)
+        else:
+            buckets = list(normal.buckets)
+            profile = list(normal.profile)
         lots = [
             EstimatedInventoryLot.model_validate(row)
             for row in frozen.get("inventory", [])
@@ -242,7 +280,7 @@ class BackendInventoryTools:
             menu,
             ingredients,
             recipes,
-            [],
+            supplies,
             as_of=contract.as_of,
             target_date=policy.target_date,
             horizon_end=policy.horizon_end,
@@ -252,7 +290,7 @@ class BackendInventoryTools:
                 item.id: [lot.id for lot in lots if lot.ingredient_id == item.id]
                 for item in ingredients
             },
-            supply_manifest=[],
+            supply_manifest=supply_manifest,
             recipe_manifest=[
                 (item.menu_item_id, item.ingredient_id) for item in recipes
             ],

@@ -63,8 +63,8 @@ DEMAND_PRIMARY_EVIDENCE: dict[
         EvidenceCategory.FORECAST_RESULT,
         EvidenceSource.DECISION_ENGINE,
     ),
-    # There is currently no authoritative persisted comparison policy.  The tool
-    # exists so the contract is explicit and fails closed until such a policy lands.
+    # Forecast comparison is a Backend-owned deterministic artifact; Demand only
+    # consumes its materiality fact and never authors the delta itself.
     AgentToolName.COMPARE_FORECAST_VERSIONS: (
         EvidenceCategory.FORECAST_RESULT,
         EvidenceSource.BACKEND,
@@ -227,15 +227,42 @@ class LocalDemandReasoning:
                     interpreted_impact="The forecasting kernel could not establish a complete forecast.",
                     summary="Demand forecast coverage is incomplete.",
                 )
-            # Comparison is deliberately not invoked: no immutable comparison
-            # artifact or materiality policy exists yet.  Inventory gets the new
-            # forecast evidence, and remains the only authority on exposure.
+            return self._decision(
+                context,
+                DemandDecisionAction.CALL_TOOL,
+                tool=AgentToolName.COMPARE_FORECAST_VERSIONS,
+                input_refs=[latest.output_ref],
+                interpreted_impact="Compare the immutable forecast artifact with the frozen prior basis.",
+                summary="Compare forecast versions.",
+            )
+        if latest.tool is AgentToolName.COMPARE_FORECAST_VERSIONS:
+            if facts.get("comparison_complete") is not True:
+                return self._decision(
+                    context,
+                    DemandDecisionAction.COMPLETE,
+                    missing_information=["forecast_comparison"],
+                    interpreted_impact="The immutable forecast comparison is incomplete.",
+                    summary="Forecast comparison is incomplete.",
+                )
+            next_step = (
+                RecommendedNextStep.CHECK_INVENTORY
+                if facts.get("forecast_material") is True
+                else RecommendedNextStep.NONE
+            )
             return self._decision(
                 context,
                 DemandDecisionAction.COMPLETE,
-                recommended_next_step=RecommendedNextStep.CHECK_INVENTORY,
-                interpreted_impact="A new authoritative forecast is available for inventory exposure review.",
-                summary="Route the forecast evidence to Inventory.",
+                recommended_next_step=next_step,
+                interpreted_impact=(
+                    "The frozen comparison shows a material demand change."
+                    if next_step is RecommendedNextStep.CHECK_INVENTORY
+                    else "The frozen comparison shows no material demand change."
+                ),
+                summary=(
+                    "Route the material forecast change to Inventory."
+                    if next_step is RecommendedNextStep.CHECK_INVENTORY
+                    else "Keep the current plan."
+                ),
             )
         return self._decision(
             context,

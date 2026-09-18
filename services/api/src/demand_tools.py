@@ -2,9 +2,12 @@
 
 import hashlib
 import json
+from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src import database as db
 from src.agent_contracts import (
     AgentToolName,
     EvidenceCategory,
@@ -15,9 +18,18 @@ from src.agent_contracts import (
 )
 from src.errors import ApiError, ErrorDetail, ErrorResponse
 from src.forecasting import DailySalesObservation, seasonal_baseline
+from src.inventory_projection import SourceEvidence
+from src.operations_schemas import PromotionEvent
 from src.planning import get_run
 from src.procurement_contract_schemas import ProcurementContract
+from src.promotion_forecasting import (
+    SOURCES,
+    ForecastVersion,
+    apply_promotions,
+    compare_forecast_versions,
+)
 from src.schemas import MenuItem
+from src.service_buckets import ServicePeriod, allocate_service_buckets
 
 
 def _identity(value: object) -> str:
@@ -69,8 +81,7 @@ class BackendDemandTools:
                 )
             snapshot = run.snapshot
             if request.tool is AgentToolName.GET_SALES_CONTEXT:
-                relevant = run.trigger in {
-                    "SALES_UPDATED",
+                promotion_context_required = run.trigger in {
                     "PROMOTION_CREATED",
                     "PROMOTION_CHANGED",
                 }
@@ -83,9 +94,13 @@ class BackendDemandTools:
                         f"{run.id}:sales-context",
                     ),
                     {
-                        "forecast_required": relevant,
-                        "promotion_context_required": run.trigger
-                        in {"PROMOTION_CREATED", "PROMOTION_CHANGED"},
+                        # The Backend handover explicitly leaves sales-driven
+                        # materiality to the ML-owned contract.  A sales batch
+                        # therefore gets a bounded context read, but must not
+                        # trigger a guessed forecast/replanning chain here.
+                        "forecast_required": promotion_context_required,
+                        "promotion_context_required": promotion_context_required,
+                        "sales_materiality_supported": False,
                         "missing_required_data": "authoritative_daily_sales"
                         not in snapshot,
                     },
@@ -118,11 +133,7 @@ class BackendDemandTools:
             if request.tool is AgentToolName.FORECAST_DEMAND:
                 return self._forecast(request, snapshot, contract)
             if request.tool is AgentToolName.COMPARE_FORECAST_VERSIONS:
-                raise ApiError(
-                    409,
-                    "MISSING_REQUIRED_DATA",
-                    "No authoritative immutable forecast comparison contract exists",
-                )
+                return self._compare(request, run, snapshot, contract)
             raise ApiError(422, "TOOL_NOT_SUPPORTED", "Unsupported Demand tool")
         except ApiError as error:
             return ErrorResponse(
@@ -204,4 +215,163 @@ class BackendDemandTools:
                 f"forecast:{_identity(artifact)}",
             ),
             {"forecast_complete": complete},
+        )
+
+    @staticmethod
+    def _menu(contract: ProcurementContract) -> list[MenuItem]:
+        frozen = contract.frozen_state or {}
+        return [MenuItem.model_validate(row) for row in frozen.get("menu_items", [])]
+
+    @staticmethod
+    def _history(contract: ProcurementContract) -> list[DailySalesObservation]:
+        return [
+            DailySalesObservation(
+                row.service_date,
+                row.available_at,
+                row.revision,
+                row.portions,
+                row.promotion,
+                row.censored,
+            )
+            for row in contract.forecast_input.payload.history
+        ]
+
+    @staticmethod
+    def _profile(contract: ProcurementContract) -> tuple[ServicePeriod, ...]:
+        return tuple(
+            ServicePeriod(item.start, item.end, item.weight)
+            for item in contract.policy.payload.service_profile
+        )
+
+    def _normal_forecast(
+        self, contract: ProcurementContract, reference: str
+    ) -> ForecastVersion:
+        menu = self._menu(contract)
+        policy = contract.policy.payload
+        baseline = seasonal_baseline(
+            self._history(contract),
+            menu,
+            issue_time=policy.issue_time,
+            target_date=policy.target_date,
+        )
+        if any(value.expected_portions is None for value in baseline.values()):
+            raise ApiError(409, "MISSING_REQUIRED_DATA", "Forecast history is insufficient")
+        profile = self._profile(contract)
+        buckets = allocate_service_buckets(
+            {
+                dish_id: value.expected_portions
+                for dish_id, value in baseline.items()
+                if value.expected_portions is not None
+            },
+            menu,
+            target_date=policy.target_date,
+            profile=profile,
+        )
+        evidence = tuple(
+            (
+                name,
+                SourceEvidence(
+                    f"{contract.forecast_input.id}:{name}",
+                    contract.known_at,
+                    contract.captured_state_revision,
+                ),
+            )
+            for name in sorted(SOURCES)
+        )
+        return ForecastVersion(
+            reference=reference,
+            as_of=contract.as_of,
+            known_at=contract.known_at,
+            target_date=policy.target_date,
+            profile=profile,
+            sources=evidence,
+            buckets=tuple(buckets),
+            promotion_state="EXCLUDED",
+            base_reference=reference,
+        )
+
+    def _promotion_events(self, run_id: str, known_at: datetime) -> list[PromotionEvent]:
+        rows = self._session.execute(
+            select(db.events)
+            .join(
+                db.assessment_requests,
+                db.assessment_requests.c.event_id == db.events.c.id,
+            )
+            .where(
+                db.assessment_requests.c.run_id == run_id,
+                db.events.c.type.in_(
+                    ("PROMOTION_CREATED", "PROMOTION_CHANGED")
+                ),
+                db.events.c.timestamp <= known_at,
+            )
+            .order_by(db.events.c.timestamp, db.events.c.id)
+        ).mappings()
+        return [PromotionEvent.model_validate(dict(row)) for row in rows]
+
+    def _compare(
+        self,
+        request: ToolRequest,
+        run,
+        snapshot: dict,
+        contract: ProcurementContract,
+    ) -> ToolResult:
+        menu = self._menu(contract)
+        previous = self._normal_forecast(contract, f"{run.id}:forecast:normal")
+        events = self._promotion_events(run.id, contract.known_at)
+        context = SourceEvidence(
+            f"{run.id}:promotion-context",
+            contract.known_at,
+            contract.captured_state_revision,
+        )
+        application = apply_promotions(
+            previous,
+            menu,
+            events=events,
+            context_evidence=context,
+            context_complete=isinstance(snapshot.get("promotions"), list),
+            as_of=contract.as_of,
+            known_at=contract.known_at,
+            result_reference=f"{run.id}:forecast:promotion",
+        )
+        if not application.complete or application.forecast is None:
+            raise ApiError(
+                409,
+                "CALCULATION_INCOMPLETE",
+                "Frozen promotion forecast application is incomplete",
+            )
+        comparison = compare_forecast_versions(previous, application.forecast, menu)
+        if comparison.status not in {"COMPARED", "NO_PREVIOUS_VERSION"}:
+            raise ApiError(
+                409,
+                "CALCULATION_INCOMPLETE",
+                "Frozen forecast versions are incompatible",
+            )
+        changed = any(delta.absolute_delta != 0 for delta in comparison.deltas or ())
+        artifact = {
+            "previous": previous.reference,
+            "current": application.forecast.reference,
+            "status": comparison.status,
+            "changed_context": comparison.changed_context,
+            "deltas": [
+                {
+                    "start": delta.start.isoformat(),
+                    "end": delta.end.isoformat(),
+                    "dish_id": delta.dish_id,
+                    "delta": str(delta.delta),
+                }
+                for delta in comparison.deltas or ()
+            ],
+        }
+        return self._result(
+            request,
+            self._ref(
+                request,
+                EvidenceCategory.FORECAST_RESULT,
+                EvidenceSource.BACKEND,
+                f"forecast-comparison:{_identity(artifact)}",
+            ),
+            {
+                "comparison_complete": True,
+                "forecast_material": changed,
+            },
         )

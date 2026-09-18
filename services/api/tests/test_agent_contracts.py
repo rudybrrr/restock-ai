@@ -100,6 +100,8 @@ def test_event_types_and_specialist_next_steps_are_authoritative() -> None:
         "SALES_UPDATED",
         "PROMOTION_CREATED",
         "PROMOTION_CHANGED",
+        "DAILY_UPDATE_SUBMITTED",
+        "DAILY_UPDATE_CORRECTED",
         "INVENTORY_ADJUSTED",
         "INVENTORY_WASTED",
         "SUPPLIER_AVAILABILITY_CHANGED",
