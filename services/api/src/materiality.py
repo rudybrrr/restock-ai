@@ -62,6 +62,37 @@ class SalesThresholdPolicy:
     evidence: SourceEvidence | None
 
 
+SALES_MATERIALITY_V1 = SalesThresholdPolicy(
+    version="SALES_MATERIALITY_V1",
+    rule=RULE,
+    absolute_floor=Decimal(5),
+    relative_threshold=Decimal("0.2"),
+    minimum_expected_portions=Decimal(20),
+    minimum_complete_buckets=2,
+    evidence=None,
+)
+"""Aniq-approved one-day demo definition; NOT a selected/persisted run policy.
+
+Approval: 18 September 2026, after explicit review of low-volume assessment
+delays. Cumulative per-dish expected served portions >=20 AND >=2 completed
+half-hours, with every elapsed service interval covered. Both deviation signs
+use inclusive max(5, 0.2 * expected); known stock/safety risk remains independent.
+Changed parameters or exposure semantics require a new policy version.
+"""
+
+
+@dataclass(frozen=True)
+class SalesPolicyResolution:
+    """Internal numerical validation result, not a Backend transport artifact."""
+
+    policy: SalesThresholdPolicy | None
+    findings: tuple[Finding, ...]
+
+    @property
+    def complete(self) -> bool:
+        return self.policy is not None and not self.findings
+
+
 @dataclass(frozen=True)
 class RiskSnapshot:
     """Reuse the existing projector's explicit input bundle and opening manifests."""
@@ -322,16 +353,31 @@ def select_daily_history(
     )
 
 
-def _policy(
-    policy: SalesThresholdPolicy | None, contract: ProcurementContract
-) -> set[Finding]:
+def resolve_sales_threshold_policy(
+    policy: SalesThresholdPolicy | None,
+    *,
+    known_at: datetime,
+    captured_revision: str,
+) -> SalesPolicyResolution:
+    """Validate explicitly selected values and evidence against the frozen version.
+
+    No default selection, coercion, evidence generation, persistence or IO.
+    Missing/unknown/fixture/conflicting policies yield no usable policy plus
+    findings. Malformed quantities/clocks raise ValueError/TypeError. Backend
+    must still establish effective applicability and authoritative selection;
+    matching reference strings alone cannot prove either fact.
+    """
+    known_at = _aware(known_at)
+    _id(captured_revision)
     if policy is None:
-        return {Finding("MISSING_THRESHOLD_OR_EXPOSURE_POLICY", "policy")}
+        return SalesPolicyResolution(
+            None, (Finding("MISSING_THRESHOLD_OR_EXPOSURE_POLICY", "policy"),)
+        )
     issues = _evidence(
         policy.evidence,
         "threshold_policy",
-        contract.captured_state_revision,
-        contract.known_at,
+        captured_revision,
+        known_at,
     )
     if not policy.version or any(
         v is None
@@ -343,7 +389,8 @@ def _policy(
             policy.minimum_complete_buckets,
         )
     ):
-        return issues | {Finding("MISSING_THRESHOLD_OR_EXPOSURE_POLICY", "policy")}
+        issues.add(Finding("MISSING_THRESHOLD_OR_EXPOSURE_POLICY", "policy"))
+        return SalesPolicyResolution(None, tuple(sorted(issues)))
     _id(policy.version)
     for value in (
         policy.absolute_floor,
@@ -363,7 +410,35 @@ def _policy(
         Decimal("0.2"),
     ):
         issues.add(Finding("UNSUPPORTED_THRESHOLD_POLICY", policy.version))
-    return issues
+    if policy.version != SALES_MATERIALITY_V1.version:
+        issues.add(Finding("UNSUPPORTED_SALES_POLICY_VERSION", policy.version))
+    elif (
+        policy.rule,
+        policy.absolute_floor,
+        policy.relative_threshold,
+        policy.minimum_expected_portions,
+        policy.minimum_complete_buckets,
+    ) != (
+        SALES_MATERIALITY_V1.rule,
+        SALES_MATERIALITY_V1.absolute_floor,
+        SALES_MATERIALITY_V1.relative_threshold,
+        SALES_MATERIALITY_V1.minimum_expected_portions,
+        SALES_MATERIALITY_V1.minimum_complete_buckets,
+    ):
+        issues.add(Finding("SALES_POLICY_VERSION_CONFLICT", policy.version))
+    return SalesPolicyResolution(None if issues else policy, tuple(sorted(issues)))
+
+
+def _policy(
+    policy: SalesThresholdPolicy | None, contract: ProcurementContract
+) -> set[Finding]:
+    return set(
+        resolve_sales_threshold_policy(
+            policy,
+            known_at=contract.known_at,
+            captured_revision=contract.captured_state_revision,
+        ).findings
+    )
 
 
 def _profile(profile: Sequence[ServicePeriod]) -> tuple:

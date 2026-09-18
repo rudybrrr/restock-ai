@@ -299,21 +299,18 @@ def test_explicit_twenty_portion_policy_boundaries(case, actual, material, delta
         ("24.999999", 30, "5", True),
         ("25.000001", 30, "5.0000002", False),
         ("20.000001", 25, "5", False),
-        ("19.999999", 25, "5", True),
+        ("19.999999", 25, "5", None),  # approved exposure minimum is not met
     ],
 )
 def test_fractional_and_percentage_oracles(
     case, expected, observed_count, threshold, material
 ):
     set_expected(case, expected)
-    case["threshold_policy"] = replace(
-        case["threshold_policy"], minimum_expected_portions=D(0)
-    )
     observed(case, observed_count)
     with localcontext() as ctx:
         ctx.prec = 5
         result = run(case)
-    assert result.complete
+    assert result.complete is (material is not None)
     assert result.material_change is material
     assert chicken(result).threshold == D(threshold)
 
@@ -330,9 +327,7 @@ def test_small_batches_accumulate(case):
 
 
 def test_sparse_exposure_and_known_breach(case):
-    case["threshold_policy"] = replace(
-        case["threshold_policy"], minimum_expected_portions=D(21)
-    )
+    set_expected(case, "19.999999")
     result = run(case)
     assert result.material_change is None and "INSUFFICIENT_EXPOSURE" in codes(result)
     assert chicken(result).adequate_exposure is False
@@ -343,18 +338,15 @@ def test_sparse_exposure_and_known_breach(case):
     assert result.first_stockout_interval.start == dt("2026-02-16T12:00+08:00")
 
 
-@pytest.mark.parametrize("minimum", ["0", "20"])
-def test_zero_expected_without_percentage_division(case, minimum):
+def test_zero_expected_without_percentage_division(case):
     set_expected(case, "0")
-    case["threshold_policy"] = replace(
-        case["threshold_policy"], minimum_expected_portions=D(minimum)
-    )
     batches(case)[0]["sales"].pop("chicken-rice")
     batches(case)[1]["sales"].pop("chicken-rice")
     result = run(case)
     assert chicken(result).expected == 0 and chicken(result).observed == 0
     assert chicken(result).threshold == 5
-    assert chicken(result).material is (False if minimum == "0" else None)
+    assert chicken(result).material is None
+    assert not result.complete and result.material_change is None
 
 
 def test_complete_observed_zero_vs_absent_batch(case):

@@ -1,6 +1,226 @@
 # ReStock numerical functions and development datasets
 
-## Sales materiality implementation traceability — 18 September 2026
+## Frozen sales-materiality policy — 18 September 2026
+
+**Approved numerical semantics, implemented on `feat/ml-sales-policy`.**
+Base main: `a3aae33ae6650f9ed46880fb28c6a8059ca833ef` (PR #29).
+Aniq explicitly approved proceeding after reviewing the recommendation and its
+low-volume delays on 18 September. That later decision supplies the previously
+unspecified exposure values; it does not make v2 §6.3 an earlier materiality
+approval. Backend authoritative selection/persistence and Agent integration remain
+separate, unfinished owner-controlled work.
+
+| Requirement | Source | Implemented behavior / approval |
+|---|---|---|
+| Two-sided cumulative deviation | v2 §9 | Inclusive abs(observed - expected) >= max(5, 0.2 × expected) |
+| Versioned demo assumption, not learned truth | v2 §2.3 ASM-06 and §9 | Fixed Decimal values; no restaurant calibration claim |
+| Materiality exposure | Aniq's explicit 18 September approval of the reviewed recommendation | >=20 expected served portions per dish AND >=2 completed half-hours |
+| Complete elapsed interval coverage | v2 §§7, 9 | Every elapsed service bucket must have compatible observations; two buckets alone do not establish completeness |
+| Twenty portions in the older plan | v2 §6.3 | Separate proposed spike-adjustment threshold, not the source of this exposure approval |
+| Risk override and unknowns | v2 §9; v3 §6.2 | Known risk remains material despite incomplete sales; unknown never becomes safe/KEEP |
+| Ownership | v2 §§3, 10; v3 §§1, 5 | ML definition/validation; Backend frozen selection/persistence; Rudy adapters |
+| Catalogue/reliability overrides | v3 §§3, 6.1 | Current five dishes; reliability CONTEXT_ONLY; no automatic spike adjustment |
+
+### Exact identity, scope and value binding
+
+`src.materiality.SALES_MATERIALITY_V1` is an immutable
+`SalesThresholdPolicy` definition with **no evidence attached**. It is not a
+selected policy, persisted artifact or fallback. The one-day Singapore demo uses
+complete half-hour observations and the original promotion-aware issued
+expectation. It does not cover multi-day aggregation or arbitrary service grains.
+The existing risk calculation requires a remaining projection horizon: at/after
+the day's horizon end it reports NO_REMAINING_PROJECTION_HORIZON rather than a
+complete safe result. Partial assessment buckets remain unsupported.
+
+- Version: `SALES_MATERIALITY_V1`.
+- Calculation rule (separate identity): `V2_DEMO_ABSOLUTE_OR_RELATIVE_V1`.
+- Decimal values: floor `"5"`, relative threshold `"0.2"`,
+  minimum expected portions `"20"`; integer bucket minimum `2`.
+- Both deviation and exposure comparisons are inclusive.
+- Exposure accumulates per dish across the same service day, including lunch
+  into dinner. It uses expected served portions, not observed portions,
+  transactions or latent demand. Complete observed zeros differ from missing rows.
+- Any parameter or exposure-meaning change requires a new approved version.
+  Values numerically equal as Decimals (20 and 20.000) are equivalent; floats,
+  nonfinite/negative values and boolean bucket counts are invalid.
+
+`resolve_sales_threshold_policy(policy, *, known_at, captured_revision)`
+validates an **explicitly supplied** existing `SalesThresholdPolicy`. It returns
+immutable `SalesPolicyResolution(policy, findings)` with `complete`:
+valid input returns its policy; missing/unsupported/conflicting policy or
+incompatible evidence returns `policy=None`, `complete=False` and findings.
+Malformed numerical/clock types raise ValueError/TypeError.
+
+`assess_sales_materiality` invokes the same resolver internally. Bypassing
+the standalone resolver cannot turn an unknown version or conflicting parameters
+into a non-material certificate. Fixture-only and draft versions are unsupported.
+Legacy exploratory tests now use the approved version; tests that previously
+changed exposure to zero/21 instead exercise approved boundaries or reject those
+changes as version conflicts. This is enforcement of the newly accepted contract,
+not a new demand or risk algorithm.
+
+| Condition | Finding / result |
+|---|---|
+| Missing policy/identity/parameter | MISSING_THRESHOLD_OR_EXPOSURE_POLICY; no resolved policy |
+| Unknown, fixture-only or draft version | UNSUPPORTED_SALES_POLICY_VERSION; no resolved policy |
+| Known version with changed values | SALES_POLICY_VERSION_CONFLICT; no resolved policy |
+| Unsupported deviation rule/floor/rate | Also UNSUPPORTED_THRESHOLD_POLICY |
+| Missing reference/time, late knowledge or wrong capture | Existing MISSING_EVIDENCE / EVIDENCE_NOT_YET_AVAILABLE / CAPTURED_REVISION_MISMATCH |
+| Invalid quantity/type | ValueError/TypeError, never silently coerced |
+
+### Frozen evidence and exact call
+
+Policy transport remains Backend-owned. The internal value illustration below
+is not a new API route/schema or a seed record; placeholders are not real evidence:
+
+```json
+{
+  "version": "SALES_MATERIALITY_V1",
+  "rule": "V2_DEMO_ABSOLUTE_OR_RELATIVE_V1",
+  "absolute_floor": "5",
+  "relative_threshold": "0.2",
+  "minimum_expected_portions": "20",
+  "minimum_complete_buckets": 2,
+  "evidence": {
+    "reference": "<Backend-resolved immutable selected-policy reference>",
+    "available_at": "<actual recording availability <= run known_at>",
+    "captured_revision": "<run captured_state_revision>"
+  }
+}
+```
+
+Decimal quantities must be decoded losslessly from strings. Backend must supply
+the selected version and all values, not ask the adapter to fill missing fields
+from the code constant. Preserve operational `as_of`, recording cutoff
+`known_at` and captured revision as different facts. Effective applicability
+and frozen authoritative policy selection belong to Backend; SourceEvidence
+validation alone cannot prove correct source selection or persistence.
+
+```python
+from src.materiality import assess_sales_materiality, resolve_sales_threshold_policy
+
+resolution = resolve_sales_threshold_policy(
+    selected_policy,  # explicit SalesThresholdPolicy, or None if unavailable
+    known_at=frozen_contract.known_at,
+    captured_revision=frozen_contract.captured_state_revision,
+)
+result = assess_sales_materiality(
+    frozen_contract,
+    issued_forecast=resolved_issued_forecast,
+    issued_input=resolved_original_input,
+    issued_catalogue=resolved_issued_catalogue,
+    snapshot_evidence=resolved_snapshot_evidence,
+    threshold_policy=selected_policy,
+    risk=resolved_risk_inputs,
+)
+# Persist resolution.findings and result, including incomplete/known-risk results.
+# Passing the original selected_policy preserves the supplied identity/findings;
+# assess_sales_materiality repeats resolution before using its parameters.
+```
+
+These arguments are caller-resolved artifacts, not fake IDs or a runnable
+database adapter. The result's `threshold_policy_version` records the supplied
+identity even if rejected; consult findings/completeness, not that echo alone.
+A valid definition in code, a run selecting it and Backend persisting the evidence
+are three separate facts. The first is implemented here.
+
+### Current first-slice consequences and independent examples
+
+Canonical `first_slice_seed_rows` provides four identical Mondays with daily
+100 /60 /80 /40 /40 portions; the new checks restore those values rather than the
+older materiality fixture's synthetic 150 per dish. Service remains lunch
+11:00–14:00 (40%, six half-hours), dinner 17:00–21:00 (60%, eight), Singapore.
+Operational date is **16 February 2026**; separate synthetic knowledge cutoff is
+18 September 2026 09:00 +08:00. No live forecast or restaurant observation is
+claimed. Every ingredient is explicitly counted at 1000 base units at assessment;
+empty commitments and zero safety are explicit fixture assumptions.
+
+| Dish | Daily expected | Previous completed cutoff / cumulative expected | First assessable cutoff / cumulative expected |
+|---|---:|---|---|
+| chicken-rice | 100 | 12:00 /13.333334 | **12:30 /20.000001** |
+| fried-rice | 60 | 13:00 /16 | **13:30 /20** |
+| chicken-noodles | 80 | 12:30 /16.000001 | **13:00 /21.333334** |
+| tofu-bowl | 40 | 17:30 /19 | **18:00 /22** |
+| vegetable-noodles | 40 | 17:30 /19 | **18:00 /22** |
+
+These are conditional earliest times: all preceding reports, original forecast
+and source evidence must actually be available at the assessment knowledge cutoff.
+Independent rounding arithmetic uses the existing largest-remainder allocation:
+chicken lunch 40 gives four early buckets 6.666667 then two 6.666666;
+noodles lunch 32 gives two early 5.333334 then four 5.333333. Tofu/vegetable
+lunch totals 16; each dinner bucket adds 3. Forecasts are not rounded to customers.
+
+At 18:00 the five expected totals are **55, 33, 44, 22, 22**.
+With observed totals matching those values, except tofu:
+- tofu **26**: deviation +4, threshold max(5, 4.4)=5; aggregate complete/False;
+- tofu **27** or **17**: deviation +5 or -5; aggregate complete/True;
+- remove one elapsed batch: missing coverage, incomplete/None, no remainder;
+- omit risk evidence: incomplete/None despite small sales deviations;
+- at 17:30, even close sales leave tofu/vegetable exposure insufficient:
+  incomplete/None, not a certified non-material whole result.
+
+All other dishes and required risk checks are satisfied in the complete examples.
+Tofu future-only demand remains **18** portions in all complete 18:00 cases;
+actuals never reduce it a second time. Corrections replace previous cumulative
+contributions at their recording cutoff; retries do not add exposure. Complete
+zero sales with expected >=20 can be materially below expectation; absent sales
+cannot. Expected zero with this approved minimum stays insufficient, even with
+an observed deviation of five; a known hard stock/safety breach still establishes
+True with incomplete sales. A supplied promotion changes the issued expectation
+and may move the crossing earlier, never through a second uplift. Separately,
+a 300-portion sensitivity has 20 expected after one lunch bucket but waits for
+two (40 expected); this demonstrates the approved duration condition.
+
+### Validation and consumer responsibilities
+
+The approved fixture and `tests/test_sales_policy.py` cover exact immutable
+definition/Decimal transport, conflicting and unknown/fixture versions, missing
+selection, knowledge/capture evidence, malformed quantities, actual five-dish
+assessment times, exact exposure boundaries, zero/missing data, aggregate
+material/non-material cases, stock-risk override and deterministic immutable input.
+Existing materiality cases retain two-sided threshold neighbors, cumulative
+corrections/retries, promotion-aware expectations and unchanged future demand.
+
+Rudy must consume the resolved frozen selection, preserve None versus False and
+True-with-incomplete, and forward only future buckets. A result does not confer
+KEEP_CURRENT_PLAN, publication or approval. Chun Yang must persist/expose selected
+policy identity/values, its applicability and frozen evidence, immutable issued
+forecast/input, plan/safety sources and the exact materiality request/result.
+Both should record compatibility responses in [#16](https://github.com/rudybrrr/restock-ai/issues/16);
+no endpoint/payload, default, teammate approval or missing-data outcome is invented.
+
+The five available #16 comments were refreshed; none supplies new sales policy
+transport. Aniq's current approval resolves the numerical decision. Rudy's
+reported supplier-only get_materiality and sales_materiality_supported=False
+describe newer work not present on accessible Agent branch
+`764a27b9f89be86a36dd3d8dcc95079f77314239`. Main's Completion still has no
+sales-materiality payload. Earlier snapshot capture-revision failures remain
+Backend follow-up; reference checks do not repair source selection.
+
+Fresh checks: 552 numerical passes (124 focused materiality/policy); final45
+policy cases also pass in Linux. Ruff, Pyright, changed Python formatting and
+diff checks pass. Full locked Linux/PostgreSQL gate: **616 passed, 3 failed**,
+664.86s. The exact same three snapshot-history capture-revision failures reproduce
+on unchanged base a3aae33 (3 failed,22.71s). Their prior specific exception remains;
+no new failures or weakened Backend assertions. See ML_HANDOVER for details and
+publication status. The test-only immutability expression was corrected for
+static checks; its final form was rerun on both Windows and Linux.
+Reproduce from `services/api`:
+
+```powershell
+.venv/Scripts/python.exe -m pytest -q tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_procurement.py tests/test_synthetic_history.py tests/test_promotion_forecasting.py tests/test_materiality.py tests/test_sales_policy.py tests/test_pass3e_numerical.py
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m pyright
+.venv/Scripts/python.exe -m ruff format --check src/materiality.py tests/test_materiality.py tests/test_sales_policy.py
+git diff --check
+```
+
+The full merge gate uses locked Linux Python 3.12/PostgreSQL 18 on the same clock,
+a read-only source mount, temporary Python environment and disposable test
+databases. No shared database or project service is used. The prior proposal's
+524 passes and PR #29's 572/3 backend result are historical, not fresh results.
+
+## Historical sales materiality implementation traceability — 18 September 2026
 
 Base: main `e179c758bba0c7d7d9db582ba98a0abae44fac6e`; focused
 `feat/ml-sales-materiality` worktree. Existing unfinished materiality work is
@@ -14,9 +234,10 @@ is reused. No backend persistence, queue, route or Agent implementation changes.
 | v3 §§5–7; unknown is not safe | Reuse `project_inventory`, accepted FEFO, exact recipes and fixed supply | safety/shortage overrides sales, incompatible/missing provenance stays incomplete |
 | Current main PR #28 | Consume actual frozen operational/commitment contract | canonical payload tests; as_of versus known_at; equivalent aware instants |
 
-The supported v2 demo threshold is max(5, 0.2 × expected-to-date). Exposure
-minimums and policy identity remain explicitly supplied: 20 expected portions is
-a test assumption, not an approved production default. Intraday sales do not
+The supported v2 demo threshold is max(5, 0.2 × expected-to-date). At PR #29,
+20 expected portions and two buckets were only test assumptions. The subsequent
+explicit approval and enforced version above supersede that limitation. Values
+and selection evidence remain explicitly supplied, without fallback. Intraday sales do not
 enable the proposed clipped demand-spike adjustment or retraining. Implementation files:
 `src/materiality.py`, focused tests/fixture and existing ML handovers.
 
@@ -41,10 +262,11 @@ evidence/deviation/projector/safety arithmetic was adapted, not published wholes
   `absolute_floor`, `relative_threshold`, `minimum_expected_portions`,
   `minimum_complete_buckets` and `SourceEvidence`. Supported rule
   `V2_DEMO_ABSOLUTE_OR_RELATIVE_V1` requires Decimal 5 and 0.2, following
-  v2 §9/ASM-06. Exposure values have **no default**. Unknown/missing policy
-  produces incomplete findings; negative/nonfinite values are invalid.
-  The fixture's version `EXPLICIT_TEST_EXPOSURE_20_V1`, 20 expected portions and
-  two covered buckets are supplied test assumptions, not production approval.
+  v2 §9/ASM-06. Exposure values have **no default**. The approved version is now enforced by
+  the resolver above; missing/unknown/conflicting policy is incomplete, and
+  malformed quantities are invalid.
+  The earlier `EXPLICIT_TEST_EXPOSURE_20_V1` is now rejected. Tests explicitly
+  supply `SALES_MATERIALITY_V1`; their inventory/sales/evidence remain synthetic.
 - Compare cumulative served portions against the issued expectation for exactly
   the same completed service half-hours. Test both signs with
   `abs(observed - expected) >= max(5, 0.2 * expected)`.
@@ -146,7 +368,7 @@ it does not erase an otherwise supported physical shortage.
 | Supply | `commitment_projection` at the same capture; all deliveries in its manifest, received/cancelled/outstanding quantities and stable projected IDs; no new recommendation lines |
 | Expiry evidence | Preserve `expiry_evidence.reference/available_at` and original offer revision in the resolved frozen contract; projector SourceEvidence capture stamp binds it to this bundle |
 | Safety | `policy.payload.safety_stock` must match; explicit safety-rule/evidence mapping, not invented policy |
-| Threshold/exposure | No authoritative materiality-policy artifact was found on inspected main or #16; Backend must supply/persist owner-confirmed values and version. Test values are not a fallback |
+| Threshold/exposure | ML now defines/enforces approved SALES_MATERIALITY_V1; Backend must supply/persist its authoritative selected values, version and evidence. A code definition or test values cannot replace selection |
 | Result evidence | Persist complete request/result, original forecast/input refs, selected batch revisions, deviations, first risk intervals and findings; Rudy/Backend own transport mapping |
 
 Current source facts were rechecked on main `e179c75` and

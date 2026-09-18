@@ -2,16 +2,91 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.10, 18 September 2026<br>
-**Status:** Pure authoritative sales materiality and frozen future-demand handoff
-implemented on `feat/ml-sales-materiality`. Agent routing, persisted result
+**Version:** 1.11, 18 September 2026<br>
+**Status:** Sales materiality is merged; the approved policy definition/resolver
+is implemented on `feat/ml-sales-policy`. Agent routing, persisted result
 mapping and live freshness/lifecycle integration remain owner-controlled.
 Aniq explicitly authorized proceeding with the normal merge of
 [PR #29](https://github.com/rudybrrr/restock-ai/pull/29) despite the three
 snapshot-replay failures reproduced on unchanged main. Those failures remain
 documented Backend follow-up; they have not been fixed or reclassified as passes.
 
-## Current sales-driven replanning handoff
+## Current frozen sales policy
+
+Aniq approved the reviewed recommendation on 18 September: **SALES_MATERIALITY_V1**
+requires >=20 expected served portions per dish AND >=2 completed half-hour
+buckets, with every elapsed service interval covered. Both limits are inclusive,
+cumulative within one day. The deviation rule remains inclusive
+`abs(observed - expected) >= max(5, 0.2 * expected)`. This is the authoritative
+numerical definition for the current one-day demo, not restaurant calibration.
+
+Implementation base is main `a3aae33ae6650f9ed46880fb28c6a8059ca833ef`;
+focused branch [feat/ml-sales-policy](https://github.com/rudybrrr/restock-ai/tree/feat/ml-sales-policy).
+See the [exact contract and call](ML_NUMERICAL_FUNCTIONS.md#frozen-sales-materiality-policy--18-september-2026).
+The earlier request for numerical approval is resolved by Aniq's explicit
+"Proceed as you suggested", following the recommendation and limitation review.
+
+`src.materiality.SALES_MATERIALITY_V1` is an immutable definition with no evidence.
+`resolve_sales_threshold_policy(policy, *, known_at, captured_revision)`
+returns a complete resolution only for the exact approved values and compatible
+supplied evidence. Missing policy, unknown/fixture versions, conflicting parameters
+or missing/late/wrong-capture evidence return findings and no resolved policy.
+Malformed quantities raise ValueError/TypeError. The existing assessment calls
+the resolver internally too; there is no fixture fallback or bypass through
+arbitrary nonempty version strings. Changed values require a new approved version.
+
+The current 100/60/80/40/40 first-slice forecast and 40% lunch/60% dinner profile
+give first eligibility at 12:30 chicken-rice, 13:00 chicken-noodles, 13:30
+fried-rice and **18:00 tofu/vegetable noodles**, provided all required observations
+and evidence are available. Aniq accepted this limitation. Before then even a
+large sales deviation for a low-volume dish may remain insufficient exposure.
+Known inventory/safety risk is assessed independently and can still be material.
+At 18:00 tofu expected 22: actual 26 is non-material, 27/17 material with other
+checks complete; missing coverage is unknown. Its future demand remains 18.
+Zero expected demand does not gain sales exposure from actual sales alone.
+
+**Chun Yang:** persist/expose the selected definition/version and values, effective
+applicability and recording/capture references, issued forecast/original input,
+plan/safety evidence and exact request/result. Preserve frozen replay, freshness
+and lifecycle checks. A constant is not a persisted run selection.
+**Rudy:** translate that authoritative selection into the existing typed call;
+preserve True-with-incomplete, None and complete False, retain findings/references
+and forward only future demand. Never fill missing values from fixture or code
+defaults, or turn incomplete findings into KEEP/approval. Both should retain
+mapping responses in [#16](https://github.com/rudybrrr/restock-ai/issues/16).
+
+No Backend schema, persistence, migration, queue or Agent code changed. Rudy's
+supplier-only get_materiality and sales-supported flag are his reported newer
+state, not independently verified on the accessible Agent remote branch.
+Policy agreement/implementation does not mean the live sales route is connected.
+
+Fresh verification: **552 numerical passes**, including 124 focused materiality/
+policy cases (79 existing +45 policy). The final 45 policy cases also passed in
+Linux after the test-only immutability expression was made type/lint compatible.
+Whole-API Ruff and Pyright, three Python formatting checks and diff checks pass.
+Full locked Linux Python 3.12/PostgreSQL 18 gate: **616 passed, 3 failed**, two
+dependency warnings, 664.86 seconds. The same three snapshot-history failures
+freshly reproduced on unchanged base a3aae33 in 22.71 seconds: captured revisions
+1→3, 1→8 and 1→2 despite replaying original as_of/known_at. No new failures.
+Aniq's existing exception for these exact three failures is retained; no blanket
+waiver, assertion changes or protection bypass. They remain Backend follow-up.
+The focused feature branch/PR records publication; original work/staging remain
+preserved. This is not an end-to-end sales-route test or deployment.
+
+Draft reply for Aniq to send Rudy (not sent automatically):
+
+> I have approved and implemented SALES_MATERIALITY_V1: >=20 expected portions
+> per dish AND >=2 complete half-hour buckets, with complete elapsed coverage;
+> deviation is >=max(5,20%) in either direction. src.materiality exposes the
+> immutable definition and resolve_sales_threshold_policy; assessment enforces
+> the version too, rejecting fixture/unknown/conflicting policies. The numerical
+> contract and tests are on feat/ml-sales-policy; use its PR for merge status.
+> Chun Yang still needs to persist the authoritative selected policy and frozen
+> request/result references. Your adapter must preserve unknown/incomplete and
+> independent stock-risk results. Policy completion does not mean the sales route
+> is connected.
+
+## Previously merged sales-driven replanning handoff
 
 Base main: `e179c758bba0c7d7d9db582ba98a0abae44fac6e`, including PR #27
 promotion functions and PR #28 activity/commitment contracts. See
@@ -62,8 +137,9 @@ does not carry a numerical materiality result directly.
 Source traceability: v2 §§6.3, 7, 9, as qualified by v3 §§5–7 and the current
 `FORECAST_ACTIVITY_V1` contract. The supported demo threshold is
 `max(5, 0.2 * expected-to-date)` in either direction. Adequate exposure and
-policy identity are explicit inputs. The 20-portion/two-bucket test policy is
-not production approval, and no clipped intraday demand adjustment is enabled.
+policy identity are explicit inputs. At PR #29 the 20-portion/two-bucket policy
+was fixture-only; the approved frozen policy above now supersedes that limitation.
+No clipped intraday demand adjustment is enabled.
 
 Worked synthetic example: two elapsed lunch buckets total expected 20 portions
 per dish. With complete risk evidence, chicken-rice actual 24 is non-material;
@@ -531,6 +607,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.10 | 18 September 2026 | Recorded Aniq's explicit waiver of the three snapshot-replay failures reproduced on unchanged main, authorizing normal PR #29 merge. Preserved failed-test evidence, Backend follow-up and integration limits; no application or test changes. |
+| 1.11 | 18 September 2026 | Aniq approved SALES_MATERIALITY_V1 after reviewing exposure delays. Added immutable definition/resolver, assessment enforcement, contract tests and explicit Backend/Agent evidence dependencies. |
 | 1.8 | 18 September 2026 | Added pure promotion application, immutable comparison, exact portion/recipe and intraday examples, frozen evidence requirements and owner handoff. Preserved unfinished materiality and accepted Pass 3E policies. |
 | 1.9 | 18 September 2026 | Added authoritative sales materiality, explicit policy/exposure, immutable forecast/history and future-only remainder semantics, canonical PR #28 contract tests and Backend/Agent consumer mapping. Preserved owner integration boundaries. |
 | 1.7 | 17 September 2026 | Recorded Aniq's explicit proceed instruction following Chun Yang's relayed acceptance of deferred timestamp correction; preserved actual failing-test evidence and normal PR protections. |
