@@ -103,11 +103,28 @@ def test_closing_submission_preserves_draft_and_records_zero(
     events = client.get("/api/v1/events").json()
     assert [e["type"] for e in events] == [
         "DAILY_UPDATE_SUBMITTED",
+        "INVENTORY_ADJUSTED",
         "DAILY_UPDATE_CORRECTED",
     ]
     assert events[0]["payload"]["replaces_revision_id"] is None
-    assert events[1]["payload"]["replaces_revision_id"] == history[0]["id"]
+    assert events[1]["payload"] == {
+        "revision_id": history[1]["id"],
+        "replaces_revision_id": history[0]["id"],
+        "day": "2026-02-16",
+        "effective_at": draft["cutoff"],
+        "adjustments": [
+            {
+                "lot_id": lots[0]["id"],
+                "ingredient_id": lots[0]["ingredient_id"],
+                "unit": lots[0]["unit"],
+                "previous_quantity": "7.5",
+                "corrected_quantity": "8",
+                "delta": "0.5",
+            }
+        ],
+    }
+    assert events[2]["payload"]["replaces_revision_id"] == history[0]["id"]
     queued = client.post("/api/v1/assessments", json={"as_of": draft["cutoff"]})
     triggers = client.get(f"/api/v1/runs/{queued.json()['id']}/triggers").json()
-    assert len(triggers) == 2
-    assert len(client.get("/api/v1/audit").json()) == 2
+    assert len(triggers) == 3
+    assert len(client.get("/api/v1/audit").json()) == 3

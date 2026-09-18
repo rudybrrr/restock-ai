@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session
 
 from src import database as db
 from src.errors import ApiError
-from src.fact_history import commitments_at, offers_at, promotions_at, sales_at
+from src.fact_history import (
+    commitments_at,
+    inventory_adjustments_at,
+    offers_at,
+    promotions_at,
+    sales_at,
+)
 from src.operations import lock_inventory, record_event
 from src.planning_schemas import (
     Candidate,
@@ -64,6 +70,7 @@ def _snapshot(
     run_id: str,
     known_at: datetime | None = None,
     captured_state_revision: int | None = None,
+    revises_plan_id: str | None = None,
 ) -> dict:
     known_at = known_at or datetime.now(UTC)
     captured_state_revision = (
@@ -76,6 +83,24 @@ def _snapshot(
         set(session.execute(select(db.supplier_offers.c.id)).scalars())
         - {offer["id"] for offer in offers}
     )
+    trigger_event_ids = list(
+        session.execute(
+            select(db.assessment_requests.c.event_id)
+            .where(db.assessment_requests.c.run_id == run_id)
+            .order_by(db.assessment_requests.c.event_id)
+        ).scalars()
+    )
+    plan_version_reference = None
+    if revises_plan_id is not None:
+        plan_version_reference = session.execute(
+            select(db.plan_versions.c.id)
+            .where(
+                db.plan_versions.c.plan_id == revises_plan_id,
+                db.plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+            )
+            .order_by(db.plan_versions.c.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
     snapshot = {
         "as_of": as_of.isoformat(),
         "known_at": known_at.isoformat(),
@@ -86,6 +111,8 @@ def _snapshot(
         ),
         "forecast_id": f"{run_id}:forecast",
         "inventory_snapshot_id": f"{run_id}:inventory",
+        "trigger_event_ids": trigger_event_ids,
+        "plan_version_reference": plan_version_reference,
         "inventory": [
             _json(row) for row in estimated_inventory(session, as_of, known_at)
         ],
@@ -127,7 +154,8 @@ def _snapshot(
                 select(db.holidays).order_by(db.holidays.c.date)
             ).mappings()
         ],
-        "promotions": promotions_at(session, as_of, known_at),
+        "promotions": promotions_at(session, known_at),
+        "inventory_adjustments": inventory_adjustments_at(session, as_of, known_at),
         "daily_history": [
             _json(dict(row))
             for row in session.execute(
@@ -168,6 +196,8 @@ def _snapshot(
                 "authoritative_daily_sales",
                 "sales_batches",
                 "promotions",
+                "inventory_adjustments",
+                "trigger_event_ids",
                 "holidays",
                 "cycle_decisions",
                 "offers",
@@ -336,6 +366,7 @@ def claim_run(session: Session) -> PlanningRun:
             row["id"],
             now,
             captured_state_revision,
+            row["snapshot"].get("revises_plan_id"),
         ),
     }
     session.execute(
@@ -619,33 +650,43 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
         raise ApiError(
             422, "INVALID_OUTCOME", "REVISE_PLAN requires exactly one candidate"
         )
-    from src.sales_materiality_contracts import result_for_completion
-
-    materiality = result_for_completion(session, run_id)
-    materiality_keep = bool(
-        materiality is not None
-        and materiality.complete
-        and materiality.material_change is False
+    from src.inventory_adjustment_contracts import (
+        result_for_completion as inventory_adjustment_result,
     )
-    if materiality is not None:
+    from src.sales_materiality_contracts import (
+        result_for_completion as sales_materiality_result,
+    )
+
+    sales_materiality = sales_materiality_result(session, run_id)
+    inventory_materiality = inventory_adjustment_result(session, run_id)
+    materiality_results = [
+        result
+        for result in (sales_materiality, inventory_materiality)
+        if result is not None
+    ]
+    materiality_keep = bool(materiality_results) and all(
+        result.complete and result.material_change is False
+        for result in materiality_results
+    )
+    for materiality in materiality_results:
         if materiality.material_change is None and body.outcome != "ESCALATE":
             raise ApiError(
                 409,
                 "UNCERTIFIED_OUTCOME",
-                "Incomplete sales materiality must be escalated",
+                "Incomplete materiality must be escalated",
             )
         if materiality.material_change is True and body.outcome == "KEEP_CURRENT_PLAN":
             raise ApiError(
                 409,
                 "UNCERTIFIED_OUTCOME",
-                "Material sales or stock risk cannot keep the current plan unchanged",
+                "A material operational change cannot keep the plan unchanged",
             )
-        if materiality_keep and body.outcome == "REVISE_PLAN":
-            raise ApiError(
-                409,
-                "UNCERTIFIED_OUTCOME",
-                "A complete non-material result cannot publish a revision",
-            )
+    if materiality_keep and body.outcome == "REVISE_PLAN":
+        raise ApiError(
+            409,
+            "UNCERTIFIED_OUTCOME",
+            "Complete non-material results cannot publish a revision",
+        )
     version_id = None
     if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
         calculated = run.snapshot.get("calculated_candidate")
@@ -671,6 +712,14 @@ def complete_run(session: Session, run_id: str, body: Completion) -> PlanningRun
             .mappings()
             .one_or_none()
         )
+        if materiality_keep and inventory_materiality is not None:
+            current_reference = current["id"] if current is not None else None
+            if current_reference != inventory_materiality.plan_version_reference:
+                raise ApiError(
+                    409,
+                    "PLAN_CHANGED",
+                    "Current plan version changed after inventory assessment",
+                )
         if current is None:
             calculated_lines = calculated["lines"] if calculated is not None else []
             if not materiality_keep and (

@@ -28,6 +28,7 @@ def test_supplier_and_promotion_history_survives_later_revisions(
     at = "2026-02-16T08:00:00+08:00"
     assert client.put("/api/v1/promotions/cny", json=promotion()).status_code == 200
     original = snapshot(client, at)
+    assert [event["payload"]["revision"] for event in original["promotions"]] == [1]
     old_price = next(
         row["unit_price"] for row in original["offers"] if row["id"] == "fresh-chicken"
     )
@@ -53,7 +54,7 @@ def test_supplier_and_promotion_history_survives_later_revisions(
         )
         == old_price
     )
-    assert earlier["promotions"][0]["revision"] == 1
+    assert [event["payload"]["revision"] for event in earlier["promotions"]] == [1, 2]
     later = snapshot(client, change_at)
     assert (
         Decimal(
@@ -65,7 +66,7 @@ def test_supplier_and_promotion_history_survives_later_revisions(
         )
         == 99
     )
-    assert later["promotions"][0]["revision"] == 2
+    assert [event["payload"]["revision"] for event in later["promotions"]] == [1, 2]
     assert later["offer_version_ids"] != original["offer_version_ids"]
     assert snapshot(client, at, original["known_at"]) == original
     # A newly recorded observation at the SAME effective instant also respects

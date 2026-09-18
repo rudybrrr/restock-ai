@@ -74,7 +74,10 @@ def test_promotion_and_supplier_events_coalesce_and_freeze_inputs(
     run = claimed.json()
     assert run["trigger"] == "PROMOTION_CREATED"
     assert run["trigger_event_id"] in {event["id"] for event in events.json()}
-    assert run["snapshot"]["promotions"][0]["name"] == "CNY special"
+    promotion_event = run["snapshot"]["promotions"][0]
+    assert promotion_event["type"] == "PROMOTION_CREATED"
+    assert promotion_event["payload"]["name"] == "CNY special"
+    assert promotion_event["id"] in run["snapshot"]["trigger_event_ids"]
     assert len(client.get(f"/api/v1/runs/{run['id']}/triggers").json()) == 3
     assert (
         client.patch(
