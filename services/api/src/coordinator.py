@@ -113,6 +113,10 @@ def _unique_refs(refs: Sequence[EvidenceRef]) -> list[EvidenceRef]:
     return list(unique.values())
 
 
+def _ref_key(ref: EvidenceRef) -> tuple[object, ...]:
+    return (ref.category, ref.source, ref.reference_id, ref.version, ref.state_revision)
+
+
 class Coordinator:
     def __init__(
         self,
@@ -239,7 +243,7 @@ class Coordinator:
                         "Specialist result identity did not match its delegation.",
                         EscalationReason.TOOL_FAILURE,
                     )
-                if not self._evidence_matches_revision(invocation, result):
+                if not self._evidence_matches_revision(invocation, delegation, result):
                     return self._finish(
                         invocation,
                         AgentOutcome.ESCALATE,
@@ -248,6 +252,11 @@ class Coordinator:
                         "Specialist evidence did not match the captured state revision.",
                         EscalationReason.TOOL_FAILURE,
                     )
+                trace.append(
+                    self._specialist_result_trace(
+                        invocation, delegation, result, call_count
+                    )
+                )
                 evidence_refs = _unique_refs(
                     [
                         *evidence_refs,
@@ -511,18 +520,41 @@ class Coordinator:
 
     @staticmethod
     def _evidence_matches_revision(
-        invocation: AgentInvocation, result: SpecialistResult
+        invocation: AgentInvocation,
+        delegation: SpecialistDelegation,
+        result: SpecialistResult,
     ) -> bool:
+        initial = {
+            _ref_key(ref)
+            for ref in (
+                delegation.trigger_ref,
+                *delegation.context_refs,
+                *delegation.materiality_evidence_refs,
+            )
+        }
         refs = [
             *result.materiality_evidence_refs,
             *result.evidence_refs,
             *([result.candidate_result_ref] if result.candidate_result_ref else []),
         ]
-        return all(
-            ref.state_revision is None
-            or ref.state_revision == invocation.captured_state_revision
-            for ref in refs
-        )
+        for ref in refs:
+            if ref.state_revision not in (None, invocation.captured_state_revision):
+                return False
+            if _ref_key(ref) in initial:
+                continue
+            # New evidence must have crossed a specialist tool boundary.  Model
+            # prose cannot introduce an unlinked reference into a business decision.
+            if (
+                ref.run_id != delegation.run_id
+                or ref.specialist_call_id != delegation.task_id
+                or ref.tool_call_id is None
+                or not ref.tool_call_id.startswith(f"{delegation.task_id}-TOOL-")
+                or ref.producer_tool is None
+                or ref.call_sequence is None
+                or not ref.tool_call_id.endswith(f"-TOOL-{ref.call_sequence}")
+            ):
+                return False
+        return True
 
     @staticmethod
     def _candidate_is_actionable(
@@ -702,8 +734,59 @@ class Coordinator:
             specialist_call_id=delegation.task_id,
             specialist=delegation.specialist,
             call_sequence=call_order,
+            objective=delegation.objective,
+            output_schema_version=delegation.required_output_schema_version,
             evidence_refs=delegation.context_refs,
             summary=f"Called {delegation.specialist.value} specialist.",
+        )
+
+    def _specialist_result_trace(
+        self,
+        invocation: AgentInvocation,
+        delegation: SpecialistDelegation,
+        result: SpecialistResult,
+        call_order: int,
+    ) -> AuditEvent:
+        """Append a concise, canonical completion fact for one specialist call.
+
+        The event deliberately stores identifiers, status, and authoritative evidence
+        only.  It must not persist a model's private reasoning or raw untrusted text.
+        """
+        refs = _unique_refs(
+            [
+                *result.materiality_evidence_refs,
+                *result.evidence_refs,
+                *([result.candidate_result_ref] if result.candidate_result_ref else []),
+            ]
+        )
+        return AuditEvent(
+            audit_event_id=f"{invocation.run_id}-SPECIALIST-{call_order}-RESULT",
+            timestamp=self._clock(),
+            actor="COORDINATOR",
+            action=AuditAction.SPECIALIST_RESULT_RECORDED,
+            state_revision=invocation.captured_state_revision,
+            trigger_id=invocation.trigger_id,
+            plan_id=invocation.affected_plan_id,
+            plan_version=invocation.affected_plan_version,
+            run_id=invocation.run_id,
+            invocation_mode=invocation.invocation_mode,
+            event_type=invocation.trigger_type,
+            specialist_call_id=delegation.task_id,
+            specialist=delegation.specialist,
+            call_sequence=call_order,
+            objective=delegation.objective,
+            output_schema_version=result.schema_version,
+            specialist_status=result.status,
+            evidence_refs=refs,
+            reason_codes=[
+                code
+                for code in (
+                    result.escalation_reason.value if result.escalation_reason else None,
+                    result.escalation_detail.value if result.escalation_detail else None,
+                )
+                if code is not None
+            ],
+            summary=f"{delegation.specialist.value} specialist returned {result.status.value}.",
         )
 
     @staticmethod

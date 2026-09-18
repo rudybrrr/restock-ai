@@ -237,3 +237,7 @@ def test_tool_audit_is_recorded() -> None:
         AuditAction.TOOL_CALLED,
         AuditAction.TOOL_RESULT_RECORDED,
     ]
+    assert audit.events[0].request_schema_version == "1"
+    assert audit.events[0].tool_succeeded is None
+    assert audit.events[1].request_schema_version == "1"
+    assert audit.events[1].tool_succeeded is True

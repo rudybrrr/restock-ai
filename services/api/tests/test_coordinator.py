@@ -7,6 +7,7 @@ from src.agent_contracts import (
     AgentInvocation,
     AgentOutcome,
     AgentToolName,
+    AuditAction,
     EscalationReason,
     EventType,
     EvidenceCategory,
@@ -106,9 +107,7 @@ def completed(
         "status": SpecialistStatus.COMPLETED,
         "materiality_evidence_refs": delegation.materiality_evidence_refs,
         "interpreted_impact": "Scoped evidence was inspected.",
-        "evidence_refs": [
-            ref(EvidenceCategory.EVENT_CONTEXT, f"RESULT-{delegation.task_id}")
-        ],
+        "evidence_refs": list(delegation.context_refs),
         "recommended_next_step": step,
         "summary": "Structured result.",
     }
@@ -347,9 +346,11 @@ def test_call_limit_is_enforced() -> None:
     )
     assert len(executor.calls) == MAX_SPECIALIST_CALLS
     assert result.completion.escalation_reason is EscalationReason.CALL_LIMIT_REACHED
-    assert [event.call_sequence for event in result.trace[:-1]] == list(
-        range(1, MAX_SPECIALIST_CALLS + 1)
-    )
+    assert [
+        event.call_sequence
+        for event in result.trace
+        if event.action is AuditAction.SPECIALIST_CALLED
+    ] == list(range(1, MAX_SPECIALIST_CALLS + 1))
     assert all(event.tool_call_id is None for event in result.trace)
     assert result.trace[-1].reason_codes == [EscalationReason.CALL_LIMIT_REACHED.value]
 
@@ -439,6 +440,23 @@ def test_coordinator_rejects_arbitrary_or_unvalidated_candidate_reference() -> N
     assert result.completion.escalation_reason is EscalationReason.TOOL_FAILURE
 
 
+def test_specialist_cannot_inject_unlinked_evidence_or_state_revision() -> None:
+    injected = EvidenceRef(
+        category=EvidenceCategory.CANDIDATE_RESULT,
+        source=EvidenceSource.DECISION_ENGINE,
+        reference_id="MODEL-INVENTED-CANDIDATE",
+        state_revision="STATE-1",
+    )
+    executor = FakeExecutor(
+        lambda delegation, count: completed(delegation, evidence_refs=[injected])
+    )
+    result = Coordinator(FakeControlPlane(), executor, clock=lambda: NOW).run(
+        invocation(trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED)
+    )
+    assert result.completion.outcome is AgentOutcome.ESCALATE
+    assert result.completion.escalation_reason is EscalationReason.TOOL_FAILURE
+
+
 def test_control_plane_failure_is_retried_once_then_fails_closed() -> None:
     class FailingControlPlane(FakeControlPlane):
         attempts = 0
@@ -522,12 +540,22 @@ def test_trace_uses_canonical_audit_events_and_records_call_order() -> None:
     control_plane = FakeControlPlane()
     executor = FakeExecutor()
     result = Coordinator(control_plane, executor, clock=lambda: NOW).run(invocation())
-    assert result.trace[0].specialist_call_id == "RUN-1-TASK-1"
-    assert result.trace[0].specialist is SpecialistType.DEMAND
-    assert result.trace[0].call_sequence == 1
-    assert result.trace[0].invocation_mode is InvocationMode.EVENT
-    assert result.trace[0].event_type == EventType.PROMOTION_CHANGED
-    assert result.trace[0].reason_codes == []
+    started, completed = result.trace[:2]
+    assert started.action is AuditAction.SPECIALIST_CALLED
+    assert started.specialist_call_id == "RUN-1-TASK-1"
+    assert started.specialist is SpecialistType.DEMAND
+    assert started.call_sequence == 1
+    assert started.objective == "Investigate the scoped demand impact."
+    assert started.output_schema_version == "1"
+    assert started.invocation_mode is InvocationMode.EVENT
+    assert started.event_type == EventType.PROMOTION_CHANGED
+    assert started.reason_codes == []
+    assert completed.action is AuditAction.SPECIALIST_RESULT_RECORDED
+    assert completed.specialist_call_id == started.specialist_call_id
+    assert completed.specialist_status is SpecialistStatus.COMPLETED
+    assert completed.output_schema_version == "1"
+    assert completed.evidence_refs
+    assert "Structured result." not in completed.summary
     assert result.trace[-1].final_outcome is result.completion.outcome
     assert control_plane.recorded[0][0] == result.completion
 

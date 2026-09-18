@@ -478,6 +478,7 @@ class AuditAction(StrEnum):
     AGENT_RUN_STARTED = "AGENT_RUN_STARTED"
     MATERIALITY_ASSESSED = "MATERIALITY_ASSESSED"
     SPECIALIST_CALLED = "SPECIALIST_CALLED"
+    SPECIALIST_RESULT_RECORDED = "SPECIALIST_RESULT_RECORDED"
     TOOL_CALLED = "TOOL_CALLED"
     TOOL_RESULT_RECORDED = "TOOL_RESULT_RECORDED"
     AGENT_COMPLETION_SUBMITTED = "AGENT_COMPLETION_SUBMITTED"
@@ -502,9 +503,16 @@ class AuditEvent(ContractModel):
     specialist_call_id: Identifier | None = None
     specialist: SpecialistType | None = None
     call_sequence: PositiveInt | None = None
+    objective: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ] | None = None
+    output_schema_version: SchemaVersion | None = None
+    specialist_status: SpecialistStatus | None = None
     tool_call_id: Identifier | None = None
     tool_name: AgentToolName | None = None
     attempt_number: PositiveInt | None = None
+    request_schema_version: SchemaVersion | None = None
+    tool_succeeded: bool | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     requested_outcome: AgentOutcome | None = None
     from_plan_status: PlanStatus | None = None
@@ -525,10 +533,20 @@ class AuditEvent(ContractModel):
             raise ValueError("specialist identity requires a specialist call id")
         if self.call_sequence is not None and self.specialist_call_id is None:
             raise ValueError("call sequence requires a specialist call id")
+        if self.objective is not None and self.specialist_call_id is None:
+            raise ValueError("objective requires a specialist call id")
+        if self.output_schema_version is not None and self.specialist_call_id is None:
+            raise ValueError("output schema version requires a specialist call id")
+        if self.specialist_status is not None and self.specialist_call_id is None:
+            raise ValueError("specialist status requires a specialist call id")
         if self.attempt_number is not None and self.tool_call_id is None:
             raise ValueError("attempt number requires a tool call id")
         if self.tool_name is not None and self.tool_call_id is None:
             raise ValueError("tool name requires a tool call id")
+        if self.request_schema_version is not None and self.tool_call_id is None:
+            raise ValueError("request schema version requires a tool call id")
+        if self.tool_succeeded is not None and self.tool_call_id is None:
+            raise ValueError("tool success requires a tool call id")
         return self
 
 

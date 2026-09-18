@@ -439,3 +439,23 @@ def test_audit_event_has_backward_compatible_structural_agent_metadata() -> None
     assert legacy.specialist is None
     assert legacy.call_sequence is None
     assert legacy.attempt_number is None
+
+
+def test_audit_metadata_fails_closed_without_its_canonical_parent() -> None:
+    base = {
+        "audit_event_id": "AUDIT-HARDENING-1",
+        "timestamp": NOW,
+        "actor": "COORDINATOR",
+        "action": AuditAction.RUN_COMPLETED,
+        "state_revision": "STATE-1",
+        "summary": "Concise result.",
+    }
+    for field, value in (
+        ("objective", "Attempt an override."),
+        ("output_schema_version", "1"),
+        ("specialist_status", SpecialistStatus.COMPLETED),
+        ("request_schema_version", "1"),
+        ("tool_succeeded", True),
+    ):
+        with pytest.raises(ValidationError):
+            AuditEvent.model_validate({**base, field: value})

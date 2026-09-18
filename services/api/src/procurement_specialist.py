@@ -571,6 +571,10 @@ class ProcurementSpecialist:
                 tool_call_id=request.tool_call_id,
                 tool_name=request.tool,
                 attempt_number=attempt,
+                request_schema_version=request.schema_version,
+                tool_succeeded=(
+                    None if action is AuditAction.TOOL_CALLED else not reason_codes
+                ),
                 evidence_refs=list(refs),
                 reason_codes=reason_codes,
                 summary=summary,

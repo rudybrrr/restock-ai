@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from src import database as db
 from src import planning
 from src.agent_contracts import (
     AgentCompletionPublication,
@@ -299,6 +301,69 @@ def test_coordinator_procurement_publishes_through_real_backend_services(
     }
     assert AuditAction.TOOL_CALLED in tool_actions
     assert AuditAction.TOOL_RESULT_RECORDED in tool_actions
+    assert AuditAction.SPECIALIST_CALLED in tool_actions
+    assert AuditAction.SPECIALIST_RESULT_RECORDED in tool_actions
+    specialist_started = next(
+        row["payload"]
+        for row in audit.json()
+        if row["action"] == AuditAction.SPECIALIST_CALLED
+        and row["payload"]["run_id"] == run["id"]
+    )
+    specialist_completed = next(
+        row["payload"]
+        for row in audit.json()
+        if row["action"] == AuditAction.SPECIALIST_RESULT_RECORDED
+        and row["payload"]["run_id"] == run["id"]
+    )
+    assert specialist_started["objective"] == "Investigate the scoped procurement impact."
+    assert specialist_started["output_schema_version"] == "1"
+    assert specialist_completed["specialist_status"] == "COMPLETED"
+    assert specialist_completed["specialist_call_id"] == specialist_started["specialist_call_id"]
+    tool_results = [
+        row["payload"]
+        for row in audit.json()
+        if row["action"] == AuditAction.TOOL_RESULT_RECORDED
+        and row["payload"]["run_id"] == run["id"]
+    ]
+    assert all(payload["request_schema_version"] == "1" for payload in tool_results)
+    assert all(payload["tool_succeeded"] is True for payload in tool_results)
+    assert all(
+        forbidden not in str(row["payload"]).lower()
+        for row in audit.json()
+        if row["payload"] and row["payload"].get("run_id") == run["id"]
+        for forbidden in ("scratchpad", "api_key", "gateway_key", "credentials", "prompt")
+    )
+
+
+def test_persisted_audit_entries_are_database_append_only(
+    client: TestClient, database_url: str
+) -> None:
+    run, _ = start_calculated_run(client)
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            assert run_coordinator(session, run).publication_result is not None
+            entry = session.execute(
+                select(db.audit_entries).where(
+                    db.audit_entries.c.action == AuditAction.RUN_COMPLETED.value
+                )
+            ).mappings().one()
+        with pytest.raises(DBAPIError), engine.begin() as connection:
+            connection.execute(
+                text("UPDATE audit_entries SET actor = 'tampered' WHERE id = :id"),
+                {"id": entry["id"]},
+            )
+        with pytest.raises(DBAPIError), engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM audit_entries WHERE id = :id"), {"id": entry["id"]}
+            )
+        with Session(engine) as session:
+            persisted = session.execute(
+                select(db.audit_entries).where(db.audit_entries.c.id == entry["id"])
+            ).mappings().one()
+            assert persisted == entry
+    finally:
+        engine.dispose()
 
 
 def test_stale_agent_completion_has_no_plan_or_audit_mutation(
