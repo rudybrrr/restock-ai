@@ -2,12 +2,14 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.9, 18 September 2026<br>
+**Version:** 1.10, 18 September 2026<br>
 **Status:** Pure authoritative sales materiality and frozen future-demand handoff
 implemented on `feat/ml-sales-materiality`. Agent routing, persisted result
 mapping and live freshness/lifecycle integration remain owner-controlled.
-The required full backend merge gate currently has three snapshot-replay failures;
-the numerical component is reviewable, but has not landed on main.
+Aniq explicitly authorized proceeding with the normal merge of
+[PR #29](https://github.com/rudybrrr/restock-ai/pull/29) despite the three
+snapshot-replay failures reproduced on unchanged main. Those failures remain
+documented Backend follow-up; they have not been fixed or reclassified as passes.
 
 ## Current sales-driven replanning handoff
 
@@ -77,7 +79,10 @@ Verification: 80 focused cases and 508 numerical regressions pass; the full
 same-clock Linux/PostgreSQL gate is 572 passed, 3 failed. Failures concern replayed
 capture revisions in `test_snapshot_history.py`, detailed in the numerical
 document, and all three reproduce on unchanged main `e179c75`. Chun Yang owns
-the replay contract/test resolution; no earlier timestamp waiver is applied.
+the replay contract/test resolution. Aniq's explicit 18 September instruction
+waives these three failures as a blocker for this merge; the earlier timestamp
+discussion is not the basis for proceeding. Application code and tests are
+unchanged from the verified implementation; this waiver update is documentation-only.
 Synthetic fixture correctness
 does not prove real restaurant demand accuracy or the completed Agent sales route.
 
@@ -525,6 +530,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.10 | 18 September 2026 | Recorded Aniq's explicit waiver of the three snapshot-replay failures reproduced on unchanged main, authorizing normal PR #29 merge. Preserved failed-test evidence, Backend follow-up and integration limits; no application or test changes. |
 | 1.8 | 18 September 2026 | Added pure promotion application, immutable comparison, exact portion/recipe and intraday examples, frozen evidence requirements and owner handoff. Preserved unfinished materiality and accepted Pass 3E policies. |
 | 1.9 | 18 September 2026 | Added authoritative sales materiality, explicit policy/exposure, immutable forecast/history and future-only remainder semantics, canonical PR #28 contract tests and Backend/Agent consumer mapping. Preserved owner integration boundaries. |
 | 1.7 | 17 September 2026 | Recorded Aniq's explicit proceed instruction following Chun Yang's relayed acceptance of deferred timestamp correction; preserved actual failing-test evidence and normal PR protections. |

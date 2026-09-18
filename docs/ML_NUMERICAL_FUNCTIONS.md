@@ -224,8 +224,8 @@ passed; all three changed Python files passed formatting.
 Full locked Linux Python 3.12.12 / PostgreSQL 18 merge gate:
 **572 passed, 3 failed**, two dependency warnings, **615.61 s**.
 Python and PostgreSQL used the same Linux clock and disposable test databases.
-No assertion or test was weakened or skipped. Merge is blocked pending resolution
-of these existing Backend snapshot-replay cases:
+No assertion or test was weakened or skipped. These existing Backend snapshot-replay
+cases initially blocked the merge:
 
 - `test_supplier_and_promotion_history_survives_later_revisions`
 - `test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff`
@@ -246,7 +246,14 @@ environment: **3 failed, 2 warnings, 30.18 s**, with the identical revision
 differences. The failure is therefore present without this ML change.
 The full command was `uv run --locked pytest -q -o cache_dir=/tmp/pytest-cache`;
 the base reproduction added the three fully qualified test names above.
-No merge waiver is inferred from an earlier timestamp discussion.
+On 18 September 2026, after the identical failures on unchanged main and the
+feature branch were explained, Aniq explicitly instructed: "It is safe to ignore
+the failed testcases. You are to push to main." This authorizes proceeding with
+the normal PR #29 merge despite these three known failures. It does not change
+their recorded failed status or resolve the Backend replay contract/test mismatch.
+The earlier timestamp discussion is not the basis for this waiver. Application
+source/tests are unchanged; this documentation-only update reuses the recorded
+verification, with fresh staged/working diff checks and repository merge checks.
 The complete numerical selection used:
 
 ```sh
