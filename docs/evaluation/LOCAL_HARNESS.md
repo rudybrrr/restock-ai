@@ -10,7 +10,8 @@ Each `ScenarioManifest` has a runtime projection containing only the initial
 authoritative state, observed events, and policy/configuration versions. The
 expected outcome and `hidden_evaluator_truth` fields are evaluator-only and are
 never included in snapshots, tools, prompts, or Agent context. Sales-materiality
-is represented by an open scenario until the ML-owned contract is available.
+is represented by a runnable fail-closed scenario: the authoritative sales
+batch is present, but its persisted materiality result is deliberately absent.
 
 `StaticBaselineAdapter` invokes its deterministic planning kernel once.
 `RuleBaselineAdapter` uses the same kernel and applies only explicit
@@ -32,9 +33,13 @@ The local golden pass selects five runnable scenarios from the canonical suite:
 
 - supplier replanning (`development-supplier-availability-001`)
 - promotion routing (`development-promotion-001`)
-- inventory correction (`development-inventory-correction-001`)
 - delivery disruption (`development-delivery-delay-001`)
+- sales materiality fail-closed routing (`development-sales-materiality-001`)
 - exact-version approval/stale-version handling (`development-stale-approval-001`)
+
+The inventory-correction scenario remains open because Backend has not yet
+landed an authoritative inventory-adjustment event contract. It is not selected
+for the runnable golden pass.
 
 Prepare a reviewable, evaluator-truth-free scenario sheet with:
 
@@ -67,4 +72,3 @@ the resulting stale error plus the persisted audit reference. The output
 preserves failures, routing, specialist/tool counts, validation and approval
 outcomes, plus explicit `pending`/`unsupported` metrics. It does not include
 evaluator-only expectations, private prompts, scratchpads, or raw frozen state.
-The sales-materiality scenario remains open and is not selected.

@@ -372,12 +372,10 @@
 # 8. Coding Pass 6 — Full Dynamic Replanning
 
 > Local contract audit (2026-09-18, after merging `origin/main`): promotion
-> application/comparison, canonical daily-correction events, activity-aware
-> procurement snapshots, and commitment-aware delivery projection are present
-> in the merged Backend contracts. The local Agent adapters now consume those
-> contracts and preserve deterministic ownership. Sales-driven materiality is
-> still explicitly ML-owned in the Backend handover, so this pass does not
-> invent a sales threshold or run a full chain for every sales batch.
+> application/comparison, activity-aware procurement snapshots, commitment-aware
+> delivery projection, and the persisted sales-materiality contract are present.
+> Inventory correction remains open because no authoritative inventory-adjustment
+> event contract is present on `origin/main`.
 
 - [x] Integrate deterministic materiality kernel for authoritative supplier availability/status changes
   - [x] Affected IDs
@@ -390,9 +388,10 @@
   - [x] Inventory receives the adjusted demand only when comparison is material
   - [x] Procurement remains conditional on projected stock exposure
 
-- [x] Implement inventory-correction route
-  - [x] Canonical daily correction routes to Inventory
-  - [x] Procurement is conditional on projected stock exposure
+- [ ] Implement inventory-correction route
+  - [ ] Authoritative inventory-adjustment event contract (Backend gap)
+  - [ ] Safe correction routes to Inventory and proves `KEEP_CURRENT_PLAN`
+  - [ ] Procurement is conditional on projected stock exposure
 
 - [x] Implement supplier-disruption route for authoritative availability/status changes
   - [x] Procurement first
@@ -401,11 +400,15 @@
 - [ ] Implement complex multi-domain route
   - [x] Demand -> Inventory -> Procurement routing is implemented
   - [x] Coordinator can perform bounded second investigation round
-  - [ ] PostgreSQL-backed promotion-to-publication acceptance is pending a local test database
+  - [x] PostgreSQL-backed promotion-to-publication acceptance on a dedicated local database
 
-- [ ] Implement sales-trigger materiality route
-  - [ ] ML-owned material threshold / forecast-input contract
-  - [x] Sales runs do not guess a threshold or invoke the full chain
+- [x] Implement sales-trigger materiality contract route
+  - [x] Landed `SALES_MATERIALITY_V1` policy is selected and frozen by Backend
+  - [x] Backend persists request/result transport with revision, `as_of`, and `known_at`
+  - [x] `get_materiality()` exposes the persisted result with immutable evidence
+  - [x] Missing/incomplete sales evidence fails closed
+  - [x] Complete material sales with safe inventory certifies `KEEP_CURRENT_PLAN`
+  - [x] Sales specialist routing is Coordinator-owned; no specialist recursion
 
 - [x] Implement delivery-disruption route
   - [x] Inventory consumes frozen received/cancelled/outstanding commitments once
@@ -419,7 +422,7 @@
 - [ ] Implement `REQUEST_HUMAN_APPROVAL`
 - [x] Implement `ESCALATE` with correct reason / detail for no feasible supplier replacement
 
-- [ ] Review and commit Pass 6
+- [x] Review and commit Pass 6
 
 ---
 
@@ -477,7 +480,7 @@
   - [x] Promotion details
   - [x] Inventory freshness
   - [x] Forecast/history and policy/version evidence
-  - Missing values remain `MISSING_REQUIRED_DATA` / incomplete; they are never defaulted into a feasible or approved plan. Sales materiality remains blocked by its explicitly ML-owned contract.
+  - Missing values remain `MISSING_REQUIRED_DATA` / incomplete; they are never defaulted into a feasible or approved plan. Sales materiality now uses the frozen Backend contract and remains fail-closed until a result is persisted.
 
 - [x] Test prompt injection
   - [x] Manager text tries to override policy
@@ -542,7 +545,7 @@
 - [x] Enforce persisted audit-entry append-only history in PostgreSQL
 - [ ] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed supplier-replanning verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, and final outcome. The local promotion, correction, and delivery adapters preserve the same append-only evidence path; their PostgreSQL execution remains pending the test database in this environment. Sales materiality remains explicitly ML-owned.
+  - PostgreSQL-backed verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, final outcome, promotion routing, delivery routing, and sales-materiality freshness/lifecycle evidence. Inventory correction remains open with the missing authoritative event contract.
 
 - [x] Review and commit Pass 9
 
@@ -563,8 +566,8 @@
 - [ ] Cover scenario families
   - [x] Normal planning
   - [x] Promotion
-  - [ ] Demand spike / drop (sales-materiality contract remains ML-owned)
-  - [x] Inventory correction
+  - [x] Demand spike / drop (sales-materiality contract and fail-closed scenario)
+  - [ ] Inventory correction (authoritative event contract not landed)
   - [ ] Wastage / expiry (no canonical evaluation fixture yet)
   - [x] Supplier shortage / delay / cancellation
   - [x] Price change
@@ -608,12 +611,15 @@
 - [ ] Review and commit Pass 10
 
 Closure verification (2026-09-18): the real local demo was prepared and run
-twice against disposable PostgreSQL database `restock_demo_closure_9043632c0c40448091fdd51d82f04948`.
-The machine-readable outputs were valid and repeatable; promotion failures
-remained failures, live model metrics remained `pending`, business metrics
-remained `unsupported`, and evaluator truth stayed separate from runtime
-evidence. Promotion and inventory-correction acceptance remain open because
-the current authoritative backend contracts do not support those fixtures.
+twice against dedicated PostgreSQL database `restock_demo_20260918`. Five
+supported scenarios produced stable boundary fingerprints, outcomes, routing,
+specialist/tool counts, and stale-approval evidence; per-run identifiers and
+latency remain intentionally run-specific. Promotion completed through the
+real local path, sales missing-result routing escalated with
+`MISSING_REQUIRED_DATA`, live model metrics remained `pending`, business
+metrics remained `unsupported`, and evaluator truth stayed separate from
+runtime evidence. Inventory correction remains open because the authoritative
+inventory-adjustment event contract is not landed.
 
 ---
 
@@ -641,11 +647,11 @@ summary fields without raw frozen state, prompts, scratchpads, or secrets.
 
 # 14. Golden Acceptance Scenario
 
-Closure status (2026-09-18): not complete. Supplier, delivery-disruption,
-and stale-approval paths exercised on the real local runner; promotion is
-blocked by an incomplete authoritative `PromotionEventPayload`, and inventory
-correction is blocked by the missing authoritative inventory-adjustment event
-contract. No substitute semantics were added.
+Closure status (2026-09-18): supplier, promotion, delivery-disruption, sales
+fail-closed, and stale-approval paths exercised on the real local runner.
+Inventory correction remains the only contract-gated Golden Acceptance gap:
+Backend has not landed an authoritative inventory-adjustment event contract.
+No substitute semantics were added.
 
 - [ ] Start with `PLAN-v2` pending or approved
 - [ ] Supplier availability falls
@@ -667,10 +673,11 @@ contract. No substitute semantics were added.
 
 # 15. Hero Demo
 
-Closure status (2026-09-18): remains open until the promotion and inventory
-authoritative contracts land. The local reset/prepare/run mechanism itself was
-verified twice from the same dedicated demo database without carry-over plans,
-events, commitments, or revision drift.
+Closure status (2026-09-18): the supported local reset/prepare/run mechanism
+was verified twice from the same dedicated demo database without carry-over
+plans, events, commitments, or revision drift. Promotion, delivery, supplier,
+sales fail-closed, and stale-approval paths are supported; inventory correction
+remains open pending the authoritative Backend event contract.
 
 - [ ] Monday: normal scheduled planning
   - [ ] Demand -> Inventory -> Procurement
@@ -781,8 +788,8 @@ events, commitments, or revision drift.
 - [x] Run approval / stale-version suite
 - [ ] Run optimiser termination suite
 - [ ] Run full benchmark
-- [ ] Run golden acceptance scenario
-- [ ] Run hero demo from clean seed
+- [x] Run supported golden acceptance scenarios
+- [x] Run supported hero-demo preparation/execution from clean seed
 
 - [ ] Review audit records
   - [ ] No chain-of-thought
@@ -798,11 +805,11 @@ events, commitments, or revision drift.
   - [ ] No stale enums / statuses
   - [x] No target metrics presented as achieved results
 
-Closure verification (2026-09-18): full PostgreSQL suite passed (724 tests),
-database-independent suite passed (635 tests), and static/database checks
-passed: Pyright, Ruff, Alembic check, frontend lint/typecheck/build, and
-`git diff --check`. The full golden acceptance and hero demo remain open as
-noted above.
+Closure verification (2026-09-18): full PostgreSQL suite passed (772 tests),
+including the landed sales-materiality route and dedicated migration-head
+merge. The supported golden/demo path passed twice; inventory correction,
+live LLM, AWS, deployment, and undefined persisted human-review workflow
+remain explicitly incomplete.
 
 - [ ] Freeze submission build
 - [ ] Record final commit SHA
