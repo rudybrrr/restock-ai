@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { ProcurementEvidence } from "@/components/procurement-evidence";
+import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -385,6 +386,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
             <Link href="/workspace/activity">
               View assessment and audit history →
             </Link>
+            <ManagerEvidencePanel runId={plan.run_id} compact />
           </details>
         </div>
       </section>

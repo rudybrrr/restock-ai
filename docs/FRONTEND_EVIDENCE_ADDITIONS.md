@@ -40,6 +40,25 @@ The development database was upgraded using the two existing additive migrations
 
 An initial Windows listener check did not detect PostgreSQL, but a subsequent direct TCP/database check succeeded. This is no longer a verification blocker.
 
+## Next parallel pass: manager-safe run evidence and golden demo
+
+The manager-only `GET /api/v1/manager/runs/{run_id}/evidence` projection now
+whitelists persisted plan metadata/history, approval attempts including
+`PLAN_VERSION_STALE`, trigger/audit timeline entries, Coordinator specialist and
+tool routing, validation summaries, final decision/reason, and explicit evidence
+gaps. It does not return run snapshots, prompts, scratchpads, raw audit payloads,
+or private frozen state. Evaluation is currently reported as
+`EVALUATION_NOT_PERSISTED` because local result files are not authoritative
+run-linked records.
+
+Activity renders the full projection through the existing assessment evidence
+surface. Overview and Recommendations render compact summaries. The local demo
+wrapper selects supplier replanning, promotion routing, inventory correction,
+delivery disruption, and stale-version approval scenarios from the canonical
+evaluation suite. Preparation is evaluator-truth-free; execution resets and
+reseeds only a dedicated `restock_demo_...` database before each real Static,
+Rule, and local Adaptive run.
+
 ## Still deliberately unavailable
 
 Real forecast outputs, shortage projections, integrated engine-generated plans/search certificates, automatic materiality, emergency/contingency calculations, measured waste and full agent tool narratives remain clearly separated from the new evidence displays.

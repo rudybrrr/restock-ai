@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import AwareDatetime
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from src import (
     changes,
@@ -23,6 +23,7 @@ from src.auth import (
     require_manager,
 )
 from src.errors import ApiError
+from src.manager_evidence import ManagerRunEvidence, build_manager_run_evidence
 from src.operations_schemas import (
     AuditEntry,
     DailyDraft,
@@ -174,6 +175,52 @@ def request_assessment(body: AssessmentRequest, session: SessionDep, manager: Ma
 @router.get("/runs/{run_id}", response_model=PlanningRun)
 def read_run(run_id: str, session: SessionDep):
     return planning.get_run(session, run_id)
+
+
+@router.get("/manager/runs/{run_id}/evidence", response_model=ManagerRunEvidence)
+def read_manager_run_evidence(run_id: str, session: SessionDep, manager: Manager):
+    """Return a manager-safe projection of one persisted assessment trace."""
+    run = planning.get_run(session, run_id)
+    plan_id = run.snapshot.get("revises_plan_id")
+    if run.plan_version_id is not None:
+        plan_id = (
+            session.execute(
+                select(db.plan_versions.c.plan_id).where(
+                    db.plan_versions.c.id == run.plan_version_id
+                )
+            ).scalar_one_or_none()
+            or plan_id
+        )
+    plan_rows = session.execute(
+        select(db.plan_versions).where(
+            or_(
+                db.plan_versions.c.run_id == run_id,
+                db.plan_versions.c.plan_id == plan_id,
+            )
+        )
+    ).mappings().all()
+    plans = [planning.read_plan(session, row["id"]) for row in plan_rows]
+    trigger_event = None
+    if run.trigger_event_id is not None:
+        trigger_event = (
+            session.execute(
+                select(db.events).where(db.events.c.id == run.trigger_event_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+    audits = (
+        session.execute(
+            select(db.audit_entries)
+            .where(db.audit_entries.c.event_id == run.trigger_event_id)
+            .order_by(db.audit_entries.c.timestamp)
+        )
+        .mappings()
+        .all()
+        if run.trigger_event_id is not None
+        else []
+    )
+    return build_manager_run_evidence(run, plans, trigger_event, audits)
 
 
 @router.get(

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { OverviewOperations } from "@/components/overview-operations";
+import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
 import { singaporeTime } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { api, Ingredient, InventoryLot, Plan, Run } from "@/lib/api";
@@ -102,6 +103,7 @@ export default function Overview() {
               >
                 Review recommendation
               </Link>
+              <ManagerEvidencePanel runId={active.run_id} compact />
             </div>
           ) : (
             <div className="empty-state">
