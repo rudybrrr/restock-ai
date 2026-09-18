@@ -1,4 +1,7 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from src.planning import current_state_revision
 
 
 def sign_in(client: TestClient) -> None:
@@ -134,6 +137,45 @@ def test_agent_claims_a_frozen_run_and_publishes_a_calculated_plan(
         "/api/v1/order-cycles", params={"start": "2026-02-15", "end": "2026-02-15"}
     )
     assert all(row["status"] == "OPEN" for row in cycles.json())
+
+
+def test_live_agent_claim_uses_current_revision_for_stale_protection(
+    client: TestClient,
+) -> None:
+    sign_in(client)
+    requested = client.post(
+        "/api/v1/assessments", json={"as_of": "2026-02-15T22:00:00+08:00"}
+    )
+    assert requested.status_code == 202
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    claimed = client.post("/api/v1/runs/claim")
+    assert claimed.status_code == 200, claimed.text
+    run = claimed.json()
+    with Session(client.app.state.engine) as session:
+        assert current_state_revision(session) == str(run["input_revision"])
+
+    del client.headers["Authorization"]
+    changed = client.put(
+        "/api/v1/promotions/cny",
+        json={
+            "revision": 1,
+            "name": "revision test",
+            "start_date": "2026-02-17",
+            "end_date": "2026-02-18",
+            "menu_item_ids": ["chicken-rice"],
+            "demand_multiplier": "1.5",
+            "effective_at": "2026-02-16T08:00:00+08:00",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    stale = client.post(
+        f"/api/v1/runs/{run['id']}/complete",
+        json={"outcome": "ESCALATE", "escalation_reason": "TOOL_FAILURE"},
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["error"]["code"] == "STATE_REVISION_STALE"
 
 
 def test_assessment_requests_coalesce_until_the_agent_completes(

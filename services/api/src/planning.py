@@ -65,21 +65,20 @@ def _json(value):
     return value
 
 
-def _revision(session: Session) -> int:
-    return session.execute(
-        select(func.count())
-        .select_from(db.events)
-        .where(
-            db.events.c.type.not_in(
-                (
-                    "PLAN_APPROVED",
-                    "PLAN_REJECTED",
-                    "PLAN_INVALIDATED",
-                    "PLAN_SUPERSEDED",
-                )
+def _revision(session: Session, known_at: datetime | None = None) -> int:
+    statement = select(func.count()).select_from(db.events).where(
+        db.events.c.type.not_in(
+            (
+                "PLAN_APPROVED",
+                "PLAN_REJECTED",
+                "PLAN_INVALIDATED",
+                "PLAN_SUPERSEDED",
             )
         )
-    ).scalar_one()
+    )
+    if known_at is not None:
+        statement = statement.where(db.events.c.timestamp <= known_at)
+    return session.execute(statement).scalar_one()
 
 
 def current_state_revision(session: Session) -> str:
@@ -194,7 +193,7 @@ def _snapshot(
 ) -> dict:
     known_at = known_at or datetime.now(UTC)
     captured_state_revision = (
-        _revision(session)
+        _revision(session, known_at)
         if captured_state_revision is None
         else captured_state_revision
     )
