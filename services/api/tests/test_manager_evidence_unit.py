@@ -13,6 +13,53 @@ from src.main import create_app
 from src.schemas import Identity
 
 
+def test_operational_contract_exports_adapter_ready_fixed_commitments():
+    rows = procurement_contracts.first_slice_seed_rows(
+        datetime(2026, 2, 15, tzinfo=UTC)
+    )
+    contract = procurement_contracts._build(
+        rows["policies"][0],
+        rows["domains"][0],
+        rows["forecast_inputs"][0],
+        rows["offers"],
+        rows["opportunities"],
+    ).model_copy(
+        update={
+            "run_id": "run-1",
+            "captured_state_revision": "12",
+        }
+    )
+    commitment = {
+        "id": "delivery-1",
+        "supplier_id": "fresh",
+        "ingredient_id": "chicken",
+        "kind": "NORMAL",
+        "expected_quantity": "10.000",
+        "expected_at": "2026-02-16T08:00:00+08:00",
+        "ordered_at": "2026-02-15T22:00:00+08:00",
+        "received_quantity": "2.000",
+        "cancelled_quantity": "3.000",
+        "outstanding_quantity": "5.000",
+        "receipts": [],
+    }
+    frozen = procurement_contracts.freeze_operational_activity(
+        contract.model_dump(mode="json"),
+        {"commitments": [commitment], "sales_batches": [{"id": "batch-1"}]},
+    )
+    assert frozen["frozen_state"]["sales_batches"] == [{"id": "batch-1"}]
+    projection = frozen["commitment_projection"]
+    assert projection["complete"] is True
+    assert projection["supply_manifest"] == ["delivery-1"]
+    supply = projection["supplies"][0]
+    assert supply["delivery"]["outstanding_quantity"] == "5.000"
+    assert supply["expiry_date"] == "2026-02-20"
+    assert supply["projected_lot_id"] == "projected-delivery:delivery-1"
+    assert supply["expiry_evidence"]["reference"] == (
+        "fresh-chicken:shelf_life_days_on_arrival"
+    )
+    assert frozen["activity_semantics"]["reconciliation_mode"] == ("COMPARE_NEVER_ADD")
+
+
 def test_manager_evidence_uses_canonical_contract_and_frozen_run(monkeypatch):
     rows = procurement_contracts.first_slice_seed_rows(
         datetime(2026, 2, 15, tzinfo=UTC)

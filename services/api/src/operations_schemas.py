@@ -23,6 +23,7 @@ EventType = Literal[
     "SUPPLIER_STATUS_CHANGED",
     "SUPPLIER_RELIABILITY_UPDATED",
     "DAILY_UPDATE_SUBMITTED",
+    "DAILY_UPDATE_CORRECTED",
     "EXTERNAL_ORDER_RECORDED",
     "DELIVERY_UPDATED",
     "DELIVERY_DELAYED",
@@ -76,6 +77,7 @@ class SalesBatch(SalesBatchCreate):
 
 class SalesBatchEventPayload(BaseModel):
     batch: SalesBatch
+    effective_at: AwareDatetime
 
 
 class SalesBatchEvent(BaseModel):
@@ -134,6 +136,7 @@ class DailyHistory(BaseModel):
 
 class DailyEventPayload(BaseModel):
     revision_id: str
+    replaces_revision_id: str | None = None
     day: date
     revision: int
     cutoff: AwareDatetime
@@ -274,7 +277,7 @@ class DeliveryEventPayload(BaseModel):
 
 class DailyEvent(BaseModel):
     id: str
-    type: Literal["DAILY_UPDATE_SUBMITTED"]
+    type: Literal["DAILY_UPDATE_SUBMITTED", "DAILY_UPDATE_CORRECTED"]
     timestamp: AwareDatetime
     source: str
     payload: DailyEventPayload

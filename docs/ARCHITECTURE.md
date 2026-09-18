@@ -130,6 +130,7 @@ MVP event types (shared by all specialised routes and tools):
 ```text
 SALES_UPDATED
 DAILY_UPDATE_SUBMITTED
+DAILY_UPDATE_CORRECTED
 PROMOTION_CREATED
 PROMOTION_CHANGED
 INVENTORY_ADJUSTED
@@ -155,9 +156,9 @@ PLAN_SUPERSEDED
 
 ## 6. Agent tools
 
-Event conventions: timestamp is real recording time; payload includes effective_at or period_start/period_end in simulation time for time-sensitive inputs. SALES_UPDATED carries a complete incremental batch with source/batch_id and dish quantities. DAILY_UPDATE_SUBMITTED carries the final submission revision and cutoff. DELIVERY_RECEIVED references the received lot and actual quantity; DELIVERY_SHORT records the outstanding or cancelled remainder without applying the receipt again.
+Event conventions: timestamp is real recording time; payload includes effective_at or period_start/period_end in simulation time for time-sensitive inputs. SALES_UPDATED carries a complete incremental batch with source/batch_id, dish quantities, and period-end effective time. DAILY_UPDATE_SUBMITTED carries the first final submission revision and cutoff. DAILY_UPDATE_CORRECTED carries the replacement revision, the superseded revision ID, and the unchanged cutoff. DELIVERY_RECEIVED references the received lot and actual quantity; DELIVERY_SHORT records the outstanding or cancelled remainder without applying the receipt again.
 
-Trigger mapping: DAILY_UPDATE_SUBMITTED, PROMOTION_CREATED, PROMOTION_CHANGED, MANUAL_REASSESSMENT_REQUESTED, MANAGER_INSTRUCTION, and explicit supplier/disruption events request assessment. SALES_UPDATED always updates estimates, but requests the agent only on deterministic materiality. Ordinary receipt/order/cycle/expiry events persist state and use deterministic impact checks before requesting reassessment. Draft form edits emit no completed submission event. All event-driven mutations are applied once; special routes and event ingestion cannot both apply the same change.
+Trigger mapping: DAILY_UPDATE_SUBMITTED, DAILY_UPDATE_CORRECTED, SALES_UPDATED, PROMOTION_CREATED, PROMOTION_CHANGED, MANUAL_REASSESSMENT_REQUESTED, MANAGER_INSTRUCTION, and explicit supplier/disruption events request assessment. In the MVP, one complete simulator batch is the reassessment unit; there is no per-sale Agent call or continuous POS stream. Ordinary receipt/order/cycle/expiry events persist state and use deterministic impact checks before requesting reassessment. Draft form edits emit no completed submission event. All event-driven mutations are applied once; special routes and event ingestion cannot both apply the same change.
 
 Agent-facing capabilities should expose narrow adapters such as:
 

@@ -45,6 +45,7 @@ from src.planning_schemas import (
 from src.procurement_contracts import (
     bind_frozen_supplier_state,
     freeze_first_slice_contract,
+    freeze_operational_activity,
 )
 from src.reconciliation import authoritative_daily_sales
 from src.requirements import sum_recipe_usage
@@ -297,30 +298,29 @@ def _snapshot(
         if supplier_reassessment is not None:
             contract = bind_frozen_supplier_state(contract, offers, offer_versions)
         contract["run_id"] = run_id
-        required_empty = (
-            snapshot["commitments"],
-            snapshot["daily_history"],
-            snapshot["sales_batches"],
-        )
-        if any(required_empty):
-            snapshot["procurement_contract_unavailable_reason"] = (
-                "FIRST_SLICE_ACTIVITY_NOT_EMPTY"
+        frozen_state = {
+            key: snapshot[key]
+            for key in (
+                "inventory",
+                "ingredients",
+                "menu_items",
+                "recipes",
+                "suppliers",
+                "commitments",
+                "daily_history",
+                "authoritative_daily_sales",
+                "sales_batches",
+                "promotions",
+                "holidays",
+                "cycle_decisions",
+                "offers",
+                "offer_version_ids",
+                "missing_offer_history",
             )
-        else:
-            contract["frozen_state"] = {
-                key: snapshot[key]
-                for key in (
-                    "inventory",
-                    "ingredients",
-                    "menu_items",
-                    "recipes",
-                    "suppliers",
-                    "commitments",
-                    "daily_history",
-                    "sales_batches",
-                )
-            }
-            snapshot["procurement_contract"] = contract
+        }
+        snapshot["procurement_contract"] = freeze_operational_activity(
+            contract, frozen_state
+        )
     return snapshot
 
 

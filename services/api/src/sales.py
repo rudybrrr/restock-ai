@@ -159,7 +159,13 @@ def create_sales_batch(
     result = _model(row)
     expire_lots(session, body.period_end, actor)
     record_event(
-        session, "SALES_UPDATED", actor, {"batch": result.model_dump(mode="json")}
+        session,
+        "SALES_UPDATED",
+        actor,
+        {
+            "batch": result.model_dump(mode="json"),
+            "effective_at": body.period_end.isoformat(),
+        },
     )
     session.commit()
     return result
