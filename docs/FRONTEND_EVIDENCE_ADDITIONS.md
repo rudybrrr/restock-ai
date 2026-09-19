@@ -36,7 +36,7 @@ The development database was upgraded using the two existing additive migrations
 - PostgreSQL-backed `tests/test_procurement_contract.py`: seven tests passed, including manager/agent boundaries, missing versions, missing run contracts and exact frozen-run responses.
 - `tests/test_access.py`, `tests/test_sales.py`, and the isolated manager-evidence test: 17 tests passed together. Database tests used disposable, uniquely named test databases.
 - `tests/live-evidence-browser.cjs`: real manager login, policy/24-offer/24-opportunity read, historical inputs and estimated inventory passed against the local application. No operational records were created; only the test's login/logout session changed.
-- Ruff and Pyright passed for the changed backend modules/tests; browser screenshots were inspected. Mobile overflow checks cover sales, policy and forecast-history panels.
+- Ruff and Pyright passed for the changed backend modules/tests; screenshot-disabled browser assertions cover sales, policy and forecast-history panels. This hardening pass did not generate or inspect screenshots.
 
 An initial Windows listener check did not detect PostgreSQL, but a subsequent direct TCP/database check succeeded. This is no longer a verification blocker.
 
@@ -53,8 +53,8 @@ run-linked records.
 
 Activity renders the full projection through the existing assessment evidence
 surface. Overview and Recommendations render compact summaries. The local demo
-wrapper selects supplier replanning, promotion routing, inventory correction,
-delivery disruption, and stale-version approval scenarios from the canonical
+wrapper selects supplier replanning, promotion routing, delivery disruption,
+sales-materiality fail-closed routing, and stale-version approval scenarios from the canonical
 evaluation suite. Preparation is evaluator-truth-free; execution resets and
 reseeds only a dedicated `restock_demo_...` database before each real Static,
 Rule, and local Adaptive run.

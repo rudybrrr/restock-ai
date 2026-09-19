@@ -35,7 +35,7 @@ The service date defaults explicitly to the agreed demonstration date, 16 Februa
 
 ## Capability boundaries
 
-Forecast artifacts, projected inventory, canonical procurement policy, search completeness/economic evidence, optional waste entry, and full materiality certification remain explicit placeholders where the inspected backend does not expose their final interface. The frontend never replaces an API failure with sample operational records.
+The frontend displays Backend-owned historical forecast inputs, estimated inventory, immutable procurement policy/domain evidence, search completeness/economic evidence where supplied, and persisted sales-materiality status. Forecast inputs remain distinct from forecast results; estimated inventory remains labelled as estimated; and missing evidence stays visible rather than being filled with sample records. Optional waste entry, live forecast outputs, and any final materiality certification not exposed by the Backend remain unavailable.
 
 Approval does not create purchases. Existing linked allocation totals come from the server. Receipt request IDs remain stable during retries of the open receipt form. Backend errors preserve entered values. Unknown supplier constraints remain unknown. Observed, estimated, and projected quantities stay labelled separately.
 
