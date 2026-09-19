@@ -273,6 +273,33 @@ are immutable and support exact idempotent retries. A sales-triggered run cannot
 complete without the saved result; incomplete evidence must escalate and a
 material result cannot certify `KEEP_CURRENT_PLAN`.
 
+### Promotion and inventory-correction contracts
+
+Claimed snapshots expose promotions as complete strict `PromotionEvent` records,
+including their envelope and all revisions known at the run's `known_at`. Pass
+that collection directly to the numerical promotion function. Provenance is the
+event `source`; do not add `assumption_source` to the canonical payload.
+
+A corrected closing submission emits `INVENTORY_ADJUSTED` when any lot count
+changes. The Agent reads the exact changed lots and corrected inventory at:
+
+```text
+GET /api/v1/runs/{run_id}/inventory-adjustment-context
+```
+
+It stores or reads the deterministic assessment through:
+
+```text
+PUT /api/v1/runs/{run_id}/inventory-adjustment-assessment
+GET /api/v1/runs/{run_id}/inventory-adjustment-assessment
+```
+
+The result is immutable, hash-bound and checked against the run's clocks,
+revision, inventory snapshot, trigger events, plan reference and evidence. A
+complete non-material result allows `KEEP_CURRENT_PLAN` without calling the
+procurement optimiser. Unknown must escalate, while a material correction must
+continue to replanning or escalation.
+
 ## Audit safeguards and database upgrade
 
 Pull the current code, then run `python -m alembic upgrade head` and rerun

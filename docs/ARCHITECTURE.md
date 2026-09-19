@@ -123,7 +123,12 @@ sequenceDiagram
 
 Locally supported dynamic routes include supplier availability/status/price changes, promotions, delivery disruption, sales materiality, stale approval, missing data, infeasible supplier search, and bounded optimiser search-limit handling. The supported golden demo exercises supplier replanning, promotion routing, delivery disruption, sales-materiality fail-closed handling, and stale approval.
 
-The inventory-correction route is intentionally open: the authoritative inventory-adjustment event contract is absent on the current main line. The `INVENTORY_ADJUSTED` name in shared planning material is not treated as an implemented Backend contract.
+Inventory corrections use the Backend-owned `INVENTORY_ADJUSTED` event and
+frozen assessment contract. The event retains the original/replacement daily
+revision IDs, effective cutoff, affected lot/ingredient/unit, previous and
+corrected quantities, and exact quantity delta. Agent code receives the frozen
+context, routes the Inventory Specialist, and consumes the persisted assessment;
+it does not recompute materiality or mutate operational state directly.
 
 ## Audit and manager evidence
 

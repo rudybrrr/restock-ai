@@ -9,6 +9,7 @@ from src import (
     changes,
     cycles,
     deliveries,
+    inventory_adjustment_contracts,
     operations,
     planning,
     procurement_contracts,
@@ -24,6 +25,11 @@ from src.auth import (
     require_manager,
 )
 from src.errors import ApiError
+from src.inventory_adjustment_schemas import (
+    InventoryAdjustmentAssessment,
+    InventoryAdjustmentContext,
+    InventoryAdjustmentResultWrite,
+)
 from src.manager_evidence import ManagerRunEvidence, build_manager_run_evidence
 from src.operations_schemas import (
     AuditEntry,
@@ -373,6 +379,39 @@ def save_sales_materiality_result(
     agent: Agent,
 ):
     return sales_materiality_contracts.save_result(session, run_id, request_id, body)
+
+
+@router.get(
+    "/runs/{run_id}/inventory-adjustment-context",
+    response_model=InventoryAdjustmentContext,
+)
+def read_inventory_adjustment_context(run_id: str, session: SessionDep, agent: Agent):
+    return inventory_adjustment_contracts.context_from_run(
+        planning.get_run(session, run_id)
+    )
+
+
+@router.get(
+    "/runs/{run_id}/inventory-adjustment-assessment",
+    response_model=InventoryAdjustmentAssessment,
+)
+def read_inventory_adjustment_assessment(
+    run_id: str, session: SessionDep, agent: Agent
+):
+    return inventory_adjustment_contracts.read_assessment(session, run_id)
+
+
+@router.put(
+    "/runs/{run_id}/inventory-adjustment-assessment",
+    response_model=InventoryAdjustmentAssessment,
+)
+def save_inventory_adjustment_assessment(
+    run_id: str,
+    body: InventoryAdjustmentResultWrite,
+    session: SessionDep,
+    agent: Agent,
+):
+    return inventory_adjustment_contracts.save_result(session, run_id, body)
 
 
 @router.get("/runs", response_model=list[PlanningRun])
