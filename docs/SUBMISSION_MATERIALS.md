@@ -28,12 +28,12 @@ Typed inputs/outputs, exact specialist allowlists, no specialist recursion, boun
 
 ## Evaluation evidence
 
-Fresh local results are in [LOCAL_RESULTS_2026-09-19.md](evaluation/LOCAL_RESULTS_2026-09-19.md). The backend suite passed 773 tests; the explicit DB-independent selection passed 681. The supported golden pass covers five scenario families across Static, Rule, and local Adaptive adapters, with two repeat runs and stable runtime evidence fingerprints.
+Fresh local results are in [LOCAL_RESULTS_2026-09-19.md](evaluation/LOCAL_RESULTS_2026-09-19.md). The complete PostgreSQL backend suite passed 782 tests; the database-independent synthetic-history suite passed 68. The supported golden pass covers seven development scenarios across Static, Rule, and local Adaptive adapters, with stable runtime evidence fingerprints.
 
 ## Limitations and pending claims
 
 - Synthetic first-slice data is not evidence of restaurant savings or production SME outcomes.
 - Live Sonnet/OpenClaw behavior, tokens, latency, cost, AWS/Bedrock, and deployment are pending.
 - Business metrics are unsupported by the current harness and are not reported as zero.
-- Inventory correction is blocked by the missing authoritative Backend inventory-adjustment event contract.
+- Inventory correction is locally complete through the landed Backend `INVENTORY_ADJUSTED` context/assessment contract; live LLM/AWS/deployment remain out of scope.
 - Persisted human-review workflow semantics are not defined and remain open.

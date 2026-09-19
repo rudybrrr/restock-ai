@@ -77,8 +77,8 @@ The manager UI defaults to `http://localhost:8000` for the API and `http://local
 
 The supported local golden demo uses only currently working flows:
 
-1. Prepare a five-scenario, evaluator-truth-free sheet.
-2. Run supplier replanning, promotion routing, delivery disruption, sales-materiality fail-closed routing, and exact-version stale approval.
+1. Prepare a seven-scenario, evaluator-truth-free sheet.
+2. Run supplier replanning, promotion routing, delivery disruption, safe and material inventory correction, sales-materiality fail-closed routing, and exact-version stale approval.
 3. Review the active/pending recommendation, Coordinator routing, specialist/tool summaries, validation evidence, approval boundary, and Activity evidence timeline.
 4. Repeat from the same dedicated `restock_demo_...` database; the runner resets and reseeds it before each system/scenario comparison.
 
@@ -94,7 +94,7 @@ uv run python -m src.evaluation.local_demo run `
   --output .tmp/golden-demo-result.json
 ```
 
-The inventory-adjustment route is intentionally not part of this demo because its authoritative Backend event contract is not present on the current main line.
+The inventory-adjustment route uses Backend PR #32's canonical event/context/assessment contract. The safe case keeps the current plan without Procurement; the material case reaches the real Procurement engine and publishes a revision.
 
 See [docs/LOCAL_DEMO_SCRIPT.md](docs/LOCAL_DEMO_SCRIPT.md) for the concise rehearsal script and [docs/SCREENSHOT_VIDEO_CHECKLIST.md](docs/SCREENSHOT_VIDEO_CHECKLIST.md) for the capture plan. These documents do not perform capture or submission.
 
@@ -108,7 +108,7 @@ The local safety suite covers permission boundaries, prompt-injection attempts, 
 
 The checked-in manifest contains 18 scenario rows: 17 currently runnable rows and one open inventory-correction row. It includes development and held-out splits and keeps expected truth separate from runtime inputs. The supported golden pass measures five runnable development scenarios across Static, Rule, and local Adaptive ReStock adapters: 15 executions, zero failed executions, stable observed-boundary fingerprints across two runs, and stale approval evidence with a persisted audit reference.
 
-Fresh local verification on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). The complete backend suite passed 773 tests. The explicit database-independent selection passed 681 tests after including the health endpoint. Ruff, Pyright, ESLint, TypeScript, production build, Alembic base-to-head, Alembic check, clean seed/reseed, and screenshot-disabled frontend evidence assertions also passed.
+Fresh local verification on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). The complete PostgreSQL backend suite passed 782 tests. The database-independent synthetic-history suite passed 68 tests with an external temp root. Ruff, Pyright, Alembic upgrade/check, clean seed/reseed, and screenshot-disabled frontend evidence assertions also passed; frontend source was unchanged by this pass.
 
 The local evaluation reports routing, outcome, specialist-call, tool-call, retry, latency, failure, and prompt-injection evidence only where the harness supports it. Live model calls, token usage, live latency/cost, and business outcomes are `pending` or `unsupported`, never zero-filled. The data is synthetic and first-slice; it is not evidence of food-waste reduction, stockout reduction, lost-sales reduction, procurement savings, emergency-order savings, or real restaurant performance.
 

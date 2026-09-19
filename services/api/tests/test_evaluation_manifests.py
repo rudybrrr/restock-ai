@@ -14,10 +14,10 @@ def test_canonical_suite_is_strict_and_separates_splits() -> None:
     suite = load_manifest(MANIFEST)
 
     assert suite.suite_id == "restock-local-authoritative-v1"
-    assert len(suite.scenarios) == 18
+    assert len(suite.scenarios) == 19
     assert {scenario.split.value for scenario in suite.scenarios} == {"development", "held_out"}
-    assert sum(scenario.status.value == "runnable" for scenario in suite.scenarios) == 17
-    assert sum(scenario.status.value == "open" for scenario in suite.scenarios) == 1
+    assert sum(scenario.status.value == "runnable" for scenario in suite.scenarios) == 19
+    assert sum(scenario.status.value == "open" for scenario in suite.scenarios) == 0
     assert {
         scenario.scenario_id
         for scenario in suite.scenarios
@@ -62,4 +62,4 @@ def test_manifest_rejects_unknown_fields_and_accepts_landed_sales_contract() -> 
         for scenario in json.loads(MANIFEST.read_text(encoding="utf-8"))["scenarios"]
         if scenario["family"] == "inventory_correction"
     )
-    assert ScenarioManifest.model_validate(inventory).status.value == "open"
+    assert ScenarioManifest.model_validate(inventory).status.value == "runnable"

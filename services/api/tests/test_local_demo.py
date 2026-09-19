@@ -15,6 +15,8 @@ def test_golden_demo_selects_the_requested_operational_flows():
         "supplier_replanning",
         "promotion_route",
         "delivery_disruption",
+        "inventory_correction_safe",
+        "inventory_correction_material",
         "sales_materiality",
         "approval_stale_version",
     ]
@@ -22,6 +24,8 @@ def test_golden_demo_selects_the_requested_operational_flows():
         "development-supplier-availability-001",
         "development-promotion-001",
         "development-delivery-delay-001",
+        "development-inventory-correction-safe-001",
+        "development-inventory-correction-material-001",
         "development-sales-materiality-001",
         "development-stale-approval-001",
     ]
@@ -33,7 +37,7 @@ def test_golden_demo_preparation_is_machine_readable_and_runtime_safe(tmp_path: 
     output = tmp_path / "golden-demo.json"
     result = prepare_golden_demo(MANIFEST, output)
 
-    assert result["scenario_count"] == 5
+    assert result["scenario_count"] == 7
     assert output.exists()
     assert all("hidden_evaluator_truth" not in row for row in result["scenarios"])
     assert all("expected" not in row for row in result["scenarios"])

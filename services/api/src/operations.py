@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from typing import overload
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,14 @@ from src.operations_schemas import (
     InventoryAdjustmentLine,
 )
 from src.reconciliation import reconcile_sales
+
+
+@overload
+def _canonical_quantity(value: Decimal) -> Decimal: ...
+
+
+@overload
+def _canonical_quantity(value: None) -> None: ...
 
 
 def _canonical_quantity(value: Decimal | None) -> Decimal | None:

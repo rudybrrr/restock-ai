@@ -4,28 +4,28 @@ This is a repository-side summary of the provider-free local harness. It reports
 
 ## Scope
 
-- Canonical manifest: 18 rows.
-- Runnable rows: 17; one row remains open for inventory correction because the authoritative Backend inventory-adjustment event contract is absent.
+- Canonical manifest: 19 rows.
+- Runnable rows: 19; safe and material inventory-correction scenarios use the landed Backend PR #32 contract.
 - Development/held-out separation: present in the manifest and enforced by tests.
-- Supported golden run: 5 development scenarios × 3 local adapters = 15 executions per run.
-- Golden scenario families: supplier replanning, promotion, delivery disruption, sales-materiality fail-closed routing, and stale approval.
-- Repeated golden runs: 2, against named disposable PostgreSQL database `restock_demo_hardening_20260919`.
+- Supported golden run: 7 development scenarios × 3 local adapters = 21 executions.
+- Golden scenario families: supplier replanning, promotion, delivery disruption, safe/material inventory correction, sales-materiality fail-closed routing, and stale approval.
+- Golden run: against named disposable PostgreSQL database `restock_demo_20260918`.
 
 ## Golden aggregate results
 
 | Adapter | Executions | Failed | Outcome correctness | Routing accuracy | Unnecessary specialist-call rate | Specialist calls/run | Tool calls/run |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Static | 5 | 0 | 0.80 | 0.20 | 0.00 | 0.0 | 0.0 |
-| Rule | 5 | 0 | 0.80 | 0.80 | 0.20 | 0.0 | 0.0 |
-| Adaptive ReStock (local scripted path) | 5 | 0 | 0.60 | 0.40 | 0.40 | 1.2 | 1.2 |
+| Static | 7 | 0 | 0.714 | 0.143 | 0.00 | 0.0 | 0.0 |
+| Rule | 7 | 0 | 0.714 | 0.714 | 0.143 | 0.0 | 0.0 |
+| Adaptive ReStock (local scripted path) | 7 | 0 | 0.714 | 0.571 | 0.286 | 1.286 | 1.143 |
 
-The local adaptive result is reported honestly, including one missed replan and one unnecessary replan in this five-scenario selection. It is not a live-model quality score.
+The local adaptive result is reported honestly, including one missed replan and one unnecessary replan in this seven-scenario selection. The inventory-correction rows produced `KEEP_CURRENT_PLAN` for the safe assessment and `REVISE_PLAN` with `INVENTORY` -> `PROCUREMENT` for the material assessment. It is not a live-model quality score.
 
 All three adapters had zero retries per run and zero failed executions in the golden output. The stale-approval flow returned `PLAN_VERSION_STALE` and recorded an approval audit reference.
 
 ## Repeatability and reset evidence
 
-- Both runs selected 5 scenarios and produced 15 scenario results.
+- The run selected 7 scenarios and produced 21 scenario results.
 - Runtime evidence projections—scenario ID, adapter, observed-boundary fingerprint, outcome, routing, specialist calls, tool calls, and retries—matched across runs.
 - Run IDs, audit IDs, plan IDs, and local latency are intentionally run-specific and were excluded from the repeatability comparison.
 - The demo reset/reseeded the dedicated database before each system/scenario run.
@@ -34,11 +34,11 @@ All three adapters had zero retries per run and zero failed executions in the go
 
 ## Safety and evidence
 
-The full PostgreSQL suite passed 773 tests, including Agent permissions, prompt-injection handling, lifecycle/stale approval, optimiser termination, specialist retention/routing, materiality, audit immutability, evaluation contracts, manager evidence, and local demo contracts. The explicit database-independent selection passed 681 tests after including the health endpoint.
+The complete PostgreSQL suite passed 782 tests after the inventory-correction integration. The database-independent synthetic-history suite passed 68 tests with its temp root outside the repository, including the output-boundary guard. The run covered Agent permissions, prompt-injection handling, lifecycle/stale approval, optimiser termination, specialist retention/routing, materiality, audit immutability, evaluation contracts, manager evidence, and local demo contracts.
 
 The screenshot-disabled frontend evidence assertions passed for correction-aware totals, usage/overlap handling, estimates, policy/domain/history display, mobile overflow, manager run evidence, exact-version failure, absence of Agent credentials, and absence of browser-side writes outside the intended intercepted flow.
 
-Prompt-injection resistance is covered by the backend permission and offline-agent tests. The five-scenario golden aggregate contains no prompt-injection scenario, so no unsupported golden percentage is assigned to it.
+Prompt-injection resistance is covered by the backend permission and offline-agent tests. The seven-scenario golden aggregate contains no prompt-injection scenario, so no unsupported golden percentage is assigned to it.
 
 ## Pending or unsupported metrics
 
@@ -52,4 +52,4 @@ Prompt-injection resistance is covered by the backend permission and offline-age
 | Real restaurant/SME savings | Not measured |
 | Deployment reliability | Not measured |
 
-The inventory-correction scenario remains explicitly blocked by the missing authoritative event contract. No substitute event semantics or fake evaluation fixture were added.
+The inventory-correction scenarios use canonical `INVENTORY_ADJUSTED` events and a persisted authoritative assessment fixture. No evaluator-only expected outcome is injected into runtime inputs, and no substitute event semantics were added.

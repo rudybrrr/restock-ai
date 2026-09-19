@@ -939,6 +939,21 @@ def complete_run(
             .mappings()
             .one_or_none()
         )
+        # Supplier materiality is carried in the Coordinator audit trace rather
+        # than a persisted specialist result. Preserve that authoritative
+        # no-op certificate while keeping the newer persisted contracts
+        # authoritative for sales and inventory-adjustment runs.
+        audit_materiality_keep = bool(
+            body.outcome == "KEEP_CURRENT_PLAN"
+            and materiality is not None
+            and not materiality.material
+            and current is not None
+            and materiality.affected_plan_id == current["plan_id"]
+            and materiality.affected_plan_version == current["version"]
+            and sales_materiality is None
+            and inventory_materiality is None
+        )
+        materiality_keep = materiality_keep or audit_materiality_keep
         if calculated is None and not materiality_keep:
             raise ApiError(
                 409,

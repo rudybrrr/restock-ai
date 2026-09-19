@@ -31,6 +31,11 @@ from src.evaluation.contracts import (
     SystemResult,
 )
 from src.evaluation.manifests import assert_no_evaluator_truth
+from src.inventory_adjustment_contracts import context_from_run, save_result
+from src.inventory_adjustment_schemas import (
+    InventoryAdjustmentResult,
+    InventoryAdjustmentResultWrite,
+)
 from src.operations import record_event
 from src.operations_schemas import EventType as BackendEventType
 from src.operations_schemas import SalesBatchCreate
@@ -257,7 +262,43 @@ class SeededBackendScenarioPreparer:
         if not isinstance(raw_as_of, str):
             raise TypeError("scenario initial_authoritative_state.as_of is required")
         requested = request_run(session, datetime.fromisoformat(raw_as_of))
-        return claim_run(session) if requested.status == "QUEUED" else requested
+        run = claim_run(session) if requested.status == "QUEUED" else requested
+        assessment_fixture = boundary.initial_authoritative_state.get(
+            "inventory_adjustment_assessment"
+        )
+        if assessment_fixture is not None:
+            if not isinstance(assessment_fixture, dict):
+                raise TypeError("inventory_adjustment_assessment must be an object")
+            context = context_from_run(run)
+            result = InventoryAdjustmentResult.model_validate(
+                {
+                    "material_change": assessment_fixture["material_change"],
+                    "complete": assessment_fixture.get("complete", True),
+                    "inventory_feasible": assessment_fixture.get(
+                        "inventory_feasible", True
+                    ),
+                    "assessed_lot_ids": context.assessed_lot_ids,
+                    "assessed_ingredient_ids": context.assessed_ingredient_ids,
+                    "findings": assessment_fixture.get("findings", []),
+                    "evidence_refs": context.required_evidence_refs,
+                    "required_follow_up": assessment_fixture.get(
+                        "required_follow_up", []
+                    ),
+                    "run_id": run.id,
+                    "snapshot_reference": context.snapshot_reference,
+                    "inventory_snapshot_reference": context.inventory_snapshot_reference,
+                    "captured_state_revision": context.captured_state_revision,
+                    "as_of": context.as_of,
+                    "known_at": context.known_at,
+                    "adjustment_event_ids": [
+                        event.id for event in context.adjustment_events
+                    ],
+                    "plan_id": context.plan_id,
+                    "plan_version_reference": context.plan_version_reference,
+                }
+            )
+            save_result(session, run.id, InventoryAdjustmentResultWrite(result=result))
+        return run
 
 
 class EventRoutingClassifier:

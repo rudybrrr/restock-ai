@@ -29,17 +29,27 @@
     },
     {
       "schema_version": "restock-evaluation-scenario/1",
-      "scenario_id": "development-inventory-correction-001",
+      "scenario_id": "development-inventory-correction-safe-001",
       "scenario_version": "1",
       "split": "development",
       "family": "inventory_correction",
-      "status": "open",
-      "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00"},
-      "observed_events": [{"event_id": "inventory-001", "event_type": "INVENTORY_ADJUSTED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"effective_at": "2026-02-15T20:00:00+08:00"}}],
+      "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00", "inventory_adjustment_assessment": {"material_change": false, "complete": true, "inventory_feasible": true}},
+      "observed_events": [{"event_id": "inventory-safe-001", "event_type": "INVENTORY_ADJUSTED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"revision_id": "daily-revision-safe-001", "replaces_revision_id": "daily-revision-safe-000", "day": "2026-02-15", "effective_at": "2026-02-15T20:00:00+08:00", "adjustments": [{"lot_id": "chicken-01", "ingredient_id": "chicken", "unit": "kg", "previous_quantity": "12", "corrected_quantity": "12.5", "delta": "0.5"}]} }],
       "policy_config_versions": {"procurement": "seed-policy-v1", "inventory": "projection-v1"},
-      "expected": null,
-      "open_reason": "Authoritative inventory-adjustment event contract is not landed",
+      "expected": {"relevant_domains": ["INVENTORY"], "routing": ["INVENTORY"], "final_outcome": "KEEP_CURRENT_PLAN"},
       "fixture_refs": ["tests/fixtures/inventory_projection_v1.json"]
+    },
+    {
+      "schema_version": "restock-evaluation-scenario/1",
+      "scenario_id": "development-inventory-correction-material-001",
+      "scenario_version": "1",
+      "split": "development",
+      "family": "inventory_correction",
+      "initial_authoritative_state": {"backend_seed": "current_seed_v1", "as_of": "2026-02-15T22:00:00+08:00", "inventory_adjustment_assessment": {"material_change": true, "complete": true, "inventory_feasible": true, "findings": [{"code": "CORRECTION_MATERIAL", "source": "authoritative"}]}},
+      "observed_events": [{"event_id": "inventory-material-001", "event_type": "INVENTORY_ADJUSTED", "occurred_at": "2026-02-15T12:00:00Z", "payload": {"revision_id": "daily-revision-material-001", "replaces_revision_id": "daily-revision-material-000", "day": "2026-02-15", "effective_at": "2026-02-15T20:00:00+08:00", "adjustments": [{"lot_id": "chicken-01", "ingredient_id": "chicken", "unit": "kg", "previous_quantity": "12", "corrected_quantity": "11.5", "delta": "-0.5"}]} }],
+      "policy_config_versions": {"procurement": "seed-policy-v1", "inventory": "projection-v1", "decision_engine": "first-slice-v1"},
+      "expected": {"relevant_domains": ["INVENTORY", "PROCUREMENT"], "routing": ["INVENTORY", "PROCUREMENT"], "final_outcome": "REVISE_PLAN"},
+      "fixture_refs": ["tests/fixtures/inventory_projection_v1.json", "tests/fixtures/procurement_v1.json"]
     },
     {
       "schema_version": "restock-evaluation-scenario/1",

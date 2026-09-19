@@ -123,6 +123,27 @@ class BackendInventoryTools:
                 )
             snapshot = run.snapshot
             if request.tool is AgentToolName.GET_INVENTORY_SNAPSHOT:
+                if run.trigger == "INVENTORY_ADJUSTED":
+                    from src.inventory_adjustment_contracts import context_from_run
+
+                    context = context_from_run(run)
+                    return self._result(
+                        request,
+                        EvidenceCategory.INVENTORY_SNAPSHOT,
+                        EvidenceSource.BACKEND,
+                        context.snapshot_reference,
+                        {
+                            "physical_fresh": True,
+                            "investigation_required": False,
+                            "authoritative_assessment_required": True,
+                            "inventory_adjustment_context": context.snapshot_reference,
+                            "adjustment_event_ids": [
+                                event.id for event in context.adjustment_events
+                            ],
+                            "assessed_lot_ids": context.assessed_lot_ids,
+                            "assessed_ingredient_ids": context.assessed_ingredient_ids,
+                        },
+                    )
                 physical = snapshot.get("daily_history")
                 if not isinstance(physical, list):
                     return self._result(

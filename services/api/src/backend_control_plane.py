@@ -30,6 +30,15 @@ from src.demand_specialist import (
 )
 from src.demand_tools import BackendDemandTools
 from src.errors import ApiError
+from src.inventory_adjustment_contracts import (
+    context_from_run as inventory_adjustment_context,
+)
+from src.inventory_adjustment_contracts import (
+    read_assessment as read_inventory_adjustment_assessment,
+)
+from src.inventory_adjustment_contracts import (
+    result_for_completion as inventory_adjustment_result,
+)
 from src.inventory_specialist import (
     InventoryReasoningModel,
     InventorySpecialist,
@@ -134,6 +143,81 @@ class BackendCoordinatorControlPlane:
         """Read the authoritative materiality evidence for the event family."""
         if invocation.invocation_mode is not InvocationMode.EVENT:
             return None
+        if invocation.trigger_type == "INVENTORY_ADJUSTED":
+            result = inventory_adjustment_result(self._session, invocation.run_id)
+            assessment = read_inventory_adjustment_assessment(
+                self._session, invocation.run_id
+            )
+            if (
+                result is None
+                or
+                not result.complete
+                or result.material_change is None
+                or assessment.result_reference is None
+                or (
+                    result.material_change is False
+                    and result.inventory_feasible is not True
+                )
+            ):
+                raise ApiError(
+                    409,
+                    "MISSING_REQUIRED_DATA",
+                    "Inventory-adjustment materiality is incomplete and cannot route a plan",
+                )
+            context = inventory_adjustment_context(
+                planning.get_run(self._session, invocation.run_id)
+            )
+            active = (
+                planning.get_active_plan(self._session, invocation.affected_plan_id)
+                if invocation.affected_plan_id
+                else None
+            )
+            if result.captured_state_revision != invocation.captured_state_revision:
+                raise ApiError(
+                    409,
+                    "STATE_REVISION_STALE",
+                    "Inventory-adjustment assessment revision is stale",
+                )
+            if (
+                result.plan_id != context.plan_id
+                or result.plan_version_reference != context.plan_version_reference
+                or result.plan_id != invocation.affected_plan_id
+                or (
+                    result.plan_version_reference
+                    != (active.id if active is not None else None)
+                )
+                or (
+                    active is not None
+                    and active.version != invocation.affected_plan_version
+                )
+                or result.assessed_lot_ids != context.assessed_lot_ids
+                or result.assessed_ingredient_ids != context.assessed_ingredient_ids
+                or not set(context.required_evidence_refs) <= set(result.evidence_refs)
+            ):
+                raise ApiError(
+                    409,
+                    "INVENTORY_ADJUSTMENT_CONTEXT_MISMATCH",
+                    "Inventory-adjustment assessment does not match frozen context",
+                )
+            return MaterialityAssessment(
+                source_event_ids=result.adjustment_event_ids,
+                captured_state_revision=invocation.captured_state_revision,
+                affected_plan_id=result.plan_id,
+                affected_plan_version=invocation.affected_plan_version,
+                affected_ingredient_ids=result.assessed_ingredient_ids,
+                material=result.material_change,
+                current_plan_unactionable=result.material_change,
+                reason_codes=(
+                    [finding.code for finding in result.findings]
+                    or ["INVENTORY_ADJUSTMENT_ASSESSED"]
+                ),
+                evidence_ref=EvidenceRef(
+                    category=EvidenceCategory.MATERIALITY,
+                    source=EvidenceSource.BACKEND,
+                    reference_id=assessment.result_reference,
+                    state_revision=invocation.captured_state_revision,
+                ),
+            )
         if invocation.trigger_type == "SALES_UPDATED":
             result = result_for_completion(self._session, invocation.run_id)
             assessment = read_assessment(self._session, invocation.run_id)

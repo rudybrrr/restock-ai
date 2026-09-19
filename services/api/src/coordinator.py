@@ -156,30 +156,33 @@ class Coordinator:
             )
 
         evidence_refs = _unique_refs([event_ref, *active_plan_refs])
-        try:
-            materiality = self._materiality(invocation)
-        except ControlPlaneFailure as error:
-            cause = error.__cause__
-            missing_materiality = isinstance(cause, ApiError) and cause.detail.code in {
-                "MISSING_REQUIRED_DATA",
-                "MATERIALITY_RESULT_REQUIRED",
-            }
-            return self._finish(
-                invocation,
-                AgentOutcome.ESCALATE,
-                evidence_refs,
-                trace,
-                (
-                    "Authoritative sales materiality evidence is incomplete."
-                    if missing_materiality
-                    else "Deterministic materiality evidence could not be retrieved."
-                ),
-                (
-                    EscalationReason.MISSING_REQUIRED_DATA
-                    if missing_materiality
-                    else EscalationReason.TOOL_FAILURE
-                ),
-            )
+        inventory_adjustment_trigger = invocation.trigger_type == "INVENTORY_ADJUSTED"
+        materiality = None
+        if not inventory_adjustment_trigger:
+            try:
+                materiality = self._materiality(invocation)
+            except ControlPlaneFailure as error:
+                cause = error.__cause__
+                missing_materiality = isinstance(cause, ApiError) and cause.detail.code in {
+                    "MISSING_REQUIRED_DATA",
+                    "MATERIALITY_RESULT_REQUIRED",
+                }
+                return self._finish(
+                    invocation,
+                    AgentOutcome.ESCALATE,
+                    evidence_refs,
+                    trace,
+                    (
+                        "Authoritative sales materiality evidence is incomplete."
+                        if missing_materiality
+                        else "Deterministic materiality evidence could not be retrieved."
+                    ),
+                    (
+                        EscalationReason.MISSING_REQUIRED_DATA
+                        if missing_materiality
+                        else EscalationReason.TOOL_FAILURE
+                    ),
+                )
         if materiality is not None:
             evidence_refs = _unique_refs([*evidence_refs, materiality.evidence_ref])
             trace.append(self._materiality_trace(invocation, materiality))
@@ -309,7 +312,55 @@ class Coordinator:
                         result.escalation_reason,
                         result.escalation_detail,
                     )
+                if inventory_adjustment_trigger and specialist is SpecialistType.INVENTORY:
+                    try:
+                        materiality = self._materiality(invocation)
+                    except ControlPlaneFailure as error:
+                        cause = error.__cause__
+                        missing_materiality = isinstance(cause, ApiError) and cause.detail.code in {
+                            "MISSING_REQUIRED_DATA",
+                            "MATERIALITY_RESULT_REQUIRED",
+                            "INVENTORY_ADJUSTMENT_ASSESSMENT_NOT_FOUND",
+                            "INVENTORY_ADJUSTMENT_CONTEXT_MISMATCH",
+                        }
+                        return self._finish(
+                            invocation,
+                            AgentOutcome.ESCALATE,
+                            evidence_refs,
+                            trace,
+                            "Authoritative inventory-adjustment assessment is incomplete or stale.",
+                            (
+                                EscalationReason.MISSING_REQUIRED_DATA
+                                if missing_materiality
+                                else EscalationReason.TOOL_FAILURE
+                            ),
+                        )
+                    if materiality is None:
+                        return self._finish(
+                            invocation,
+                            AgentOutcome.ESCALATE,
+                            evidence_refs,
+                            trace,
+                            "Inventory-adjustment materiality was not available.",
+                            EscalationReason.MISSING_REQUIRED_DATA,
+                        )
+                    evidence_refs = _unique_refs(
+                        [*evidence_refs, materiality.evidence_ref]
+                    )
+                    trace.append(self._materiality_trace(invocation, materiality))
                 final_step = result.recommended_next_step
+                if inventory_adjustment_trigger and specialist is SpecialistType.INVENTORY:
+                    final_step = (
+                        RecommendedNextStep.CHECK_PROCUREMENT
+                        if materiality is not None and materiality.material
+                        else RecommendedNextStep.KEEP_CURRENT_PLAN
+                    )
+                next_step = (
+                    final_step
+                    if inventory_adjustment_trigger
+                    and specialist is SpecialistType.INVENTORY
+                    else result.recommended_next_step
+                )
                 if result.candidate_result_ref is not None:
                     if not self._candidate_is_actionable(delegation, result):
                         return self._finish(
@@ -321,7 +372,7 @@ class Coordinator:
                             EscalationReason.TOOL_FAILURE,
                         )
                     candidate_ref = result.candidate_result_ref
-                follow_up = FOLLOW_UP_ROUTE.get(result.recommended_next_step)
+                follow_up = FOLLOW_UP_ROUTE.get(next_step)
                 if follow_up is not None:
                     if follow_up in called_this_round:
                         if follow_up not in deferred:
@@ -461,9 +512,17 @@ class Coordinator:
             reason_codes=assessment.reason_codes,
             materiality=assessment,
             summary=(
-                "Deterministic supplier materiality requires Procurement reassessment."
-                if assessment.material
-                else "Deterministic supplier materiality leaves the current plan unchanged."
+                (
+                    "Authoritative inventory-adjustment materiality requires Procurement reassessment."
+                    if assessment.material
+                    else "Authoritative inventory-adjustment materiality leaves the current plan unchanged."
+                )
+                if invocation.trigger_type == "INVENTORY_ADJUSTED"
+                else (
+                    "Deterministic supplier materiality requires Procurement reassessment."
+                    if assessment.material
+                    else "Deterministic supplier materiality leaves the current plan unchanged."
+                )
             ),
         )
 

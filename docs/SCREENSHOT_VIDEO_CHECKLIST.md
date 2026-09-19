@@ -17,7 +17,7 @@ Capture planning only. No screenshots or browser capture are part of the local h
 
 ## Capture rules
 
-- Use only local seeded/demo state and the supported five-scenario flow.
+- Use only local seeded/demo state and the supported seven-scenario flow.
 - Do not capture inventory correction, live model behavior, AWS, deployment, or unsupported business outcomes.
 - Redact credentials, database URLs, tokens, and local filesystem paths.
 - Label scripted local reasoning clearly; do not label it Sonnet/OpenClaw.

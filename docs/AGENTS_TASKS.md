@@ -374,11 +374,10 @@
 
 # 8. Coding Pass 6 — Full Dynamic Replanning
 
-> Local contract audit (2026-09-18, after merging `origin/main`): promotion
-> application/comparison, activity-aware procurement snapshots, commitment-aware
-> delivery projection, and the persisted sales-materiality contract are present.
-> Inventory correction remains open because no authoritative inventory-adjustment
-> event contract is present on `origin/main`.
+> Local contract audit (2026-09-19, after merging PR #32 from `origin/main` at
+> `550d39b`): promotion application/comparison, activity-aware procurement
+> snapshots, commitment-aware delivery projection, persisted sales materiality,
+> and the authoritative inventory-adjustment contract are present.
 
 - [x] Integrate deterministic materiality kernel for authoritative supplier availability/status changes
   - [x] Affected IDs
@@ -391,10 +390,11 @@
   - [x] Inventory receives the adjusted demand only when comparison is material
   - [x] Procurement remains conditional on projected stock exposure
 
-- [ ] Implement inventory-correction route
-  - [ ] Authoritative inventory-adjustment event contract (Backend gap)
-  - [ ] Safe correction routes to Inventory and proves `KEEP_CURRENT_PLAN`
-  - [ ] Procurement is conditional on projected stock exposure
+- [x] Implement inventory-correction route
+  - [x] Consume Backend PR #32 `INVENTORY_ADJUSTED` context and assessment routes
+  - [x] Safe correction routes to Inventory and proves `KEEP_CURRENT_PLAN`
+  - [x] Material correction routes Inventory -> Procurement through the real engine
+  - [x] Unknown, stale, mismatched, and incomplete assessment paths fail closed
 
 - [x] Implement supplier-disruption route for authoritative availability/status changes
   - [x] Procurement first
@@ -549,7 +549,7 @@
 - [x] Enforce persisted audit-entry append-only history in PostgreSQL
 - [x] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
-  - PostgreSQL-backed verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, final outcome, promotion routing, delivery routing, and sales-materiality freshness/lifecycle evidence. Inventory correction remains open with the missing authoritative event contract.
+  - PostgreSQL-backed verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, final outcome, promotion routing, delivery routing, sales-materiality freshness/lifecycle evidence, and inventory-adjustment context/assessment freshness and mismatch guards.
 
 - [x] Review and commit Pass 9
 
@@ -571,7 +571,7 @@
   - [x] Normal planning
   - [x] Promotion
   - [x] Demand spike / drop (sales-materiality contract and fail-closed scenario)
-  - [ ] Inventory correction (authoritative event contract not landed)
+  - [x] Inventory correction (safe keep-current and material procurement revision)
   - [ ] Wastage / expiry (no canonical evaluation fixture yet)
   - [x] Supplier shortage / delay / cancellation
   - [x] Price change
@@ -614,16 +614,13 @@
 
 - [ ] Review and commit Pass 10
 
-Closure verification (2026-09-18): the real local demo was prepared and run
-twice against dedicated PostgreSQL database `restock_demo_20260918`. Five
-supported scenarios produced stable boundary fingerprints, outcomes, routing,
-specialist/tool counts, and stale-approval evidence; per-run identifiers and
-latency remain intentionally run-specific. Promotion completed through the
-real local path, sales missing-result routing escalated with
-`MISSING_REQUIRED_DATA`, live model metrics remained `pending`, business
-metrics remained `unsupported`, and evaluator truth stayed separate from
-runtime evidence. Inventory correction remains open because the authoritative
-inventory-adjustment event contract is not landed.
+Closure verification (2026-09-19): the real local demo was prepared and run
+against dedicated PostgreSQL database `restock_demo_20260918`. Seven supported
+scenarios × three adapters produced results; the adaptive path proved safe
+inventory correction -> `KEEP_CURRENT_PLAN` and material correction ->
+Inventory -> Procurement -> `REVISE_PLAN`. Live model metrics remain `pending`,
+business metrics remain `unsupported`, and evaluator truth stays separate from
+runtime evidence.
 
 ---
 
@@ -652,11 +649,9 @@ summary fields without raw frozen state, prompts, scratchpads, or secrets.
 
 # 14. Golden Acceptance Scenario
 
-Closure status (2026-09-18): supplier, promotion, delivery-disruption, sales
-fail-closed, and stale-approval paths exercised on the real local runner.
-Inventory correction remains the only contract-gated Golden Acceptance gap:
-Backend has not landed an authoritative inventory-adjustment event contract.
-No substitute semantics were added.
+Closure status (2026-09-19): supplier, promotion, delivery-disruption, sales
+fail-closed, stale-approval, and both inventory-correction paths were exercised
+on the real local runner using the landed Backend contract.
 
 - [x] Start with an isolated pending or approved plan version
 - [x] Supplier availability falls
@@ -673,22 +668,23 @@ No substitute semantics were added.
 - [x] Manager exact-version approval is exercised on the current version
 - [x] Full event / routing / tool / validation / approval trace is visible
 - [x] Repeat from clean seed successfully
+- [x] Safe inventory correction keeps the current plan with no Procurement call
+- [x] Material inventory correction reaches the real engine and publishes a new revision
 
 ---
 
 # 15. Hero Demo
 
-Closure status (2026-09-18): the supported local reset/prepare/run mechanism
-was verified twice from the same dedicated demo database without carry-over
-plans, events, commitments, or revision drift. Promotion, delivery, supplier,
-sales fail-closed, and stale-approval paths are supported; inventory correction
-remains open pending the authoritative Backend event contract.
+Closure status (2026-09-19): the supported local reset/prepare/run mechanism
+was verified from the dedicated demo database without carry-over plans, events,
+commitments, or revision drift. Promotion, delivery, supplier, sales fail-closed,
+stale-approval, and inventory-correction safe/material paths are supported.
 
 - [ ] Monday: normal scheduled planning
   - [ ] Demand -> Inventory -> Procurement
   - [ ] `PLAN-v1 PENDING_APPROVAL`
   - [ ] Manager approval
-  - Not part of the five-scenario golden selection; retain as a future rehearsal extension.
+  - Not part of the seven-scenario golden selection; retain as a future rehearsal extension.
 
 - [x] Promotion reassessment
   - [x] Demand reassessment
@@ -812,11 +808,10 @@ remains open pending the authoritative Backend event contract.
   - [x] No stale enums / statuses
   - [x] No target metrics presented as achieved results
 
-Closure verification (2026-09-19): full PostgreSQL suite passed (773 tests),
-including the landed sales-materiality route and dedicated migration-head
-merge. The supported golden/demo path passed twice; inventory correction,
-live LLM, AWS, deployment, and undefined persisted human-review workflow
-remain explicitly incomplete.
+Closure verification (2026-09-19): full PostgreSQL and database-independent
+suites, focused inventory-correction routing, and the supported golden/demo path
+passed. Live LLM, AWS, deployment, and undefined persisted human-review
+workflow remain explicitly incomplete.
 
 - [x] Freeze local submission build
 - [x] Record final commit SHA after focused commits
@@ -922,21 +917,22 @@ remain explicitly incomplete.
 
 Classification was performed against the current checkout and then limited to locally completable work:
 
-- **A — completed locally:** repository/test-command verification; local tool-to-kernel mapping; Coordinator and specialist permission coverage; supplier/promotion/delivery/sales-materiality/stale-approval local paths; supported golden/demo preparation and repeat execution; audit/evidence/frontend surfaces; rubric-local evidence; local degraded-condition tests; migration/seed/reset checks; README, architecture, routing, evaluation, demo, submission, and capture-plan documentation; quality/claims/secret scans.
-- **B — blocked by the missing inventory-adjustment contract:** inventory-correction route, its safe `KEEP_CURRENT_PLAN`/conditional Procurement behavior, the inventory-correction evaluation fixture, and the inventory-correction Golden Acceptance step. No substitute semantics were added.
+- **A — completed locally:** repository/test-command verification; local tool-to-kernel mapping; Coordinator and specialist permission coverage; supplier/promotion/delivery/sales-materiality/stale-approval/inventory-correction local paths; supported golden/demo preparation and execution; audit/evidence/frontend surfaces; rubric-local evidence; local degraded-condition tests; migration/seed/reset checks; README, architecture, routing, evaluation, demo, submission, and capture-plan documentation; quality/claims/secret scans.
+- **B — not applicable to the landed inventory-correction contract:** no substitute correction semantics were added; the Agent consumes Backend context and assessment only.
 - **C — requires live LLM/gateway:** OpenClaw structured-output runtime verification, successful Sonnet/Bedrock request, live model calls, live token usage, live model latency/cost, live-model evaluation, and Bedrock-unavailable runtime verification.
 - **D — requires deployment:** deployed backend/frontend/Agent runtime, production-like end-to-end flow, deployed URL verification, and hosted reliability/telemetry.
 - **E — optional, external, or undefined:** ChatGPT Project setup/instructions, external team review/submission actions, 30–50 scenario expansion, unsupported business metrics, holiday/snapshot-comparison/safety-stock/storage extensions without a current acceptance contract, persisted human-review workflow semantics, canonical tool-call duration, and final video/screenshots/URLs.
 
 Fresh verification record:
 
-- Full PostgreSQL suite: **773 passed, 2 warnings, exit 0**.
-- Database-independent selection including health: **681 passed, 2 warnings, exit 0**.
-- Ruff: **exit 0**; Pyright: **0 errors, 0 warnings, 0 informations**; ESLint: **exit 0**; TypeScript: **exit 0**; production build: **exit 0**.
+- Full PostgreSQL suite: **782 passed, 3 warnings, exit 0** (with `RESTOCK_TEST_TMP` outside the repository, as required by the output-boundary guard).
+- Database-independent synthetic-history suite: **68 passed, 3 warnings, exit 0** (with the same external temp-root boundary).
+- Focused inventory/evaluation suite: **17 passed, 3 warnings, exit 0**.
+- Ruff: **exit 0**; Pyright: **0 errors, 0 warnings, 0 informations**; `git diff --check`: **exit 0**; secret-value scan: **no matches**.
 - Alembic empty-database upgrade: **exit 0**, head `20260918_merge_sales_agent_audit`; Alembic check: **exit 0**, no new operations.
 - Seed twice on the named disposable migration DB: **both exit 0**.
-- Golden demo prepare: **exit 0**; two golden demo runs: **both exit 0**; 5 scenarios × 3 adapters, 0 failed executions each run, stable runtime evidence fingerprints.
-- Screenshot-disabled frontend evidence assertions: **exit 0**.
-- `git diff --check`: **exit 0**. Secret-value scan: **no matches**. Pre-existing untracked artifacts were preserved and not staged.
+- Golden demo prepare: **exit 0**; golden demo run: **exit 0**; 7 scenarios × 3 adapters, with adaptive safe/material inventory-correction outcomes proven and runtime evidence kept separate from evaluator truth.
+- Screenshot-disabled frontend evidence assertions: **exit 0**; frontend source regressions were not applicable because no frontend source changed.
+- Pre-existing untracked artifacts were preserved and not staged.
 
-Open items intentionally retained: inventory-adjustment contract, undefined persisted human-review workflow, live LLM/OpenClaw/AWS, deployment, live-model metrics, real business outcomes, and external submission URLs/video/actions.
+Open items intentionally retained: undefined persisted human-review workflow, live LLM/OpenClaw/AWS, deployment, live-model metrics, real business outcomes, and external submission URLs/video/actions.

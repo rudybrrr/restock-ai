@@ -67,6 +67,16 @@ _GOLDEN_SELECTION: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("delivery event", "inventory routing", "replanning"),
     ),
     (
+        "inventory_correction_safe",
+        "development-inventory-correction-safe-001",
+        ("INVENTORY_ADJUSTED", "authoritative assessment", "KEEP_CURRENT_PLAN"),
+    ),
+    (
+        "inventory_correction_material",
+        "development-inventory-correction-material-001",
+        ("INVENTORY_ADJUSTED", "Inventory to Procurement", "REVISE_PLAN"),
+    ),
+    (
         "sales_materiality",
         "development-sales-materiality-001",
         ("sales batch", "materiality contract", "fail-closed routing"),

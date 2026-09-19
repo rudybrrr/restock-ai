@@ -29,17 +29,21 @@ business metrics are explicitly `unsupported`, never zero-filled.
 
 ## Golden/demo preparation
 
-The local golden pass selects five runnable scenarios from the canonical suite:
+The local golden pass selects seven runnable scenarios from the canonical suite:
 
 - supplier replanning (`development-supplier-availability-001`)
 - promotion routing (`development-promotion-001`)
 - delivery disruption (`development-delivery-delay-001`)
+- safe inventory correction (`development-inventory-correction-safe-001`)
+- material inventory correction (`development-inventory-correction-material-001`)
 - sales materiality fail-closed routing (`development-sales-materiality-001`)
 - exact-version approval/stale-version handling (`development-stale-approval-001`)
 
-The inventory-correction scenario remains open because Backend has not yet
-landed an authoritative inventory-adjustment event contract. It is not selected
-for the runnable golden pass.
+Inventory correction uses the landed Backend PR #32 contract. The preparer
+materializes only the observed canonical correction event and the authoritative
+assessment fixture into Backend persistence; the runtime Agent receives the
+frozen context and persisted assessment through the existing routes and never
+receives evaluator `expected` fields or computes materiality itself.
 
 Prepare a reviewable, evaluator-truth-free scenario sheet with:
 
@@ -49,7 +53,7 @@ Prepare a reviewable, evaluator-truth-free scenario sheet with:
   --output .tmp/golden-demo.json
 ```
 
-To execute the five scenarios through the real Backend planning kernel,
+To execute the seven scenarios through the real Backend planning kernel,
 Coordinator, local specialists, and evaluation adapters, first migrate a
 dedicated database whose name begins with `restock_demo_`. The runner resets and
 reseeds only that explicitly dedicated database before every system/scenario
