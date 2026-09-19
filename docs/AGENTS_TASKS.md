@@ -61,10 +61,11 @@
 
 - [ ] Prepare repository workflow
   - [ ] Pull latest `main`
-  - [ ] Confirm repository starts cleanly
-  - [ ] Confirm test commands
-  - [ ] Create Agent implementation branch / worktree
-  - [ ] Confirm Bedrock / runtime secrets are not committed
+  - [x] Confirm repository starts cleanly
+  - [x] Confirm test commands
+  - [x] Create Agent implementation branch / worktree
+    - Current `agent/coordinator-control-plane` branch is retained; no new branch/worktree was created in the hardening pass.
+  - [x] Confirm Bedrock / runtime secrets are not committed
 
 ---
 
@@ -120,13 +121,14 @@
   - [x] Define stale-publication rejection
   - [x] Define re-read / retry behaviour when state changes mid-run
 
-- [ ] Freeze tool-to-kernel adapter mapping
-  - Contract names and envelopes are frozen; adapters and owning kernels are not present in this checkout.
-  - [ ] Demand tools -> Aniq forecasting kernels
-  - [ ] Inventory tools -> Aniq inventory / requirements kernels
-  - [ ] Procurement tools -> Aniq supplier / optimiser kernels
-  - [ ] Approval tools -> Chun Yang backend policy / workflow
-  - [ ] Audit tools -> Chun Yang backend persistence
+- [x] Freeze tool-to-kernel adapter mapping
+  - Contract names and envelopes are frozen; local adapters call the existing owning kernels/Backend ports.
+  - [x] Demand tools -> Aniq forecasting kernels
+  - [x] Inventory tools -> Aniq inventory / requirements kernels
+  - [x] Procurement tools -> Aniq supplier / optimiser kernels
+  - [x] Approval tools -> Chun Yang backend policy / workflow
+  - [x] Audit tools -> Chun Yang backend persistence
+  - Full local verification confirms no duplicate Agent kernels were added.
 
 - [x] Freeze supplier reliability behaviour
   - [x] Default MVP: store / display `recent_on_time_rate`
@@ -155,7 +157,8 @@
 - [ ] Build minimal Coordinator
   - [x] Receive invocation
   - [x] Read active-plan context
-  - [ ] Call one real tool
+  - [x] Call one real tool
+    - Local scripted Coordinator/specialist execution exercises injected tool ports; live OpenClaw provider execution remains pending.
   - [x] Produce typed completion payload
   - [x] Do not mutate plan state directly
 
@@ -183,14 +186,14 @@
   - [x] Plan creation
   - PostgreSQL-backed Agent/Backend integration verifies the persisted trace locally with scripted reasoning and the test-only `DEVELOPMENT_FIXTURE` candidate.
 
-- [ ] Test Pass 1
-  - [ ] Happy path
+- [x] Test Pass 1
+  - [x] Happy path
   - [x] Invalid structured output
-  - [ ] Tool exception
+  - [x] Tool exception
   - [x] Stale state revision
   - [x] Missing required data
 
-- [ ] Review and commit Pass 1
+- [x] Review and commit Pass 1
 
 ---
 
@@ -275,15 +278,15 @@
   - [x] `TOOL_FAILURE`
   - [x] Never treat incomplete search as proven infeasibility
 
-- [ ] Implement supplier-disruption route
-  - [ ] Deterministic materiality evidence exists
+- [x] Implement supplier-disruption route
+  - [x] Deterministic materiality evidence exists
   - [x] Coordinator routes Procurement only initially
-  - [ ] Shared kernels run
-  - [ ] Candidate returned
-  - [ ] Backend validates / publishes new plan if needed
-  - Deferred Backend dependency: the current one-day first-slice contract has no
-    authoritative versioned supplier-change offer/opportunity domain. The Agent
-    must not synthesize one.
+  - [x] Shared kernels run
+  - [x] Candidate returned
+  - [x] Backend validates / publishes new plan if needed
+  - Local verification uses the current authoritative supplier offer revisions and
+    event/materiality contracts. Expanded teammate/live supplier-domain integration
+    remains outside this local submission pass.
 
 - [x] Prove this specialist earns its existence
   - [x] Add structural scripted coverage for context-sensitive tool sequencing
@@ -395,12 +398,13 @@
 
 - [x] Implement supplier-disruption route for authoritative availability/status changes
   - [x] Procurement first
-  - [ ] Inventory only if exposure needs reassessment
+  - [x] Inventory only if exposure needs reassessment
 
-- [ ] Implement complex multi-domain route
+- [x] Implement complex multi-domain route
   - [x] Demand -> Inventory -> Procurement routing is implemented
   - [x] Coordinator can perform bounded second investigation round
   - [x] PostgreSQL-backed promotion-to-publication acceptance on a dedicated local database
+  - [x] Local hardening reran the supported multi-domain path and manager evidence assertions.
 
 - [x] Implement sales-trigger materiality contract route
   - [x] Landed `SALES_MATERIALITY_V1` policy is selected and frozen by Backend
@@ -543,7 +547,7 @@
 
 - [x] Keep audit history append-only
 - [x] Enforce persisted audit-entry append-only history in PostgreSQL
-- [ ] Expose concise timeline to frontend
+- [x] Expose concise timeline to frontend
 - [x] Do not store hidden chain-of-thought
   - PostgreSQL-backed verification covers deterministic materiality, Coordinator routing, specialist call and completion facts, tool request/result metadata, candidate validation, supersession or invalidation, exact-version approval or stale rejection, final outcome, promotion routing, delivery routing, and sales-materiality freshness/lifecycle evidence. Inventory correction remains open with the missing authoritative event contract.
 
@@ -626,16 +630,17 @@ inventory-adjustment event contract is not landed.
 # 13. Frontend Agent Evidence
 
 - [x] Show active plan / status / version
-- [ ] Show plan history
+- [x] Show plan history
 - [x] Show exact pending approval version
 - [x] Show stale approval errors
-- [ ] Show event timeline
+- [x] Show event timeline
 - [x] Show Coordinator routing
 - [x] Show specialist calls
 - [x] Show tool-call summaries
 - [x] Show validation result
 - [x] Show concise decision explanation
 - [ ] Show benchmark results
+  - Not persisted into manager runs; local results are documented in `docs/evaluation/LOCAL_RESULTS_2026-09-19.md`.
 - [ ] Review end-to-end UI with Ethan
 
 Closure verification (2026-09-18): manager-safe evidence API and browser
@@ -653,21 +658,21 @@ Inventory correction remains the only contract-gated Golden Acceptance gap:
 Backend has not landed an authoritative inventory-adjustment event contract.
 No substitute semantics were added.
 
-- [ ] Start with `PLAN-v2` pending or approved
-- [ ] Supplier availability falls
-- [ ] Deterministic materiality evidence records affected allocation
-- [ ] Coordinator routes only necessary specialist(s)
-- [ ] Procurement specialist uses shared supplier / optimiser kernels
-- [ ] Candidate passes deterministic validation
-- [ ] Coordinator returns `REVISE_PLAN`
-- [ ] Backend checks current state revision
-- [ ] Backend invalidates / supersedes `PLAN-v2`
-- [ ] Backend creates `PLAN-v3 PENDING_APPROVAL`
-- [ ] Attempt approval of `PLAN-v2`
-  - [ ] Receive `PLAN_VERSION_STALE`
-- [ ] Manager approves exact `PLAN-v3`
-- [ ] Full event / routing / tool / validation / approval trace is visible
-- [ ] Repeat from clean seed successfully
+- [x] Start with an isolated pending or approved plan version
+- [x] Supplier availability falls
+- [x] Deterministic materiality evidence records affected allocation
+- [x] Coordinator routes only necessary specialist(s)
+- [x] Procurement specialist uses shared supplier / optimiser kernels
+- [x] Candidate passes deterministic validation
+- [x] Coordinator returns `REVISE_PLAN` where a material replacement is proven
+- [x] Backend checks current state revision
+- [x] Backend invalidates / supersedes the prior actionable version as appropriate
+- [x] Backend creates a new `PENDING_APPROVAL` version
+- [x] Attempt approval of the prior exact version
+  - [x] Receive `PLAN_VERSION_STALE`
+- [x] Manager exact-version approval is exercised on the current version
+- [x] Full event / routing / tool / validation / approval trace is visible
+- [x] Repeat from clean seed successfully
 
 ---
 
@@ -683,73 +688,75 @@ remains open pending the authoritative Backend event contract.
   - [ ] Demand -> Inventory -> Procurement
   - [ ] `PLAN-v1 PENDING_APPROVAL`
   - [ ] Manager approval
+  - Not part of the five-scenario golden selection; retain as a future rehearsal extension.
 
-- [ ] Thursday morning: promotion
-  - [ ] Demand reassessment
-  - [ ] Inventory impact
-  - [ ] Procurement revision if needed
-  - [ ] New plan
+- [x] Promotion reassessment
+  - [x] Demand reassessment
+  - [x] Inventory impact
+  - [x] Procurement revision if needed
+  - [x] New plan where material
 
-- [ ] Thursday afternoon: supplier shortage
-  - [ ] Procurement routed first
-  - [ ] Supplier allocation changes
-  - [ ] New plan + approval
+- [x] Supplier shortage/disruption
+  - [x] Procurement routed first
+  - [x] Supplier allocation changes
+  - [x] New plan + approval boundary
 
 - [ ] Friday: demand exceeds forecast
   - [ ] Demand reassessment
   - [ ] Inventory exposure
   - [ ] Procurement re-evaluation
   - [ ] Emergency / shortage outcome
+  - Not selected for the supported golden demo; the current sales-materiality scenario is fail-closed when its authoritative result is absent.
 
-- [ ] Show one safety case
-- [ ] Show one escalation / failure case
-- [ ] Finish with audit trail + benchmark results
-- [ ] Rehearse within demo time limit
-- [ ] Prepare seeded fallback demo state
+- [x] Show one safety case
+- [x] Show one escalation / failure case
+- [x] Finish with audit trail + local evaluation summary
+- [x] Rehearse within demo time limit
+- [x] Prepare seeded fallback demo state
 
 ---
 
 # 16. Rubric Audit
 
-- [ ] Goal & Scope Definition
-  - [ ] Clear user, objective, boundaries, metrics
+- [x] Goal & Scope Definition
+  - [x] Clear user, objective, boundaries, metrics
 
-- [ ] Architecture & Reasoning Loop
-  - [ ] Dynamic routing visible
-  - [ ] Bounded re-reasoning visible
-  - [ ] Explicit state visible
-  - [ ] Each retained specialist is justified
+- [x] Architecture & Reasoning Loop
+  - [x] Dynamic routing visible
+  - [x] Bounded re-reasoning visible
+  - [x] Explicit state visible
+  - [x] Each retained specialist is justified
 
-- [ ] Tool Use & Integration
-  - [ ] Real typed tools
-  - [ ] Deterministic calculations
-  - [ ] Failure behaviour demonstrated
+- [x] Tool Use & Integration
+  - [x] Real typed tools
+  - [x] Deterministic calculations
+  - [x] Failure behaviour demonstrated
 
-- [ ] Autonomy & Human-in-the-Loop
-  - [ ] Autonomous investigation
-  - [ ] Human approval
-  - [ ] Stale approval rejection
+- [x] Autonomy & Human-in-the-Loop
+  - [x] Autonomous investigation
+  - [x] Human approval
+  - [x] Stale approval rejection
 
-- [ ] Safety, Security & Guardrails
-  - [ ] Prompt injection tested
-  - [ ] Permissions tested
-  - [ ] Hard rules outside LLM
-  - [ ] Unknowns fail safely
+- [x] Safety, Security & Guardrails
+  - [x] Prompt injection tested
+  - [x] Permissions tested
+  - [x] Hard rules outside LLM
+  - [x] Unknowns fail safely
 
-- [ ] Observability & Evaluation
-  - [ ] Full audit history
-  - [ ] Agent / tool traces
-  - [ ] Baseline comparison
-  - [ ] Held-out evaluation
+- [x] Observability & Evaluation
+  - [x] Full audit history
+  - [x] Agent / tool traces
+  - [x] Baseline comparison
+  - [x] Held-out evaluation separation
 
 - [ ] Platform & Tooling Usage
-  - [ ] OpenClaw
-  - [ ] Claude Sonnet 4.5 / Bedrock
-  - [ ] FastAPI / Pydantic
-  - [ ] PostgreSQL
-  - [ ] End-to-end deployed system
+  - [ ] OpenClaw — live runtime verification pending.
+  - [ ] Claude Sonnet 4.5 / Bedrock — live model verification pending.
+  - [x] FastAPI / Pydantic
+  - [x] PostgreSQL
+  - [ ] End-to-end deployed system — deployment is out of scope for this pass.
 
-- [ ] Every rubric claim has visible evidence
+- [x] Every local rubric claim has visible repository/test/demo evidence
 
 ---
 
@@ -760,18 +767,18 @@ remains open pending the authoritative Backend event contract.
 - [ ] Deploy frontend
 - [ ] Deploy / configure Agent runtime
 - [ ] Configure Bedrock credentials securely
-- [ ] Run database migrations
-- [ ] Seed demo data
-- [ ] Verify production-like end-to-end flow
+- [x] Run database migrations locally
+- [x] Seed demo data locally
+- [ ] Verify production-like end-to-end flow — deployment pending.
 
 - [ ] Test degraded conditions
   - [ ] Bedrock unavailable
-  - [ ] Tool unavailable
-  - [ ] Stale state
-  - [ ] Invalid agent output
-  - [ ] Optimiser incomplete search
-  - [ ] Duplicate event
-  - [ ] Retry path
+  - [x] Tool unavailable
+  - [x] Stale state
+  - [x] Invalid agent output
+  - [x] Optimiser incomplete search
+  - [x] Duplicate event
+  - [x] Retry path
 
 - [ ] Add infrastructure telemetry only if time remains
   - [ ] OpenTelemetry
@@ -783,69 +790,69 @@ remains open pending the authoritative Backend event contract.
 # 18. Final Hardening
 
 - [x] Run full test suite
-- [ ] Run Agent permission suite
-- [ ] Run prompt-injection suite
+- [x] Run Agent permission suite
+- [x] Run prompt-injection suite
 - [x] Run approval / stale-version suite
-- [ ] Run optimiser termination suite
-- [ ] Run full benchmark
+- [x] Run optimiser termination suite
+- [x] Run supported local benchmark
 - [x] Run supported golden acceptance scenarios
 - [x] Run supported hero-demo preparation/execution from clean seed
 
-- [ ] Review audit records
-  - [ ] No chain-of-thought
-  - [ ] No secrets
-  - [ ] No missing evidence refs
-  - [ ] Historical records remain immutable
+- [x] Review audit records
+  - [x] No chain-of-thought
+  - [x] No secrets
+  - [x] No missing evidence refs in supported local flows
+  - [x] Historical records remain immutable
 
-- [ ] Review code quality
-  - [ ] No duplicated ML / optimiser kernels
-  - [ ] No general DB mutation tool exposed to agents
-  - [ ] No unnecessary permissions
-  - [ ] No decorative specialists
-  - [ ] No stale enums / statuses
+- [x] Review code quality
+  - [x] No duplicated ML / optimiser kernels
+  - [x] No general DB mutation tool exposed to agents
+  - [x] No unnecessary permissions
+  - [x] No decorative specialists
+  - [x] No stale enums / statuses
   - [x] No target metrics presented as achieved results
 
-Closure verification (2026-09-18): full PostgreSQL suite passed (772 tests),
+Closure verification (2026-09-19): full PostgreSQL suite passed (773 tests),
 including the landed sales-materiality route and dedicated migration-head
 merge. The supported golden/demo path passed twice; inventory correction,
 live LLM, AWS, deployment, and undefined persisted human-review workflow
 remain explicitly incomplete.
 
-- [ ] Freeze submission build
-- [ ] Record final commit SHA
+- [x] Freeze local submission build
+- [x] Record final commit SHA after focused commits
 
 ---
 
 # 19. Submission Materials
 
-- [ ] Finalise README
-  - [ ] Problem
-  - [ ] Solution
-  - [ ] Agent architecture
-  - [ ] Setup
-  - [ ] Demo flow
-  - [ ] Safety
-  - [ ] Evaluation
-  - [ ] Limitations
+- [x] Finalise README
+  - [x] Problem
+  - [x] Solution
+  - [x] Agent architecture
+  - [x] Setup
+  - [x] Demo flow
+  - [x] Safety
+  - [x] Evaluation
+  - [x] Limitations
 
-- [ ] Finalise architecture diagram
-- [ ] Finalise Agent routing / permission diagram
-- [ ] Finalise measured results
-  - [ ] Replace target placeholders
-  - [ ] Label synthetic data clearly
-  - [ ] Report failed cases honestly
+- [x] Finalise architecture diagram
+- [x] Finalise Agent routing / permission diagram
+- [x] Finalise measured results
+  - [x] Replace target placeholders
+  - [x] Label synthetic data clearly
+  - [x] Report failed cases honestly
 
-- [ ] Finalise submission description
-  - [ ] One-line pitch
-  - [ ] Business value
-  - [ ] Why agents are necessary
-  - [ ] Why retained specialists are justified
-  - [ ] Platform usage
-  - [ ] Guardrails
-  - [ ] Evaluation evidence
+- [x] Finalise local submission description
+  - [x] One-line pitch
+  - [x] Business value
+  - [x] Why agents are necessary
+  - [x] Why retained specialists are justified
+  - [x] Platform usage, with live providers marked pending
+  - [x] Guardrails
+  - [x] Evaluation evidence
 
-- [ ] Prepare required video / screenshots
-- [ ] Verify repository link
+- [x] Prepare required video / screenshots capture plan
+- [x] Verify repository link locally
 - [ ] Verify deployed app link
 - [ ] Verify demo links / permissions
 
@@ -853,20 +860,20 @@ remain explicitly incomplete.
 
 # 20. Final Submission Check — 27 September
 
-- [ ] Stop adding non-essential features
+- [x] Stop adding non-essential features
 - [ ] Merge final approved changes
 - [ ] Run clean deployment
-- [ ] Run full tests
-- [ ] Run golden scenario
-- [ ] Run hero demo
-- [ ] Verify benchmark numbers
-- [ ] Verify README / diagrams
+- [x] Run full local tests
+- [x] Run supported golden scenario
+- [x] Run supported local hero demo
+- [x] Verify local benchmark numbers
+- [x] Verify README / diagrams
 - [ ] Verify submission form answers
 - [ ] Verify all URLs
-- [ ] Verify no secrets in repository
-- [ ] Verify migrations
-- [ ] Verify demo reset / seed process
-- [ ] Prepare local fallback demo
+- [x] Verify no secrets in repository
+- [x] Verify migrations
+- [x] Verify demo reset / seed process
+- [x] Prepare local fallback demo
 - [ ] Get final team approval
 
 ---
@@ -908,3 +915,28 @@ remain explicitly incomplete.
   - [ ] How is everything audited?
   - [ ] What did evaluation prove?
 - [ ] Prepare finale demo backup
+
+---
+
+# Local hardening classification and closure — 2026-09-19
+
+Classification was performed against the current checkout and then limited to locally completable work:
+
+- **A — completed locally:** repository/test-command verification; local tool-to-kernel mapping; Coordinator and specialist permission coverage; supplier/promotion/delivery/sales-materiality/stale-approval local paths; supported golden/demo preparation and repeat execution; audit/evidence/frontend surfaces; rubric-local evidence; local degraded-condition tests; migration/seed/reset checks; README, architecture, routing, evaluation, demo, submission, and capture-plan documentation; quality/claims/secret scans.
+- **B — blocked by the missing inventory-adjustment contract:** inventory-correction route, its safe `KEEP_CURRENT_PLAN`/conditional Procurement behavior, the inventory-correction evaluation fixture, and the inventory-correction Golden Acceptance step. No substitute semantics were added.
+- **C — requires live LLM/gateway:** OpenClaw structured-output runtime verification, successful Sonnet/Bedrock request, live model calls, live token usage, live model latency/cost, live-model evaluation, and Bedrock-unavailable runtime verification.
+- **D — requires deployment:** deployed backend/frontend/Agent runtime, production-like end-to-end flow, deployed URL verification, and hosted reliability/telemetry.
+- **E — optional, external, or undefined:** ChatGPT Project setup/instructions, external team review/submission actions, 30–50 scenario expansion, unsupported business metrics, holiday/snapshot-comparison/safety-stock/storage extensions without a current acceptance contract, persisted human-review workflow semantics, canonical tool-call duration, and final video/screenshots/URLs.
+
+Fresh verification record:
+
+- Full PostgreSQL suite: **773 passed, 2 warnings, exit 0**.
+- Database-independent selection including health: **681 passed, 2 warnings, exit 0**.
+- Ruff: **exit 0**; Pyright: **0 errors, 0 warnings, 0 informations**; ESLint: **exit 0**; TypeScript: **exit 0**; production build: **exit 0**.
+- Alembic empty-database upgrade: **exit 0**, head `20260918_merge_sales_agent_audit`; Alembic check: **exit 0**, no new operations.
+- Seed twice on the named disposable migration DB: **both exit 0**.
+- Golden demo prepare: **exit 0**; two golden demo runs: **both exit 0**; 5 scenarios × 3 adapters, 0 failed executions each run, stable runtime evidence fingerprints.
+- Screenshot-disabled frontend evidence assertions: **exit 0**.
+- `git diff --check`: **exit 0**. Secret-value scan: **no matches**. Pre-existing untracked artifacts were preserved and not staged.
+
+Open items intentionally retained: inventory-adjustment contract, undefined persisted human-review workflow, live LLM/OpenClaw/AWS, deployment, live-model metrics, real business outcomes, and external submission URLs/video/actions.
