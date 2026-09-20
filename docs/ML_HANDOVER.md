@@ -2,14 +2,67 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.11, 18 September 2026<br>
-**Status:** Sales materiality is merged; the approved policy definition/resolver
-is implemented on `feat/ml-sales-policy`. Agent routing, persisted result
-mapping and live freshness/lifecycle integration remain owner-controlled.
+**Version:** 1.13, 20 September 2026<br>
+**Status:** The one-day physical simulator is implemented on
+[feat/ml-physical-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-physical-simulator),
+based on main `550d39b`. See [PR #33](https://github.com/rudybrrr/restock-ai/pull/33)
+for merge status. Aniq explicitly accepted its one unchanged-main Backend test
+failure after the complete pre-merge check; no general test waiver applies.
+Sales policy and materiality are already merged. Main's PR #31/#32 now provide
+Backend sales/correction persistence and transport; older missing-contract notes
+below are historical. Rudy's final Agent route and live acceptance remain separate.
+
+### One-day physical execution core
+
+`src.physical_simulator.simulate_day(PhysicalDay, Catalogue)` executes explicit
+integer attempted orders against true lot stock. It enforces atomic promotional
+pairs, receipt-aware FEFO, expiry and exact Decimal conservation; reconciles actual
+receipts/cancellations against fixed opening commitments; and returns served/unmet
+portions, physical ledgers and separately accessible observation records.
+`observations_at(result.observations, known_at=...)` exposes only available facts.
+The existing recipe helper, dated allocator and canonical models are reused.
+No Backend historical replay, Agent adapter or transport contract is changed.
+
+The synthetic `physical_day_v1.json` fixture has 9 attempted portions, 5 served,
+4 unmet and SGD 19 revenue, with one atomic pair, partial receipt/cancellation,
+expired stock and a hidden rice loss. See [callable semantics and reproduction](
+ML_NUMERICAL_FUNCTIONS.md#one-day-physical-simulator--20-september-2026).
+Tests include independent reference arithmetic and the full five-dish 320-portion
+recipe oracle. Missing manifests and inconsistent inputs are rejected, not defaulted.
+
+Fresh pre-merge verification: **628 numerical tests passed**, including 76 physical
+simulator cases (25.86 seconds). Whole-API Ruff and Pyright, changed-file formatting
+and diff checks passed. The full locked Linux Python 3.12/PostgreSQL 18 suite:
+**701 passed, 1 failed** (254.19 seconds; two dependency warnings). The sole failure,
+`test_safe_inventory_correction_can_certify_keep_current_plan`, expects `"0.5"`
+but receives `"0.500"` at `tests/test_inventory_adjustment_contract.py:64`.
+It also fails on unchanged main `550d39b` in the same environment (3.78 seconds).
+The old three snapshot-history failures now pass. No test assertion was weakened.
+Aniq explicitly accepted this specific unchanged-main failure on 20 September:
+"Merge with this specific failure recorded." Normal PR #33 merge is authorized;
+the failure remains Backend follow-up, not a pass or a blanket test exception.
+
+Review reproduced and fixed a simulator receipt-retry identity collision: use
+the `(delivery_id, request_id)` pair, not colon-joined text. Independent regression
+tests accept distinct colon-containing IDs and still reject actual retries.
+The documented library fixture remains 5 served, 4 unmet, SGD 19.00. No browser,
+Bedrock or live-agent tests were run. PostgreSQL was isolated from the project DB.
+
+This completes the bounded one-day physical core, not the random event generator,
+multi-day manager/policy scenario driver, reporting-error/correction generator,
+full economic scorer or live publication. Opening counts are exact; hidden losses
+remain evaluator-only until their physical effect appears in counts/sales. Existing
+full-history dates, supplier enrichment and economic policies still need their
+respective decisions. Aniq owns the next simulator/horizon increment; Chun Yang
+owns authoritative ingestion/revision semantics; Rudy owns routing and publication
+adapters. Preserve owner coordination in issue #16; this change closes no issue.
+
+Historical sales-policy merge verification (18 September; superseded by the
+current full gate above for the three snapshot-history tests):
 Aniq explicitly authorized proceeding with the normal merge of
 [PR #29](https://github.com/rudybrrr/restock-ai/pull/29) despite the three
-snapshot-replay failures reproduced on unchanged main. Those failures remain
-documented Backend follow-up; they have not been fixed or reclassified as passes.
+snapshot-replay failures reproduced on unchanged main at that time. That historical
+failed result is preserved below; the current gate verifies those tests now pass.
 
 ## Current frozen sales policy
 
@@ -606,6 +659,8 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.13 | 20 September 2026 | Recorded Aniq's explicit acceptance of the one unchanged-main decimal-string test failure for normal PR #33 merge; failed-test evidence and Backend follow-up retained. |
+| 1.12 | 20 September 2026 | Added one-day physical execution, independent fixture/oracles and observation-only access; corrected receipt retry identity; recorded 628 numerical passes and full gate 701/1 with unchanged-main reproduction. Merge and live integration remain separate. |
 | 1.10 | 18 September 2026 | Recorded Aniq's explicit waiver of the three snapshot-replay failures reproduced on unchanged main, authorizing normal PR #29 merge. Preserved failed-test evidence, Backend follow-up and integration limits; no application or test changes. |
 | 1.11 | 18 September 2026 | Aniq approved SALES_MATERIALITY_V1 after reviewing exposure delays. Added immutable definition/resolver, assessment enforcement, contract tests and explicit Backend/Agent evidence dependencies. |
 | 1.8 | 18 September 2026 | Added pure promotion application, immutable comparison, exact portion/recipe and intraday examples, frozen evidence requirements and owner handoff. Preserved unfinished materiality and accepted Pass 3E policies. |
