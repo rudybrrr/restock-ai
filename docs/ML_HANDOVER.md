@@ -2,15 +2,73 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.13, 20 September 2026<br>
-**Status:** The one-day physical simulator is implemented on
-[feat/ml-physical-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-physical-simulator),
-based on main `550d39b`. See [PR #33](https://github.com/rudybrrr/restock-ai/pull/33)
-for merge status. Aniq explicitly accepted its one unchanged-main Backend test
-failure after the complete pre-merge check; no general test waiver applies.
-Sales policy and materiality are already merged. Main's PR #31/#32 now provide
-Backend sales/correction persistence and transport; older missing-contract notes
-below are historical. Rudy's final Agent route and live acceptance remain separate.
+**Version:** 1.14, 20 September 2026<br>
+**Status:** Continuous seven-day physical execution is implemented on
+[feat/ml-seven-day-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-seven-day-simulator),
+based on main `f5199256d0c9e65fe9c94ed473ff3c4f91ac4ae2` (merged PR #33).
+Publication and merge are subject to the current verification record below;
+PR #33's failure exception does not authorize another PR's merge.
+
+### Seven-day physical execution
+
+`src.physical_scenario.simulate_scenario(PhysicalScenario, Catalogue)` carries
+true lot stock and commitments through seven consecutive SGT calendar days,
+including overnight arrivals, midnight expiry, cancellation, new explicit external
+commitments, hidden losses, scheduled counts and explicit disposal. It shares
+the one-day executor's recipe/FEFO/event operations; the one-day API is preserved.
+Daily state snapshots are not new stocktakes. Expired stock is retained until
+explicit removal and never repeatedly counted as new expiry.
+
+`scenario_observations_at(result.observations, known_at=...)` supplies only available
+observations, separately from attempted demand, hidden losses and evaluator results.
+Counts do not reset physical state; daily final sales replace batches and are not
+another consumption movement. These offline types are not new Backend contracts.
+
+The explicit development fixture covers **16–22 February 2026**: **15 attempted,
+11 served, 4 unmet; 7 paid + 4 free; S$35 revenue**. Chicken conservation is
+0.600 opening + 1.350 new receipts = 1.650 consumed + 0.150 hidden loss +
+0.100 disposal + 0.050 retained expired. The original commitment and an additional
+external purchase remain distinct. See [numerical inputs, outputs, independent
+arithmetic and runnable command](ML_NUMERICAL_FUNCTIONS.md#continuous-seven-day-physical-simulator--20-september-2026).
+
+Fresh verification on 20 September 2026:
+- **682 numerical tests passed**, including 54 seven-day and 76 one-day cases,
+  plus 552 forecasting/recipe/bucket/projector/history/procurement/promotion/
+  materiality/policy regressions. The local invocation also included three seed
+  integration tests without TEST_DATABASE_URL: those three stopped at setup;
+  they were subsequently covered by the isolated full suite below.
+- Full locked Linux Python 3.12/PostgreSQL 18 gate: **755 passed, 1 failed**.
+  Exact summary: `1 failed, 755 passed, 2 warnings in 252.16s (0:04:12)`.
+- The sole failure is
+  `tests/test_inventory_adjustment_contract.py::test_safe_inventory_correction_can_certify_keep_current_plan:64`:
+  expected `"0.5"`, actual `"0.500"`. The same test fails on unchanged current
+  main `f5199256d0c9e65fe9c94ed473ff3c4f91ac4ae2` in the same isolated environment
+  (3.81 seconds). Quantities are numerically equal, but the assertion prevents
+  the subsequent KEEP checks. Chun Yang owns the serialization/test correction.
+  No Backend assertion or implementation was weakened or modified.
+- Whole-API Ruff and Pyright passed on Windows and Linux; changed-file formatting
+  and diff checks passed. The isolated API snapshot matches the tested checkout,
+  except a final test-format-only change with an identical parsed AST. No runtime
+  or dependency configuration changed. The repository has no Actions workflows
+  or required status checks; normal PR protection still applies.
+- CLI repeated output/hash verification passed. Two existing dependency warnings
+  remain. No browser, Bedrock or live-agent acceptance was run. Project PostgreSQL
+  stayed stopped; only disposable test databases were used.
+
+**Merge remains pending a new explicit exception for this PR's unchanged-main
+failure, or its correction. PR #33's waiver does not transfer.**
+
+Remaining work: Aniq's adaptive scenario/policy driver, multi-day procurement and
+full economics/evaluation; reporting-error generation and final history-calendar
+approval remain separate. Chun Yang owns authoritative snapshots/ingestion,
+revisions and persistence; Rudy owns agent driving and observation/result adapters.
+Backend PR #31/#32 contracts are on main, but this fixture execution does not prove
+live Agent integration. Preserve owner confirmations through issue #16.
+
+### Historical PR #33 verification and one-day interface
+
+The paragraphs below preserve PR #33's original results and its specific accepted
+failure. They are historical, not the current seven-day gate.
 
 ### One-day physical execution core
 
@@ -48,13 +106,13 @@ tests accept distinct colon-containing IDs and still reject actual retries.
 The documented library fixture remains 5 served, 4 unmet, SGD 19.00. No browser,
 Bedrock or live-agent tests were run. PostgreSQL was isolated from the project DB.
 
-This completes the bounded one-day physical core, not the random event generator,
+Historical PR #33 completed the bounded one-day physical core, not the random event generator,
 multi-day manager/policy scenario driver, reporting-error/correction generator,
 full economic scorer or live publication. Opening counts are exact; hidden losses
 remain evaluator-only until their physical effect appears in counts/sales. Existing
 full-history dates, supplier enrichment and economic policies still need their
-respective decisions. Aniq owns the next simulator/horizon increment; Chun Yang
-owns authoritative ingestion/revision semantics; Rudy owns routing and publication
+respective decisions. The seven-day execution increment is now implemented above;
+Aniq owns later horizon/evaluation work. Chun Yang owns authoritative ingestion/revision semantics; Rudy owns routing and publication
 adapters. Preserve owner coordination in issue #16; this change closes no issue.
 
 Historical sales-policy merge verification (18 September; superseded by the
@@ -659,6 +717,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.14 | 20 September 2026 | Continuous seven-day physical execution, explicit counts/disposal, independent oracles and reproducible report. Current verification/merge status is recorded above; PR #33 results are historical. |
 | 1.13 | 20 September 2026 | Recorded Aniq's explicit acceptance of the one unchanged-main decimal-string test failure for normal PR #33 merge; failed-test evidence and Backend follow-up retained. |
 | 1.12 | 20 September 2026 | Added one-day physical execution, independent fixture/oracles and observation-only access; corrected receipt retry identity; recorded 628 numerical passes and full gate 701/1 with unchanged-main reproduction. Merge and live integration remain separate. |
 | 1.10 | 18 September 2026 | Recorded Aniq's explicit waiver of the three snapshot-replay failures reproduced on unchanged main, authorizing normal PR #29 merge. Preserved failed-test evidence, Backend follow-up and integration limits; no application or test changes. |

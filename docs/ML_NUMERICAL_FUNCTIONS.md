@@ -1,5 +1,173 @@
 # ReStock numerical functions and development datasets
 
+## Continuous seven-day physical simulator — 20 September 2026
+
+`src.physical_scenario.simulate_scenario(PhysicalScenario, Catalogue)` runs one
+continuous, explicit timeline across 1–7 consecutive Singapore calendar days.
+Shorter spans support independent boundary tests; the reference fixture covers
+**16–22 February 2026**, ending 23 February 00:00 SGT. These are development
+fixture dates, not approval of the full historical training/simulation calendar.
+Base main: `f5199256d0c9e65fe9c94ed473ff3c4f91ac4ae2`; branch
+[feat/ml-seven-day-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-seven-day-simulator).
+
+Approved basis: ML v2 §§5.2–5.3, §7, §12.2 and P04; v3 §§3/5–8 retain the
+physical methods and replace the historical catalogue/examples. The user explicitly
+authorized the seven-day execution layer. V5 provides product context, not new
+catalogue, reliability penalties or lifecycle authority.
+
+### Inputs and continuous execution
+
+- `PhysicalScenario` extends the existing internal physical fixture inputs with
+  explicit dated `ScenarioDay` profiles/reporting delays, opening availability,
+  `ExternalPurchase`, `CountSchedule` and `Disposal` events. These are offline
+  numerical models, **not proposed Backend payloads**. `Catalogue`, `InventoryLot`,
+  `Delivery`, `Receipt`, recipe conversion and service-profile validation are reused.
+- Complete opening manifests include all eight ingredients; `[]` means verified
+  zero. Opening physical/count-equal stock is supplied exactly once. Reconciled
+  prior receipts contribute to opening stock, never again to new stock movements.
+  Catalogue and recipe hashes must match. Missing/invalid inputs raise ValueError;
+  no certified partial result is emitted.
+- The extracted private `_PhysicalState` shares the existing one-day recipe,
+  whole-portion, atomic-pair, FEFO and receipt/cancellation arithmetic. The public
+  `simulate_day` API and its 76 regression cases remain compatible. This is not
+  seven calls to `simulate_day` and not another observed-history replayer.
+- Calendar snapshots carry lot IDs, original received time, expiry, usable and
+  retained-expired quantities. They have **no `counted_at`**. Only the explicit
+  opening and scheduled counts emit physical count records. Counts never reset
+  stock or deduct daily sales again. Receipt-lot metadata retains the canonical
+  receipt timestamp; it does not fabricate a separately scheduled stocktake.
+- Opening and new commitments use canonical supplier/ingredient fields. New
+  commitments must have no prior receipts, received or cancelled quantities.
+  They are supplied external actions, not automatic approvals or recommendations.
+  Placement/expected arrival creates no stock; actual receipts do. Cancellation
+  affects only outstanding supply. A later arrival cannot repair an earlier loss
+  of service. Identity/retry validation spans the whole run, including opening
+  receipt evidence; retry identity is `(delivery_id, request_id)`. Retries must be
+  deduplicated upstream; duplicates/conflicts are rejected here.
+- `FEFO_EXPIRY_RECEIVED_LOT_ID_V1` retains actual lot-ID tie order. Scenario policy
+  `EXPIRY_PLACEMENT_LOSS_SALE_RECEIPT_CANCEL_DISPOSAL_COUNT_V1` extends the one-day
+  event order: expiry, placement, hidden loss, sales, receipts, cancellation,
+  disposal, count, then midnight snapshot; IDs order ties within kind. Sales at
+  an interval end precede equal-time receipts. Every midnight is processed, even
+  with no service events. Calendar physical intervals are `(start,end]`; activity
+  exactly at the ending midnight is included before that day's closing snapshot,
+  which equals the next day's opening. Original event/observation timestamps stay
+  intact. Profiles still use the existing half-hour allocator for validation.
+- Expiry occurs at the next SGT midnight after `expiry_date`. Already-expired
+  opening quantity is separate from `newly_expired`. Expiry transfers stock to
+  physically retained expired stock exactly once; only explicit disposal removes
+  it. Disposal names either the USABLE or EXPIRED pool. Hidden losses remove
+  supplied usable quantities without publishing a loss explanation.
+- Arithmetic uses input-derived local Decimal precision, including event-count
+  carry digits, independent of ambient context. No premature quantity/money
+  rounding or supplier-capacity renewal occurs.
+
+### Truth, observations and conservation
+
+`ScenarioResult` contains evaluator-only daily physical snapshots, order outcomes,
+paid/free/attempted/served/unmet/revenue totals, movement records, per-lot and
+per-ingredient ledgers, and final reconciled commitments. All eight ingredients
+appear, including explicit zeros. Never send this full result to an agent.
+
+`scenario_observations_at(result.observations, known_at=...)` takes **only** the
+separate `ScenarioObservations` stream and returns defensive copies. It exposes
+opening commitment facts, newly recorded external placements, actual receipts,
+cancellations/disposals, exact scheduled counts, complete batch vectors and final
+daily revision-1 served sales/accounting only after their availability times.
+It does not expose future attempts, future realised receipts, schedules or hidden
+losses. Counts reveal measured discrepancies without inventing their causes.
+
+Complete batches cover the run contiguously, including explicit closed/zero-sale
+intervals. Observable receipt/count/disposal boundaries split batches; adjacent
+batches are withheld until the boundary event is available. Hidden loss times
+never split public batches. A missing/not-yet-available report is absent, not a
+zero vector. Daily final totals replace batches in forecast history and never
+cause physical consumption. Promotion/censoring eligibility remains explicit and
+day-wide; reporting-error/replacement-revision generation is not implemented.
+
+For every lot and ingredient, in its own base unit:
+
+`opening + new receipts = served recipe consumption + hidden loss + disposal + closing usable + closing retained expired`.
+
+`opening_expired` is a classification within opening, and `newly_expired` is an
+internal transfer, **not additional outflows in that equation**. For each commitment:
+`ordered = received (including reconciled prior receipts) + cancelled + outstanding`.
+
+### Independent seven-day reference
+
+`tests/fixtures/physical_seven_days_v1.json` is a small, fully explicit synthetic
+fixture using the current five dishes/eight ingredients and 40% lunch/60% dinner
+profile. Weights describe the profile; explicit transactions need not match them.
+
+| Date | Attempted | Served | Unmet | Paid | Free | Revenue SGD |
+|---|---:|---:|---:|---:|---:|---:|
+| Feb 16 | 3 | 3 | 0 | 2 | 1 | 10 |
+| Feb 17 | 1 | 1 | 0 | 1 | 0 | 5 |
+| Feb 18 | 3 | 2 | 1 | 1 | 1 | 5 |
+| Feb 19 | 3 | 3 | 0 | 2 | 1 | 10 |
+| Feb 20 | 2 | 0 | 2 | 0 | 0 | 0 |
+| Feb 21 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Feb 22 | 3 | 2 | 1 | 1 | 1 | 5 |
+| **Total** | **15** | **11** | **4** | **7** | **4** | **35** |
+
+Independent arithmetic: the 11 served chicken-rice portions use 1.650 kg chicken,
+1.100 kg rice and 0.110 litres soy. Chicken opening 0.600 + new receipts 1.350
+= consumption 1.650 + hidden loss 0.150 + disposal 0.100 + retained expired 0.050.
+Rice 3.000 - 1.100 - hidden loss 0.200 = 1.700 kg; soy 1.000 - 0.110 = 0.890 litres.
+Vegetables retain 0.100 kg already expired + 0.200 kg newly expired; neither is
+served or silently disposed. Other ingredients are explicit zero stock/demand.
+
+The opening chicken commitment is 1.500 kg: 0.600 already received and counted,
+0.450 received overnight Feb 17, 0.450 cancelled Feb 18, zero outstanding. A new
+external 0.900 kg commitment on Feb 18 is delayed, with 0.600 received overnight
+Feb 19 and 0.300 overnight Feb 22. It never changes the original commitment.
+The Feb 18 shortage remains unmet. Four fulfilled pairs are four transactions,
+not eight paid sales. S$35 is revenue only, not a complete economic score.
+
+From `services/api` (Windows existing environment; Linux may use `uv run`):
+
+```powershell
+.\.venv\Scripts\python.exe -m src.physical_scenario --scenario tests/fixtures/physical_seven_days_v1.json --catalogue tests/fixtures/seasonal_baseline_v3.json
+.\.venv\Scripts\python.exe -m pytest -q tests/test_physical_scenario.py tests/test_physical_simulator.py
+```
+
+The compact stdout JSON contains version/date/timezone/policies, catalogue/recipe
+hashes, scenario-file SHA-256, daily and aggregate sales, ingredient ledgers,
+commitment balances and a report SHA-256 computed before adding that field.
+Decimal values are lossless strings. No nondeterministic run time enters hashes.
+Reordering equivalent input events preserves numerical results; changing source
+file bytes intentionally changes the file hash. Do not commit generated truth
+reports or feed them to planner snapshots.
+
+### Acceptance coverage and remaining boundaries
+
+The dedicated tests cover all 16 requested groups: existing one-day regression;
+two-day hand arithmetic/continuity; seven-day totals; lot/ingredient conservation;
+midnight expiry/retention/disposal; overnight and midnight receipts; delayed
+commitments; partial receipts/cancellation; cross-day retry/conflict/excess rejection;
+new external actions; atomic pairs/shared shortages; hidden losses/count visibility;
+no repeated sales deduction; deterministic reorder/immutability/Decimal context;
+isolated runs with identical attempts and different actions; malformed manifests,
+versions, references, times and quantities. Expected totals are independently
+hand-derived, not calculated using this simulator or the optimiser.
+
+Current verification: **682 numerical passes** (54 seven-day + 76 one-day +
+552 existing numerical regressions); full isolated Backend **755 passed / 1 failed**,
+with the same decimal-string assertion reproduced on unchanged main f5199256.
+Windows/Linux Ruff and Pyright, formatting and diff checks pass. See ML_HANDOVER
+for exact commands/scope, the initial seed-test configuration errors and the new
+merge-exception requirement. Prior 628/701 results below are historical PR #33
+evidence, not fresh verification of this runner.
+
+Still outside scope: reporting-error/random event generation, adaptive manager or
+policy driving, broader purchasing horizons/capacity renewals, terminal valuation
+and full economic scoring, the 40-scenario benchmark and real forecast quality.
+CASH_SLICE_V1 is unchanged. Aniq owns those numerical/evaluation increments;
+Chun Yang owns authoritative ingestion/revisions and persistence; Rudy owns agent
+routing and observation/result adapters. Fixture observation types do not resolve
+issue #16 or constitute live publication. Keep outstanding owner confirmations
+and the full-history calendar distinct from this completed physical execution layer.
+
 ## One-day physical simulator — 20 September 2026
 
 Implementation: `src.physical_simulator.simulate_day(PhysicalDay, Catalogue)`.

@@ -19,7 +19,11 @@ from src.inventory_projection import FEFO_POLICY, _expiry, _precision
 from src.operations_schemas import Delivery, Receipt, SalesBatch
 from src.requirements import calculate_requirements
 from src.schemas import InventoryLot
-from src.service_buckets import ServicePeriod, allocate_service_buckets
+from src.service_buckets import (
+    ProjectedDemandBucket,
+    ServicePeriod,
+    allocate_service_buckets,
+)
 
 Quantity = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
 PositiveQuantity = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
@@ -58,7 +62,7 @@ class HiddenLoss(DatasetModel):
     quantity: PositiveQuantity
 
 
-class PhysicalDay(DatasetModel):
+class PhysicalInputs(DatasetModel):
     """Offline numerical fixture, not a proposed Backend request payload.
 
     Opening lots are complete true/count-equal physical stock at start. Opening
@@ -67,14 +71,12 @@ class PhysicalDay(DatasetModel):
     """
 
     fixture_id: Identity
-    target_date: date
     start: AwareDatetime
     end: AwareDatetime
     catalogue_sha256: Identity
     recipe_sha256: Identity
     fefo_policy: Literal["FEFO_EXPIRY_RECEIVED_LOT_ID_V1"]
     event_policy: Literal["EXPIRY_LOSS_SALE_RECEIPT_CANCEL_V1"]
-    profile: tuple[ServicePeriod, ...]
     opening_lots: tuple[InventoryLot, ...]
     opening_manifest: dict[str, tuple[str, ...]]
     commitments: tuple[Delivery, ...]
@@ -82,6 +84,11 @@ class PhysicalDay(DatasetModel):
     cancellations: tuple[Cancellation, ...]
     hidden_losses: tuple[HiddenLoss, ...]
     orders: tuple[AttemptedOrder, ...]
+
+
+class PhysicalDay(PhysicalInputs):
+    target_date: date
+    profile: tuple[ServicePeriod, ...]
     batch_reporting_delay_seconds: Annotated[int, Field(ge=0, strict=True)]
     closing_available_at: AwareDatetime
 
@@ -117,7 +124,7 @@ class LotLedger:
 class Movement:
     at: datetime
     lot_id: str
-    kind: Literal["RECEIPT", "CONSUMPTION", "HIDDEN_LOSS", "EXPIRY"]
+    kind: Literal["RECEIPT", "CONSUMPTION", "HIDDEN_LOSS", "EXPIRY", "DISPOSAL"]
     quantity: Decimal
     source_id: str
 
@@ -205,6 +212,24 @@ def _validate(
     )
     if any(b.start < inputs.start or b.end > inputs.end for b in buckets):
         raise ValueError("Physical day must cover the complete dated service profile")
+    _validate_events(inputs, catalogue, buckets)
+    # Complete observed coverage, including explicitly closed gaps. Actual receipt
+    # boundaries split batches: no inferred within-batch receipt ordering. Hidden
+    # loss times NEVER alter public interval boundaries.
+    boundaries = {inputs.start, inputs.end}
+    boundaries.update(t for b in buckets for t in (b.start, b.end))
+    boundaries.update(r.receipt.received_at for r in inputs.receipts)
+    ordered = sorted(boundaries)
+    return tuple(pairwise(ordered))
+
+
+def _validate_events(
+    inputs: PhysicalInputs,
+    catalogue: Catalogue,
+    buckets: tuple[ProjectedDemandBucket, ...],
+    new_commitments: tuple[Delivery, ...] = (),
+) -> None:
+    """Shared whole-run reference/quantity checks, without day-boundary resets."""
     units: dict[str, Literal["kg", "litres", "pieces"]] = {
         i.id: i.unit for i in catalogue.ingredients
     }
@@ -249,7 +274,7 @@ def _validate(
             and not order.promotion_reference.strip()
         ):
             raise ValueError("Nonempty promotion reference required")
-    _unique([d.id for d in inputs.commitments], "delivery")
+    _unique([d.id for d in inputs.commitments + new_commitments], "delivery")
     opening = {lot.id: lot for lot in inputs.opening_lots}
     old_receipts: list[Receipt] = []
     for delivery in inputs.commitments:
@@ -297,13 +322,14 @@ def _validate(
             closed = receipt.remainder == "CANCELLED"
         if closed and delivery.outstanding_quantity:
             raise ValueError("Cancelled opening remainder cannot remain outstanding")
-    deliveries = {d.id: d for d in inputs.commitments}
+    deliveries = {d.id: d for d in inputs.commitments + new_commitments}
     for event in inputs.receipts:
         receipt = event.receipt
         if receipt.delivery_id not in deliveries:
             raise ValueError("Actual receipt references unknown external commitment")
         if (
             not inputs.start < receipt.received_at <= inputs.end
+            or receipt.received_at < deliveries[receipt.delivery_id].ordered_at
             or event.available_at < receipt.received_at
             or receipt.expiry_date < receipt.received_at.astimezone(SINGAPORE).date()
             or receipt.closing_counts
@@ -327,6 +353,7 @@ def _validate(
         if (
             event.delivery_id not in deliveries
             or not inputs.start < event.at <= inputs.end
+            or event.at < deliveries[event.delivery_id].ordered_at
             or event.available_at < event.at
         ):
             raise ValueError("Invalid cancellation reference or timestamp")
@@ -335,26 +362,9 @@ def _validate(
     for loss in inputs.hidden_losses:
         if not inputs.start < loss.at <= inputs.end:
             raise ValueError("Hidden loss outside physical day")
-    # Complete observed coverage, including explicitly closed gaps. Actual receipt
-    # boundaries split batches: no inferred within-batch receipt ordering. Hidden
-    # loss times NEVER alter public interval boundaries.
-    boundaries = {inputs.start, inputs.end}
-    boundaries.update(t for b in buckets for t in (b.start, b.end))
-    boundaries.update(r.receipt.received_at for r in inputs.receipts)
-    ordered = sorted(boundaries)
-    return tuple(pairwise(ordered))
 
 
-def simulate_day(inputs: PhysicalDay, catalogue: Catalogue) -> PhysicalResult:
-    """Execute explicit realised events without modifying any supplied object.
-
-    Equal-time policy: expiry, hidden loss, sales, receipts, cancellations; stable
-    IDs within kind. Thus a receipt at a batch end covers subsequent sales only.
-    Invalid/inconsistent fixtures raise ValueError; no partial certified result.
-    """
-    # Revalidate/copy canonical mutable nested models, including model_copy edits.
-    inputs = PhysicalDay.model_validate(inputs.model_dump())
-    catalogue = Catalogue.model_validate(catalogue.model_dump())
+def _physical_quantities(inputs: PhysicalInputs, catalogue: Catalogue) -> list[Decimal]:
     values = [r.quantity for r in catalogue.recipes]
     values += [
         q for lot in inputs.opening_lots for q in (lot.quantity, lot.initial_quantity)
@@ -372,6 +382,20 @@ def simulate_day(inputs: PhysicalDay, catalogue: Catalogue) -> PhysicalResult:
             d.outstanding_quantity,
         )
     ]
+    return values
+
+
+def simulate_day(inputs: PhysicalDay, catalogue: Catalogue) -> PhysicalResult:
+    """Execute explicit realised events without modifying any supplied object.
+
+    Equal-time policy: expiry, hidden loss, sales, receipts, cancellations; stable
+    IDs within kind. Thus a receipt at a batch end covers subsequent sales only.
+    Invalid/inconsistent fixtures raise ValueError; no partial certified result.
+    """
+    # Revalidate/copy canonical mutable nested models, including model_copy edits.
+    inputs = PhysicalDay.model_validate(inputs.model_dump())
+    catalogue = Catalogue.model_validate(catalogue.model_dump())
+    values = _physical_quantities(inputs, catalogue)
     if any(not v.is_finite() or v < 0 for v in values):
         raise ValueError("Finite nonnegative Decimal quantities required")
     # Each order consumes at most two recipe portions. Allow carry digits for
@@ -383,38 +407,208 @@ def simulate_day(inputs: PhysicalDay, catalogue: Catalogue) -> PhysicalResult:
         return _execute(inputs, catalogue, intervals)
 
 
+class _PhysicalState:
+    """Private executor state, never a physical-count observation or runtime API.
+
+    Both day and scenario entry points use these exact movement operations.
+    Counts are emitted only when requested and never reset physical quantities.
+    """
+
+    def __init__(self, data: PhysicalInputs, catalogue: Catalogue) -> None:
+        self.start = data.start
+        self.metadata = {lot.id: lot for lot in data.opening_lots}
+        self.stock = {lot.id: lot.quantity for lot in data.opening_lots}
+        # opening, received, consumed, hidden loss, newly expired
+        self.ledger = {
+            lot.id: [lot.quantity, ZERO, ZERO, ZERO, ZERO] for lot in data.opening_lots
+        }
+        self.retained = dict.fromkeys(self.stock, ZERO)
+        self.opening_expired = dict.fromkeys(self.stock, ZERO)
+        self.disposed = dict.fromkeys(self.stock, ZERO)
+        self.deliveries: dict[str, Delivery] = {}
+        self.received: dict[str, Decimal] = {}
+        self.cancelled: dict[str, Decimal] = {}
+        self.remaining: dict[str, Decimal] = {}
+        for delivery in data.commitments:
+            self.place(delivery)
+        self.movements: list[Movement] = []
+        self.outcomes: list[SaleOutcome] = []
+        self.dish_ids = sorted(d.id for d in catalogue.menu_items)
+        self.units: dict[str, Literal["kg", "litres", "pieces"]] = {
+            i.id: i.unit for i in catalogue.ingredients
+        }
+        self.usage = {
+            (dish, portions): calculate_requirements(
+                {dish: Decimal(portions)},
+                catalogue.menu_items,
+                catalogue.ingredients,
+                catalogue.recipes,
+                sparse=True,
+            )
+            for dish in self.dish_ids
+            for portions in (1, 2)
+        }
+
+    def place(self, delivery: Delivery) -> None:
+        self.deliveries[delivery.id] = delivery
+        self.received[delivery.id] = delivery.received_quantity
+        self.cancelled[delivery.id] = delivery.cancelled_quantity
+        self.remaining[delivery.id] = delivery.outstanding_quantity
+
+    def expire(self, at: datetime, *, opening: bool = False) -> None:
+        for key in sorted(self.metadata):
+            expiry = _expiry(self.metadata[key].expiry_date)
+            if self.stock[key] and expiry <= at:
+                amount = self.stock[key]
+                self.stock[key] = ZERO
+                self.retained[key] += amount
+                if opening:
+                    self.opening_expired[key] += amount
+                else:
+                    self.ledger[key][4] += amount
+                    self.movements.append(
+                        Movement(max(self.start, expiry), key, "EXPIRY", amount, key)
+                    )
+
+    def lose(self, loss: HiddenLoss) -> None:
+        if loss.lot_id not in self.stock or loss.quantity > self.stock[loss.lot_id]:
+            raise ValueError("Hidden loss exceeds available usable lot stock")
+        self.stock[loss.lot_id] -= loss.quantity
+        self.ledger[loss.lot_id][3] += loss.quantity
+        self.movements.append(
+            Movement(loss.at, loss.lot_id, "HIDDEN_LOSS", loss.quantity, loss.id)
+        )
+
+    def serve(self, order: AttemptedOrder) -> None:
+        portions = 1 + order.free_portions
+        needed = self.usage[order.menu_item_id, portions]
+        missing = tuple(
+            i
+            for i, q in needed.items()
+            if q
+            > sum(
+                (
+                    self.stock[k]
+                    for k, lot in self.metadata.items()
+                    if lot.ingredient_id == i
+                ),
+                ZERO,
+            )
+        )
+        if not missing:
+            keys = sorted(
+                self.metadata,
+                key=lambda k: (
+                    self.metadata[k].expiry_date,
+                    self.metadata[k].received_at,
+                    k,
+                ),
+            )
+            for ingredient, required in needed.items():
+                for key in keys:
+                    if self.metadata[key].ingredient_id != ingredient or not required:
+                        continue
+                    amount = min(required, self.stock[key])
+                    if amount:
+                        self.stock[key] -= amount
+                        required -= amount
+                        self.ledger[key][2] += amount
+                        self.movements.append(
+                            Movement(order.at, key, "CONSUMPTION", amount, order.id)
+                        )
+        self.outcomes.append(
+            SaleOutcome(
+                order.id,
+                order.at,
+                order.menu_item_id,
+                portions,
+                0 if missing else portions,
+                0 if missing else 1,
+                0 if missing else order.free_portions,
+                ZERO if missing else order.unit_price,
+                portions if missing else 0,
+                missing,
+            )
+        )
+
+    def receive(self, receipt: Receipt) -> None:
+        delivery = self.deliveries[receipt.delivery_id]
+        if receipt.quantity > self.remaining[delivery.id]:
+            raise ValueError(
+                "Receipt exceeds outstanding commitment after cancellations"
+            )
+        self.remaining[delivery.id] -= receipt.quantity
+        self.received[delivery.id] += receipt.quantity
+        if receipt.remainder == "CANCELLED":
+            self.cancelled[delivery.id] += self.remaining[delivery.id]
+            self.remaining[delivery.id] = ZERO
+        self.metadata[receipt.lot_id] = InventoryLot(
+            id=receipt.lot_id,
+            ingredient_id=delivery.ingredient_id,
+            unit=self.units[delivery.ingredient_id],
+            received_at=receipt.received_at,
+            expiry_date=receipt.expiry_date,
+            initial_quantity=receipt.quantity,
+            quantity=receipt.quantity,
+            counted_at=receipt.received_at,
+        )
+        self.stock[receipt.lot_id] = receipt.quantity
+        self.ledger[receipt.lot_id] = [ZERO, receipt.quantity, ZERO, ZERO, ZERO]
+        self.retained[receipt.lot_id] = ZERO
+        self.opening_expired[receipt.lot_id] = ZERO
+        self.disposed[receipt.lot_id] = ZERO
+        self.movements.append(
+            Movement(
+                receipt.received_at,
+                receipt.lot_id,
+                "RECEIPT",
+                receipt.quantity,
+                receipt.id,
+            )
+        )
+
+    def cancel(self, event: Cancellation) -> None:
+        if event.quantity > self.remaining[event.delivery_id]:
+            raise ValueError("Cancellation exceeds outstanding commitment")
+        self.remaining[event.delivery_id] -= event.quantity
+        self.cancelled[event.delivery_id] += event.quantity
+
+    def dispose(
+        self,
+        identity: str,
+        at: datetime,
+        lot_id: str,
+        quantity: Decimal,
+        *,
+        expired: bool,
+    ) -> None:
+        pool = self.retained if expired else self.stock
+        if lot_id not in pool or quantity > pool[lot_id]:
+            raise ValueError("Disposal exceeds the specified physical stock pool")
+        pool[lot_id] -= quantity
+        self.disposed[lot_id] += quantity
+        self.movements.append(Movement(at, lot_id, "DISPOSAL", quantity, identity))
+
+    def count(self, at: datetime) -> tuple[InventoryLot, ...]:
+        # A caller may invoke this ONLY for an explicit count schedule.
+        return tuple(
+            self.metadata[k].model_copy(
+                deep=True,
+                update={
+                    "quantity": self.stock[k] + self.retained[k],
+                    "counted_at": at,
+                },
+            )
+            for k in sorted(self.metadata)
+        )
+
+
 def _execute(
     data: PhysicalDay,
     catalogue: Catalogue,
     intervals: tuple[tuple[datetime, datetime], ...],
 ) -> PhysicalResult:
-    metadata = {lot.id: lot for lot in data.opening_lots}
-    stock = {lot.id: lot.quantity for lot in data.opening_lots}
-    # opening, received, consumed, hidden loss, expired
-    ledger = {
-        lot.id: [lot.quantity, ZERO, ZERO, ZERO, ZERO] for lot in data.opening_lots
-    }
-    deliveries = {d.id: d for d in data.commitments}
-    received = {d.id: d.received_quantity for d in data.commitments}
-    cancelled = {d.id: d.cancelled_quantity for d in data.commitments}
-    remaining = {d.id: d.outstanding_quantity for d in data.commitments}
-    movements: list[Movement] = []
-    outcomes: list[SaleOutcome] = []
-    dish_ids = sorted(d.id for d in catalogue.menu_items)
-    units: dict[str, Literal["kg", "litres", "pieces"]] = {
-        i.id: i.unit for i in catalogue.ingredients
-    }
-    usage = {
-        (dish, portions): calculate_requirements(
-            {dish: Decimal(portions)},
-            catalogue.menu_items,
-            catalogue.ingredients,
-            catalogue.recipes,
-            sparse=True,
-        )
-        for dish in dish_ids
-        for portions in (1, 2)
-    }
+    state = _PhysicalState(data, catalogue)
     orders = {o.id: o for o in data.orders}
     receipts = {r.receipt.id: r for r in data.receipts}
     losses = {e.id: e for e in data.hidden_losses}
@@ -435,109 +629,20 @@ def _execute(
         if _expiry(r.receipt.expiry_date) <= data.end
     ]
     for at, kind, identity in sorted(timeline):
-        for key in sorted(metadata):
-            lot = metadata[key]
-            if stock[key] and _expiry(lot.expiry_date) <= at:
-                amount = stock[key]
-                stock[key] = ZERO
-                ledger[key][4] += amount
-                movements.append(
-                    Movement(
-                        max(data.start, _expiry(lot.expiry_date)),
-                        key,
-                        "EXPIRY",
-                        amount,
-                        key,
-                    )
-                )
+        state.expire(at)
         if kind == 1:
-            loss = losses[identity]
-            if loss.lot_id not in stock or loss.quantity > stock[loss.lot_id]:
-                raise ValueError("Hidden loss exceeds available usable lot stock")
-            stock[loss.lot_id] -= loss.quantity
-            ledger[loss.lot_id][3] += loss.quantity
-            movements.append(
-                Movement(at, loss.lot_id, "HIDDEN_LOSS", loss.quantity, identity)
-            )
+            state.lose(losses[identity])
         elif kind == 2:
-            order = orders[identity]
-            portions = 1 + order.free_portions
-            needed = usage[order.menu_item_id, portions]
-            missing = tuple(
-                i
-                for i, q in needed.items()
-                if q
-                > sum(
-                    (stock[k] for k, lot in metadata.items() if lot.ingredient_id == i),
-                    ZERO,
-                )
-            )
-            if not missing:
-                # Same canonical FEFO policy as projector/replay; no helper or
-                # observed-history behaviour is changed by this physical executor.
-                keys = sorted(
-                    metadata,
-                    key=lambda k: (metadata[k].expiry_date, metadata[k].received_at, k),
-                )
-                for ingredient, required in needed.items():
-                    for key in keys:
-                        if metadata[key].ingredient_id != ingredient or not required:
-                            continue
-                        amount = min(required, stock[key])
-                        if amount:
-                            stock[key] -= amount
-                            required -= amount
-                            ledger[key][2] += amount
-                            movements.append(
-                                Movement(at, key, "CONSUMPTION", amount, identity)
-                            )
-            outcomes.append(
-                SaleOutcome(
-                    identity,
-                    at,
-                    order.menu_item_id,
-                    portions,
-                    0 if missing else portions,
-                    0 if missing else 1,
-                    0 if missing else order.free_portions,
-                    ZERO if missing else order.unit_price,
-                    portions if missing else 0,
-                    missing,
-                )
-            )
+            state.serve(orders[identity])
         elif kind == 3:
-            receipt = receipts[identity].receipt
-            delivery = deliveries[receipt.delivery_id]
-            if receipt.quantity > remaining[delivery.id]:
-                raise ValueError(
-                    "Receipt exceeds outstanding commitment after cancellations"
-                )
-            remaining[delivery.id] -= receipt.quantity
-            received[delivery.id] += receipt.quantity
-            if receipt.remainder == "CANCELLED":
-                cancelled[delivery.id] += remaining[delivery.id]
-                remaining[delivery.id] = ZERO
-            metadata[receipt.lot_id] = InventoryLot(
-                id=receipt.lot_id,
-                ingredient_id=delivery.ingredient_id,
-                unit=units[delivery.ingredient_id],
-                received_at=at,
-                expiry_date=receipt.expiry_date,
-                initial_quantity=receipt.quantity,
-                quantity=receipt.quantity,
-                counted_at=at,
-            )
-            stock[receipt.lot_id] = receipt.quantity
-            ledger[receipt.lot_id] = [ZERO, receipt.quantity, ZERO, ZERO, ZERO]
-            movements.append(
-                Movement(at, receipt.lot_id, "RECEIPT", receipt.quantity, identity)
-            )
+            state.receive(receipts[identity].receipt)
         elif kind == 4:
-            event = cancellations[identity]
-            if event.quantity > remaining[event.delivery_id]:
-                raise ValueError("Cancellation exceeds outstanding commitment")
-            remaining[event.delivery_id] -= event.quantity
-            cancelled[event.delivery_id] += event.quantity
+            state.cancel(cancellations[identity])
+    metadata, stock, ledger = state.metadata, state.stock, state.ledger
+    outcomes, movements = state.outcomes, state.movements
+    deliveries = state.deliveries
+    received, cancelled, remaining = state.received, state.cancelled, state.remaining
+    dish_ids, units = state.dish_ids, state.units
     batches = []
     for start, end in intervals:
         sales = {
