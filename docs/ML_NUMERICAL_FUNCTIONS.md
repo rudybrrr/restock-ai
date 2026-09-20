@@ -155,8 +155,10 @@ Current verification: **682 numerical passes** (54 seven-day + 76 one-day +
 552 existing numerical regressions); full isolated Backend **755 passed / 1 failed**,
 with the same decimal-string assertion reproduced on unchanged main f5199256.
 Windows/Linux Ruff and Pyright, formatting and diff checks pass. See ML_HANDOVER
-for exact commands/scope, the initial seed-test configuration errors and the new
-merge-exception requirement. Prior 628/701 results below are historical PR #33
+for exact commands/scope, the initial seed-test configuration errors and Aniq's
+explicit PR #34-specific merge exception accepted on 20 September. The existing
+Backend failure remains recorded; no application/test changes or fresh suite rerun
+were made for that documentation-only exception. Prior 628/701 results below are historical PR #33
 evidence, not fresh verification of this runner.
 
 Still outside scope: reporting-error/random event generation, adaptive manager or

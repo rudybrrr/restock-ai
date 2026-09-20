@@ -2,12 +2,13 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.14, 20 September 2026<br>
+**Version:** 1.15, 20 September 2026<br>
 **Status:** Continuous seven-day physical execution is implemented on
 [feat/ml-seven-day-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-seven-day-simulator),
 based on main `f5199256d0c9e65fe9c94ed473ff3c4f91ac4ae2` (merged PR #33).
-Publication and merge are subject to the current verification record below;
-PR #33's failure exception does not authorize another PR's merge.
+See [PR #34](https://github.com/rudybrrr/restock-ai/pull/34) for merge status.
+Aniq explicitly authorized its normal merge on 20 September after reviewing the
+one unchanged-main test failure below. This exception applies only to PR #34.
 
 ### Seven-day physical execution
 
@@ -31,7 +32,9 @@ The explicit development fixture covers **16–22 February 2026**: **15 attempte
 external purchase remain distinct. See [numerical inputs, outputs, independent
 arithmetic and runnable command](ML_NUMERICAL_FUNCTIONS.md#continuous-seven-day-physical-simulator--20-september-2026).
 
-Fresh verification on 20 September 2026:
+Verification from the implementation turn on 20 September 2026 (not rerun for
+this documentation-only approval record):
+
 - **682 numerical tests passed**, including 54 seven-day and 76 one-day cases,
   plus 552 forecasting/recipe/bucket/projector/history/procurement/promotion/
   materiality/policy regressions. The local invocation also included three seed
@@ -55,8 +58,13 @@ Fresh verification on 20 September 2026:
   remain. No browser, Bedrock or live-agent acceptance was run. Project PostgreSQL
   stayed stopped; only disposable test databases were used.
 
-**Merge remains pending a new explicit exception for this PR's unchanged-main
-failure, or its correction. PR #33's waiver does not transfer.**
+**PR #34 specific exception accepted:** on 20 September, Aniq instructed:
+"You can merge. If you need to, update the documentation for this failed test."
+This authorizes normal PR #34 merge despite the recorded unchanged-main failure.
+The failed test remains failed and Backend-owned; no assertion was weakened and
+no general test waiver is granted. The exact failure and its impact remain above.
+Application/test content is unchanged from tested implementation commit
+`f4f2f827e59a38cdc0b1d49b8815664c1fc6291b`; only these documentation records changed.
 
 Remaining work: Aniq's adaptive scenario/policy driver, multi-day procurement and
 full economics/evaluation; reporting-error generation and final history-calendar
@@ -717,6 +725,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.15 | 20 September 2026 | Recorded Aniq's explicit PR #34 merge exception for the unchanged-main decimal-string failure; preserved failed-test evidence and Backend follow-up. No application/test changes. |
 | 1.14 | 20 September 2026 | Continuous seven-day physical execution, explicit counts/disposal, independent oracles and reproducible report. Current verification/merge status is recorded above; PR #33 results are historical. |
 | 1.13 | 20 September 2026 | Recorded Aniq's explicit acceptance of the one unchanged-main decimal-string test failure for normal PR #33 merge; failed-test evidence and Backend follow-up retained. |
 | 1.12 | 20 September 2026 | Added one-day physical execution, independent fixture/oracles and observation-only access; corrected receipt retry identity; recorded 628 numerical passes and full gate 701/1 with unchanged-main reproduction. Merge and live integration remain separate. |
