@@ -1,0 +1,235 @@
+{
+  "fixture_id": "physical-day-v1-synthetic",
+  "target_date": "2026-02-16",
+  "start": "2026-02-16T10:00:00+08:00",
+  "end": "2026-02-16T22:00:00+08:00",
+  "catalogue_sha256": "0704fa2f1658e140d9cc5fd1f090f64d094d14403d698da97d5ea22ea8e0e3da",
+  "recipe_sha256": "12a039e95453255236a9d49f7514e42188c63811ebe032e111662a16168098af",
+  "fefo_policy": "FEFO_EXPIRY_RECEIVED_LOT_ID_V1",
+  "event_policy": "EXPIRY_LOSS_SALE_RECEIPT_CANCEL_V1",
+  "profile": [
+    {
+      "start": "2026-02-16T11:00:00+08:00",
+      "end": "2026-02-16T14:00:00+08:00",
+      "weight": "0.4"
+    },
+    {
+      "start": "2026-02-16T17:00:00+08:00",
+      "end": "2026-02-16T21:00:00+08:00",
+      "weight": "0.6"
+    }
+  ],
+  "opening_lots": [
+    {
+      "id": "chicken-a",
+      "ingredient_id": "chicken",
+      "unit": "kg",
+      "initial_quantity": "0.300",
+      "quantity": "0.300",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-16"
+    },
+    {
+      "id": "chicken-b",
+      "ingredient_id": "chicken",
+      "unit": "kg",
+      "initial_quantity": "0.150",
+      "quantity": "0.150",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-18"
+    },
+    {
+      "id": "rice-a",
+      "ingredient_id": "rice",
+      "unit": "kg",
+      "initial_quantity": "2.000",
+      "quantity": "2.000",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-20"
+    },
+    {
+      "id": "eggs-a",
+      "ingredient_id": "eggs",
+      "unit": "pieces",
+      "initial_quantity": "1",
+      "quantity": "1",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-20"
+    },
+    {
+      "id": "vegetables-a",
+      "ingredient_id": "vegetables",
+      "unit": "kg",
+      "initial_quantity": "0.200",
+      "quantity": "0.200",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-18"
+    },
+    {
+      "id": "vegetables-expired",
+      "ingredient_id": "vegetables",
+      "unit": "kg",
+      "initial_quantity": "0.100",
+      "quantity": "0.100",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-15"
+    },
+    {
+      "id": "oil-a",
+      "ingredient_id": "oil",
+      "unit": "litres",
+      "initial_quantity": "0.100",
+      "quantity": "0.100",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-20"
+    },
+    {
+      "id": "soy-a",
+      "ingredient_id": "soy-sauce",
+      "unit": "litres",
+      "initial_quantity": "0.200",
+      "quantity": "0.200",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T10:00:00+08:00",
+      "expiry_date": "2026-02-20"
+    }
+  ],
+  "opening_manifest": {
+    "chicken": [
+      "chicken-a",
+      "chicken-b"
+    ],
+    "rice": [
+      "rice-a"
+    ],
+    "noodles": [],
+    "eggs": [
+      "eggs-a"
+    ],
+    "tofu": [],
+    "vegetables": [
+      "vegetables-a",
+      "vegetables-expired"
+    ],
+    "oil": [
+      "oil-a"
+    ],
+    "soy-sauce": [
+      "soy-a"
+    ]
+  },
+  "commitments": [
+    {
+      "id": "external-chicken",
+      "supplier_id": "fresh",
+      "ingredient_id": "chicken",
+      "kind": "NORMAL",
+      "expected_quantity": "0.300",
+      "received_quantity": "0",
+      "cancelled_quantity": "0",
+      "outstanding_quantity": "0.300",
+      "ordered_at": "2026-02-15T22:00:00+08:00",
+      "expected_at": "2026-02-16T11:00:00+08:00",
+      "receipts": []
+    }
+  ],
+  "receipts": [
+    {
+      "receipt": {
+        "id": "receipt-a",
+        "delivery_id": "external-chicken",
+        "lot_id": "chicken-arrival",
+        "request_id": "slip-a",
+        "quantity": "0.150",
+        "received_at": "2026-02-16T11:30:00+08:00",
+        "expiry_date": "2026-02-18",
+        "remainder": "CANCELLED"
+      },
+      "available_at": "2026-02-16T11:32:00+08:00"
+    }
+  ],
+  "cancellations": [],
+  "hidden_losses": [
+    {
+      "id": "hidden-rice",
+      "at": "2026-02-16T16:00:00+08:00",
+      "lot_id": "rice-a",
+      "quantity": "0.250"
+    }
+  ],
+  "orders": [
+    {
+      "id": "a",
+      "at": "2026-02-16T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "b",
+      "at": "2026-02-16T11:10:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 1,
+      "unit_price": "5.00",
+      "promotion_reference": "synthetic-pair-v1"
+    },
+    {
+      "id": "c",
+      "at": "2026-02-16T11:15:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "d",
+      "at": "2026-02-16T11:30:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "e",
+      "at": "2026-02-16T11:35:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "f",
+      "at": "2026-02-16T12:00:00+08:00",
+      "menu_item_id": "fried-rice",
+      "free_portions": 0,
+      "unit_price": "4.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "g",
+      "at": "2026-02-16T12:05:00+08:00",
+      "menu_item_id": "fried-rice",
+      "free_portions": 0,
+      "unit_price": "4.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "h",
+      "at": "2026-02-16T17:05:00+08:00",
+      "menu_item_id": "tofu-bowl",
+      "free_portions": 0,
+      "unit_price": "6.00",
+      "promotion_reference": null
+    }
+  ],
+  "batch_reporting_delay_seconds": 60,
+  "closing_available_at": "2026-02-16T22:05:00+08:00"
+}

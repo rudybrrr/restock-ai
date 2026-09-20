@@ -1,5 +1,188 @@
 # ReStock numerical functions and development datasets
 
+## One-day physical simulator — 20 September 2026
+
+Implementation: `src.physical_simulator.simulate_day(PhysicalDay, Catalogue)`.
+Observation access: `observations_at(result.observations, known_at=...)`.
+This is Aniq's offline physical execution core, not a database adapter, a second
+observed-history replayer, a forecast or a completed seven-day benchmark.
+Branch [feat/ml-physical-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-physical-simulator),
+base `550d39bd15d368022e8a6315c0a24f5e8a55f3d1`; see its PR for merge status.
+
+**Approved basis:** v2 §§5.2–5.3 (attempts/served sales/truth isolation),
+§7 (FEFO, expiry, receipts and reconciliation), §12.2 (independent oracles);
+v3 §§3 and 7 preserve these methods while replacing the old catalogue, dates
+and numerical examples. The existing current catalogue/recipe fixture is reused;
+its recipes are compared directly with the seed's literal table without executing
+the seed. No historical D1–D5 examples or old supplier economics are imported.
+The one-day boundary is an incremental implementation agreed in this task,
+not a claim to fulfil every v2 simulator/evaluation work package.
+
+### Input and execution semantics
+
+- Supply a complete explicit opening manifest for all ingredients. Empty lot IDs
+  mean verified zero; absence is invalid. Opening canonical `InventoryLot`
+  quantities are true/count-equal stock at the fixture start.
+- Supply the existing `Catalogue`, matching catalogue/recipe hashes, a dated
+  `ServicePeriod` profile, and a Singapore service-day start/end covering it.
+  The existing allocator validates/expands the profile. Profile weights do not
+  constrain actual transactions: attempts are explicit integer events.
+- Each `AttemptedOrder` is one ordinary paid portion or one paid + one free
+  promotional pair, with explicit price and promotion reference. Pairs are atomic.
+  All recipe ingredients must be available before any are depleted. Revenue is
+  earned only for fulfilled paid portions. Missing multiple ingredients does not
+  multiply lost portions. No promotion uplift or demand sampling runs here.
+- Supply canonical opening `Delivery` records and future actual `Receipt`
+  events with recording availability, plus optional cancellations. Previously
+  received lots must reconcile with opening stock. Only actual new receipts
+  create stock; expected arrival alone never does. Partial receipts, a cancelled
+  remainder, explicit cancellation, duplicate IDs and over-receipts are checked.
+  Only commitments placed by opening are supported in this increment. Retry
+  identity is the exact `(delivery_id, request_id)` pair; embedded colons cannot
+  collide with another pair. Actual duplicate retries remain invalid.
+- Optional evaluator-only hidden losses remove explicitly identified usable
+  physical stock. They do not become recorded waste, adjustment facts or public
+  batch boundaries. Losses exceeding explainable stock are invalid.
+- Versioned explicit policies: `FEFO_EXPIRY_RECEIVED_LOT_ID_V1` and the local
+  fixture event policy `EXPIRY_LOSS_SALE_RECEIPT_CANCEL_V1`. Equal-time priority
+  is expiry, hidden loss, sales, receipts, cancellation; IDs order same-kind ties.
+  Observed batches are `(start,end]`: a receipt at the interval end helps only
+  subsequent orders. A sale at a service-period start is outside that interval.
+  This boundary convention is tested, not an inferred Backend transport default.
+- Lot depletion is expiry date, receipt instant, actual lot ID (no source-prefix
+  tie break). Expiry takes effect at the next Singapore midnight. Expired stock
+  remains physically held until disposal; its closing usable quantity is zero,
+  while closing physical counts retain expired stock. Already expired opening
+  stock is classified at the opening boundary.
+- Decimal arithmetic uses an input-derived local precision, independent of the
+  caller's context; no premature pack or money rounding. Reuses recipe arithmetic,
+  date/expiry/precision helpers and canonical models. No shared replay or FEFO
+  implementation was changed.
+
+### Outputs and visibility
+
+`PhysicalResult` contains evaluator-only per-order attempted/served/unmet results,
+paid/free/revenue, missing ingredient reasons, exact per-lot movement/conservation
+ledgers and reconciled commitment balances. Never hand the whole result to an
+agent or forecast feature loader.
+
+Its separate `Observations` stream contains complete canonical `SalesBatch`
+vectors (explicit zeros), actual receipt/cancellation observations, final daily
+served-sales revision and paid/free/transaction/revenue totals, and closing
+physical counts. Opening/closing manifests preserve zero-lot ingredients.
+`observations_at` accepts only that stream, withholds records until available,
+and returns defensive copies of mutable canonical models. Batch reporting is
+delayed explicitly; intervals touching an actual receipt split are withheld until
+that receipt is recorded. No future quantity or hidden loss is exposed.
+
+Intervals cover start→end contiguously, including zero-sales closed periods, and
+split at actual receipt boundaries rather than prorating unknown consumption.
+Daily totals are replacement forecast-history labels, never extra stock deductions.
+The current emitter produces exact revision 1 observations and closing counts;
+reporting-error generation, replacement submission generation and Backend revision
+selection remain separate work. A regression exercises existing daily replacement
+selection, but does not claim a new correction adapter was implemented.
+Daily promotion/censoring flags are conservative day-wide labels available only
+with the final report. A zero vector is a complete observation; a not-yet-available
+report is `None`.
+
+Invalid or unsupported fixtures raise `ValueError` (including Pydantic validation
+errors), and yield no certified partial result. No database session, network, LLM,
+optimiser, random stream or input mutation is used. Upstream scenario generation
+must still use the approved separate seeded demand/timing/observation-error streams.
+This core accepts pre-generated attempts so policy comparisons can reuse identical
+attempts while producing independent physical outcomes.
+
+### Independent worked fixture and reproduction
+
+`tests/fixtures/physical_day_v1.json` is **synthetic development evidence**, dated
+16 February 2026, 10:00–22:00 SGT, using the 40% lunch / 60% dinner profile.
+It does not freeze the full historical calendar or seven-day simulation schedule.
+
+Opening chicken is 0.450 kg. An ordinary chicken-rice sale consumes 0.150 kg;
+one promotional pair consumes another 0.300 kg. Two later chicken orders fail,
+including the order exactly at the 11:30 receipt boundary. The actual receipt
+adds 0.150 kg, which serves the 11:35 order. A fried-rice order consumes the one
+available egg; the next fails. Tofu has an explicit empty opening manifest, so
+its attempted order fails.
+
+Independent expected results: **9 attempted portions, 5 served, 4 unmet;
+4 fulfilled transactions, 4 paid + 1 free portion; SGD 19 revenue**.
+Chicken consumption is 0.600 kg. Rice starts at 2 kg, serves 0.500 kg of recipe
+usage and has a hidden 0.250 kg loss, leaving a 1.250 kg physical count. The loss
+is not labelled observed waste. Another 0.100 kg of vegetables is expired and
+unusable, physically retained. The external 0.300 kg commitment ends received
+0.150 / cancelled 0.150 / outstanding zero. A separate 6-of-10 opening receipt
+test proves those six units are not admitted again.
+
+From `services/api`, using the existing environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_physical_simulator.py
+```
+
+A minimal library call, also from `services/api`:
+
+```python
+import json
+from pathlib import Path
+from src.history_dataset import Catalogue
+from src.physical_simulator import PhysicalDay, simulate_day
+
+fixtures = Path("tests/fixtures")
+raw = json.loads((fixtures / "seasonal_baseline_v3.json").read_text())
+catalogue = Catalogue.model_validate(
+    {k: raw[k] for k in ("menu_items", "ingredients", "recipes")}
+)
+inputs = PhysicalDay.model_validate_json(
+    (fixtures / "physical_day_v1.json").read_text()
+)
+result = simulate_day(inputs, catalogue)
+print(sum(o.served for o in result.outcomes))  # 5
+print(sum(o.unmet for o in result.outcomes))   # 4
+```
+
+Fresh pre-merge verification on 20 September: **628 numerical tests passed**
+(25.86 seconds), including **76 physical simulator cases** and 552 existing
+forecasting, recipe, bucket, projector, synthetic-history/service-profile,
+procurement/Pass 3E, promotion, materiality and policy regressions. Two existing
+dependency warnings remain. Whole-API Ruff and Pyright passed on Windows and
+Linux; formatting of both new Python files and diff checks passed. The review
+first reproduced, then corrected, the colon-joined receipt-retry identity bug.
+The documented library example remains served 5, unmet 4, revenue 19.00.
+
+Full Backend gate (`uv sync --locked`, `uv run --no-sync pytest -q`) used an
+isolated source snapshot, Linux Python 3.12.12 and disposable PostgreSQL 18:
+**701 passed, 1 failed, 2 warnings in 254.19 seconds**. The failure is
+`tests/test_inventory_adjustment_contract.py::test_safe_inventory_correction_can_certify_keep_current_plan`,
+line 64: expected string `"0.5"`, actual `"0.500"`. The same unmodified test
+failed on unchanged main `550d39b` in the same environment (3.78 seconds).
+These values are numerically equal, but the failure prevents that test from
+exercising its subsequent KEEP assertions. No Backend code or test was changed;
+Chun Yang owns the serialization/test-contract follow-up. The earlier three
+snapshot-history tests passed. This new failure is not an earlier waived failure;
+merge remains pending. It is not evidence of a simulator regression.
+
+Exact numerical command, from `services/api`:
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_physical_simulator.py tests/test_forecasting.py tests/test_requirements.py tests/test_service_buckets.py tests/test_inventory_projection.py tests/test_synthetic_history.py tests/test_procurement.py tests/test_pass3e_numerical.py tests/test_promotion_forecasting.py tests/test_materiality.py tests/test_sales_policy.py
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m pyright
+.\.venv\Scripts\python.exe -m ruff format --check src/physical_simulator.py tests/test_physical_simulator.py
+```
+No browser, Bedrock or end-to-end Agent suite was run. Only new offline code
+and documentation changed; shared runtime behaviour is untouched. The existing
+project PostgreSQL database remained stopped and unmodified. Test databases were
+created only inside the disposable isolated PostgreSQL instance. No deployment
+or issue edit is part of this change.
+
+No generated histories, evaluator output folders or credentials are added.
+Existing history artifacts are unchanged. Full data dates, supplier enrichment,
+multi-day replenishment, comparison-policy driving/manager response delays,
+measurement-error generation, final costing/terminal policy and the 40-scenario
+benchmark remain outside this slice. Do not use its revenue as an operating-cost
+score, claim forecast accuracy, or treat fixture success as live integration.
+
 ## Frozen sales-materiality policy — 18 September 2026
 
 **Approved numerical semantics, implemented on `feat/ml-sales-policy`.**
