@@ -178,6 +178,50 @@ def project_inventory(
     evidence: Mapping[str, SourceEvidence],
     fixture_fefo: FixtureFEFO,
 ) -> InventoryProjection:
+    """Project one day; preserve the original strict one-day input contract."""
+    return _project_inventory(
+        opening_lots,
+        buckets,
+        menu_items,
+        ingredients,
+        recipes,
+        supplies,
+        as_of=as_of,
+        target_date=target_date,
+        horizon_end=horizon_end,
+        known_at=known_at,
+        captured_revision=captured_revision,
+        opening_manifest=opening_manifest,
+        supply_manifest=supply_manifest,
+        recipe_manifest=recipe_manifest,
+        service_profile=service_profile,
+        evidence=evidence,
+        fixture_fefo=fixture_fefo,
+    )
+
+
+def _project_inventory(
+    opening_lots: Sequence[EstimatedInventoryLot],
+    buckets: Sequence[ProjectedDemandBucket],
+    menu_items: Sequence[MenuItem],
+    ingredients: Sequence[Ingredient],
+    recipes: Sequence[RecipeItem],
+    supplies: Sequence[ExpectedSupply],
+    *,
+    as_of: datetime,
+    target_date: date,
+    horizon_end: datetime,
+    known_at: datetime,
+    captured_revision: str,
+    opening_manifest: Mapping[str, Sequence[str]],
+    supply_manifest: Sequence[str],
+    recipe_manifest: Sequence[tuple[str, str]],
+    service_profile: Sequence[ServicePeriod],
+    evidence: Mapping[str, SourceEvidence],
+    fixture_fefo: FixtureFEFO,
+    _profiles: Mapping[date, Sequence[ServicePeriod]] | None = None,
+    _ingredient_ids: frozenset[str] | None = None,
+) -> InventoryProjection:
     """Project one service day from explicit frozen fixture inputs.
 
     Structural contradictions raise ValueError. Missing evidence/coverage or
@@ -198,9 +242,14 @@ def project_inventory(
         raise ValueError("One supported target date required")
     day_start = datetime.combine(target_date, time.min, SINGAPORE)
     day_end = day_start + timedelta(days=1)
-    if not as_of < horizon_end or not day_start < horizon_end <= day_end:
+    if not as_of < horizon_end or (
+        _profiles is None and not day_start < horizon_end <= day_end
+    ):
         raise ValueError("Horizon must end within the one target service day")
-    if as_of.date() not in (target_date, target_date - timedelta(days=1)):
+    if _profiles is None and as_of.date() not in (
+        target_date,
+        target_date - timedelta(days=1),
+    ):
         raise ValueError("Opening must be on the service day or preceding setup day")
 
     findings: set[Finding] = set()
@@ -228,22 +277,39 @@ def project_inventory(
         check_evidence(name, evidence.get(name))
 
     # Reuse the allocator's public profile validation and expected interval set.
-    expected = allocate_service_buckets(
-        {d.id: ZERO for d in menu_items},
-        menu_items,
-        target_date=target_date,
-        profile=service_profile,
+    profiles = {target_date: service_profile} if _profiles is None else _profiles
+    expected = tuple(
+        b
+        for day, profile in sorted(profiles.items())
+        for b in allocate_service_buckets(
+            {d.id: ZERO for d in menu_items},
+            menu_items,
+            target_date=day,
+            profile=profile,
+        )
     )
     # A frozen full-day profile also defines a residual projection. Actual
     # activity belongs in the opening estimate, never in future consumption.
-    intervals = {(b.start, b.end) for b in expected if b.start >= as_of}
+    intervals = {
+        (b.start, b.end)
+        for b in expected
+        if b.start >= as_of and (_profiles is None or b.end <= horizon_end)
+    }
     if any(b.start < as_of < b.end for b in expected):
         findings.add(Finding("UNSUPPORTED_OPENING_CUTOFF", "opening"))
+    if _profiles is not None and any(b.start < horizon_end < b.end for b in expected):
+        findings.add(Finding("UNSUPPORTED_END_CUTOFF", "horizon"))
     ordered = sorted(buckets, key=lambda b: _aware(b.start))
     actual = []
     for b in ordered:
         start, end = _aware(b.start), _aware(b.end)
-        if b.provenance != "PROJECTED" or not day_start <= start < end <= horizon_end:
+        if (
+            b.provenance != "PROJECTED"
+            or not (day_start if _profiles is None else as_of)
+            <= start
+            < end
+            <= horizon_end
+        ):
             raise ValueError("Expected projected service intervals within the horizon")
         if actual and start < actual[-1][1]:
             raise ValueError("Overlapping or duplicate demand buckets")
@@ -258,6 +324,10 @@ def project_inventory(
         {d.id: ZERO for d in menu_items}, menu_items, ingredients, recipes
     )
     units = {i.id: i.unit for i in ingredients}
+    if _ingredient_ids is not None:
+        if not _ingredient_ids or _ingredient_ids - set(units):
+            raise ValueError("Invalid internal ingredient projection scope")
+        units = {i: u for i, u in units.items() if i in _ingredient_ids}
     for identifier in [*units, *(d.id for d in menu_items)]:
         _id(identifier)
     pairs = [(r.menu_item_id, r.ingredient_id) for r in recipes]
@@ -266,7 +336,13 @@ def project_inventory(
     if set(pairs) != set(recipe_manifest):
         findings.add(Finding("RECIPE_MANIFEST_MISMATCH", "recipe"))
     requirements = [
-        calculate_requirements(b.expected_portions, menu_items, ingredients, recipes)
+        {
+            i: q
+            for i, q in calculate_requirements(
+                b.expected_portions, menu_items, ingredients, recipes
+            ).items()
+            if i in units
+        }
         for b in ordered
     ]
 
@@ -412,8 +488,13 @@ def project_inventory(
                 raise ValueError(
                     "Cancelled receipt remainder cannot remain outstanding"
                 )
-            check_evidence("expiry:" + d.id, supply.expiry_evidence)
             arrival = _aware(d.expected_at)
+            # A verified multi-day prefix can precede unresolved future supply.
+            # Still reconcile its quantities and existing receipts above.
+            if _profiles is not None and arrival > horizon_end:
+                deliveries.append((d, supply))
+                continue
+            check_evidence("expiry:" + d.id, supply.expiry_evidence)
             if arrival <= as_of:
                 findings.add(Finding("OVERDUE_EXPECTED_SUPPLY", d.id))
             if any(start < arrival < end for start, end in actual):
@@ -428,7 +509,9 @@ def project_inventory(
     identities = {"opening:" + lot.id: lot.id for lot in lots}
     if fixture_fefo == FEFO_POLICY:
         for d, supply in deliveries:
-            if d.outstanding_quantity:
+            if d.outstanding_quantity and (
+                _profiles is None or d.expected_at <= horizon_end
+            ):
                 if not supply.projected_lot_id or not supply.projected_lot_id.strip():
                     findings.add(Finding("MISSING_PROJECTED_LOT_ID", d.id))
                 else:
@@ -476,7 +559,11 @@ def project_inventory(
         )
         balances[key] = opening[key] = lot.quantity
     for d, supply in deliveries:
-        if d.outstanding_quantity and supply.expiry_date is not None:
+        if (
+            d.outstanding_quantity
+            and supply.expiry_date is not None
+            and (_profiles is None or d.expected_at <= horizon_end)
+        ):
             key = "supply:" + d.id
             metadata[key] = (
                 d.ingredient_id,

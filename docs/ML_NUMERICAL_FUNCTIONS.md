@@ -1,5 +1,173 @@
 # ReStock numerical functions and development datasets
 
+## Ingredient-specific multi-day coverage and projection — 20 September 2026
+
+Approved basis: v2 §§6.1, 7, 8.1 and T05/T11/T17, with v3 §§3, 5–8 overrides.
+Base: `32a01213da64009c603eae8d7061980bcdb71fdc` (merged PR #34).
+These are pure internal numerical functions, not Backend transport or an Agent tool.
+The original `project_inventory` public signature and strict one-day behaviour stay
+unchanged. Its private validation/depletion kernel now also accepts a verified
+multi-day profile set and one-ingredient arithmetic scope. All canonical recipes
+are retained; no parallel catalogue or observed-history replayer is introduced.
+
+### Callable boundary
+
+`src.coverage.calculate_coverage(...) -> CoverageResult` accepts canonical
+`Ingredient`, `Supplier`, `SupplierOffer`, the complete approved-offer manifest,
+explicit `Occasion` dispositions and `OpportunityDomain` records. Required keyword
+inputs are `issue_time`, `known_at`, `captured_revision`, Singapore `decision_time`,
+source and offer evidence, `occasion_policy`, `expiry_policy`, `max_horizon_days`.
+Evidence categories: catalogue, schedule, policy and domain; each disposition,
+offer, domain and expected expiry also carries a resolved reference/availability/
+captured revision. `None` opportunity rows mean missing; `()` declares an empty
+complete domain. Missing evidence is different from a complete domain containing
+no feasible receipt. Neither is an automatically approved purchasing outcome.
+
+The result identifies each ingredient's protected `[start,end)` window, current
+and next anchored occasion and supporting opportunity, plus the maximum known
+`forecast_end`, findings, exclusion reasons and source refs. If any ingredient is
+unresolved, that maximum is only a known lower bound, not a certified union horizon.
+An over-cap endpoint stays visible with `UNSUPPORTED_HORIZON`; it is not truncated.
+
+`src.multiday_projection.project_multiday(...) -> MultiDayProjection` accepts that
+coverage result, dated existing `ForecastVersion` values, canonical menu/ingredient/
+recipe models, `EstimatedInventoryLot` opening estimates and fixed `ExpectedSupply`.
+Explicit keywords supply opening/supply/recipe manifests, snapshot/opening/supply/
+catalogue/recipe/constraint evidence, safety and storage maps, every ingredient's
+`assessment_end`, `constraint_policy`, and `fefo_policy`. Forecast versions must
+bind the same catalogue/recipe evidence and capture revision, their original issue
+clock, complete source refs, known promotion basis and dated service profiles.
+Availability is checked against both forecast and caller knowledge cutoffs. Elapsed
+actual portions are not consumed again; estimated opening already includes them.
+
+Outputs contain per-ingredient protected/assessment endpoints, `verified_until`,
+projected bucket and lot ledgers, first shortages, expiry rows, timed breaches and
+`DatedBalance` movements (opening/allocated/expired/admitted/closing at each event).
+All base-unit quantities are exact Decimals; movement accumulation uses exact
+rationals. Breach `quantity` means unmet demand for SHORTAGE, remaining balance for
+SAFETY, and total balance for STORAGE; `limit` is the supplied constraint. No money,
+packs, candidate, approval or Agent outcome is returned.
+
+`complete=True` means the declared conditional calculation completed, including
+any demonstrated breaches. `complete=False` must not become safe/zero/no-risk.
+Verified prefixes and independently complete ingredients remain available with
+findings: a missing later forecast or unresolved future receipt cannot erase an
+earlier established shortage. Common untrusted opening/supply provenance prevents
+stock certification. Missing safety/storage policy does not erase separately proven
+stock shortages, but those unknown constraints are not certified. Malformed values,
+unknown IDs, contradictions and duplicates raise validation errors.
+
+### Ordering and timing scope
+
+- Anchors are exactly `starting_date + k * interval_days`. No weekday inheritance.
+- The contracts inspected on main and issue #16 do **not** freeze a general intraday
+  OPEN selection rule. `FIXTURE_OPEN_AT_DECISION_PROTECT_NEXT_V1` is an explicitly
+  supplied fixture choice, not a production default: before today's decision its
+  OPEN occasion is next; exactly at OPEN the current action protects through the
+  following occasion. A prior ORDERED/SKIPPED record consumes that occasion without
+  shifting its anchor or creating stock. A past still-OPEN occasion is incomplete.
+  Before the first anchor, that anchor is next. Already disposed future occasions
+  are reported unsupported; no implicit renewal/calendar walk is invented.
+- Select the earliest feasible receipt in the explicit next-occasion domain, with
+  offer ID/opportunity ID as deterministic evidence ties. Cutoff equality and
+  minimum-lead equality are allowed. Require approved identities, AVAILABLE status,
+  an orderable MOQ/pack within NEW capacity, a listed arrival and supported expiry.
+  This establishes a replenishment boundary, not that its capacity covers a future
+  purchase. Reliability is context-only. No opportunity quantity is added as stock.
+- FEFO remains `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`; offer-derived expiry remains
+  `EXPIRY_ARRIVAL_PLUS_SHELF_LIFE_MINUS_ONE_V1`. Expiry occurs at the following SGT
+  midnight. Consumption ending there precedes expiry and simultaneous receipts.
+- `SERVICE_END_SAFETY_RECEIPT_STORAGE_V1` explicitly checks protected service-end
+  safety and initial/post-event storage. Arrival at bucket start can serve it;
+  arrival at end cannot. Mid-bucket arrivals/cutoffs are unsupported, with verified
+  earlier risk retained. No midnight stocktake/reset is invented.
+- A later fixed commitment remains fixed. Caller-supplied assessment extensions
+  consume their dated forecast and label later risks ASSESSMENT, not protected
+  purchase demand. A commitment beyond the supplied assessment returns its ID/time
+  in `DELAYED_COMMITMENT_BEYOND_ASSESSMENT`; callers must extend forecasts and the
+  assessment to cover the consequences of interest. No implicit continuation or
+  expiry-length policy is imposed. Existing receipts/cancellations reconcile once.
+
+### Independent complete and incomplete examples
+
+`tests/fixtures/multiday_coverage_v1.json` uses the current five dishes/eight
+ingredients/recipes with fixture offers, 22:00 SGT decisions, receipt next day
+10:00, one 11:00–11:30 service bucket and 30-day offer shelf life. Issue time is
+15 February 2026 22:00 SGT. Each service has 10 chicken-rice + 10 fried-rice;
+other dishes explicitly zero. The maximum supported interval is an explicitly
+supplied **21 days for this fixture only**, not approved production policy.
+
+| Ingredient | Next anchored order | Protection end (SGT) | Protected services | Requirement / supplied opening |
+|---|---|---|---:|---:|
+| chicken | 16 Feb 22:00 | 17 Feb 10:00 | 1 | 1.500 kg |
+| vegetables | 16 Feb 22:00 | 17 Feb 10:00 | 1 | 0.500 kg |
+| rice | 1 Mar 22:00 | 2 Mar 10:00 | 14 | 28.000 kg |
+| oil | 22 Feb 22:00 | 23 Feb 10:00 | 7 | 0.700 litres |
+| soy-sauce | 22 Feb 22:00 | 23 Feb 10:00 | 7 | 0.700 litres |
+| eggs | 18 Feb 22:00 | 19 Feb 10:00 | 3 | 30 pieces |
+| noodles | 18 Feb 22:00 | 19 Feb 10:00 | 3 | 0 kg |
+| tofu | 17 Feb 22:00 | 18 Feb 10:00 | 2 | 0 kg |
+
+Rice arithmetic: `(10 * .100 + 10 * .100) * 14 = 28 kg`; chicken
+`10 * .150 = 1.5 kg`. Combined required forecast end is **2 March 10:00 SGT**.
+All openings are usable through their protected services, safety is explicit zero,
+storage is 100 base units per ingredient, and commitments are explicitly empty.
+The complete fixture closes at zero without breaches; daily chicken is not falsely
+reported short for the other thirteen rice service days.
+
+Partial receipt variation: a fixed 10 kg rice delivery has 6 kg already received
+and present once in opening, 4 kg outstanding arriving 20 Feb 22:00. Across the
+14 services: `6 + 4 = 10 allocated + 0 expired + 0 closing`; required 28, unmet 18.
+First shortage remains **19 Feb 11:00–11:30 SGT, 2 kg**, despite the later arrival.
+
+Incomplete example: zero opening rice and missing 17 Feb forecast produces
+`complete=False / MISSING_FORECAST_DAY`, while retaining **16 Feb 11:00–11:30,
+2 kg unmet** from the verified prefix. An unknown OPEN convention returns
+`UNRESOLVED_OCCASION_POLICY` with no fabricated protected window. No case produces
+an actionable candidate or proves safety outside its verified coverage.
+
+### Reproduction and acceptance map
+
+From `services/api`, using the prepared environment (or `uv run`):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_multiday_coverage.py
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m pyright
+.\.venv\Scripts\python.exe -m ruff format --check src/coverage.py src/multiday_projection.py src/inventory_projection.py tests/test_multiday_coverage.py
+```
+
+The test fixture builder supplies all frozen inputs; outputs derive from functions,
+not expected-value JSON. No generated dataset or database loading command is needed.
+Acceptance groups from the task are covered as follows:
+
+| Groups | Independent tests |
+|---|---|
+| 1 | Exact one-day ledger parity plus unchanged one-day regression suite |
+| 2–3, 14–15 | Hand-derived daily/weekly/fortnightly table, >7 days, zero admitted supply |
+| 4–6 | Cutoff/lead equality and rejection, infeasible first slot, empty vs missing domain |
+| 7–8 | Missing day/profile/bucket/dish/ingredient, retained earlier shortage, visible over-cap endpoint |
+| 9–12 | FEFO ID tie, SGT midnight, midnight-ending bucket, 6/10 partial receipt, cancellation, delayed assessment |
+| 13 | Post-receipt storage, service-end safety and exact dated movement balances |
+| 16–18 | Equivalent input order, immutability, low-context fractional arithmetic, source/clock/revision failures, conservation |
+
+Verification results are recorded in the current ML_HANDOVER entry. This is
+synthetic numerical validation, not real forecast accuracy or live acceptance.
+
+### Remaining ownership and decisions
+
+Aniq: multi-day purchase search/independent candidate validation, adaptive scenario
+policy driver, agreed full economics and evaluation remain separate tasks. OPEN-02
+terminal value, waste priority, continuation and target metrics are unchanged.
+Chun Yang: authoritative per-date cycle dispositions, frozen complete opportunities,
+forecasts, source revisions, opening coverage and reconciled commitments; confirm
+production occasion policy and horizon/assessment policy before live use. Rudy:
+consume protected windows separately from assessment extensions, preserve timed
+known risks alongside incomplete findings, and never publish/KEEP from an incomplete
+multi-day calculation. Multi-day persistence/adapters and live integrated acceptance
+remain unimplemented by this change. Existing issue #16 coordination remains.
+
+
 ## Continuous seven-day physical simulator — 20 September 2026
 
 `src.physical_scenario.simulate_scenario(PhysicalScenario, Catalogue)` runs one
