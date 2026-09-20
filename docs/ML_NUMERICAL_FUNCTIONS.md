@@ -160,8 +160,11 @@ failed on unchanged main `550d39b` in the same environment (3.78 seconds).
 These values are numerically equal, but the failure prevents that test from
 exercising its subsequent KEEP assertions. No Backend code or test was changed;
 Chun Yang owns the serialization/test-contract follow-up. The earlier three
-snapshot-history tests passed. This new failure is not an earlier waived failure;
-merge remains pending. It is not evidence of a simulator regression.
+snapshot-history tests passed. Aniq subsequently accepted this specific failure
+on 20 September: "Merge with this specific failure recorded." This authorizes
+normal [PR #33](https://github.com/rudybrrr/restock-ai/pull/33) merge; it does not
+reclassify the failure as a pass or waive other failures. The test/serialization
+follow-up remains Chun Yang-owned. No simulator regression was found.
 
 Exact numerical command, from `services/api`:
 ```powershell

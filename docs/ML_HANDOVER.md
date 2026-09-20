@@ -2,11 +2,12 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
-**Version:** 1.12, 20 September 2026<br>
+**Version:** 1.13, 20 September 2026<br>
 **Status:** The one-day physical simulator is implemented on
 [feat/ml-physical-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-physical-simulator),
-based on main `550d39b`. See its PR for publication/merge status; the full
-pre-merge check identified one unchanged-main Backend test failure.
+based on main `550d39b`. See [PR #33](https://github.com/rudybrrr/restock-ai/pull/33)
+for merge status. Aniq explicitly accepted its one unchanged-main Backend test
+failure after the complete pre-merge check; no general test waiver applies.
 Sales policy and materiality are already merged. Main's PR #31/#32 now provide
 Backend sales/correction persistence and transport; older missing-contract notes
 below are historical. Rudy's final Agent route and live acceptance remain separate.
@@ -37,7 +38,9 @@ and diff checks passed. The full locked Linux Python 3.12/PostgreSQL 18 suite:
 but receives `"0.500"` at `tests/test_inventory_adjustment_contract.py:64`.
 It also fails on unchanged main `550d39b` in the same environment (3.78 seconds).
 The old three snapshot-history failures now pass. No test assertion was weakened.
-The new failure is not covered by the earlier waiver; merge remains pending.
+Aniq explicitly accepted this specific unchanged-main failure on 20 September:
+"Merge with this specific failure recorded." Normal PR #33 merge is authorized;
+the failure remains Backend follow-up, not a pass or a blanket test exception.
 
 Review reproduced and fixed a simulator receipt-retry identity collision: use
 the `(delivery_id, request_id)` pair, not colon-joined text. Independent regression
@@ -656,6 +659,7 @@ Keep one shared document. For each subsequent revision, record date, affected in
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.13 | 20 September 2026 | Recorded Aniq's explicit acceptance of the one unchanged-main decimal-string test failure for normal PR #33 merge; failed-test evidence and Backend follow-up retained. |
 | 1.12 | 20 September 2026 | Added one-day physical execution, independent fixture/oracles and observation-only access; corrected receipt retry identity; recorded 628 numerical passes and full gate 701/1 with unchanged-main reproduction. Merge and live integration remain separate. |
 | 1.10 | 18 September 2026 | Recorded Aniq's explicit waiver of the three snapshot-replay failures reproduced on unchanged main, authorizing normal PR #29 merge. Preserved failed-test evidence, Backend follow-up and integration limits; no application or test changes. |
 | 1.11 | 18 September 2026 | Aniq approved SALES_MATERIALITY_V1 after reviewing exposure delays. Added immutable definition/resolver, assessment enforcement, contract tests and explicit Backend/Agent evidence dependencies. |
