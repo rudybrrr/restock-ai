@@ -2,6 +2,70 @@
 
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
+**Version:** 1.16, 20 September 2026<br>
+**Status:** Ingredient-specific multi-day coverage and projected inventory are
+implemented on [feat/ml-multiday-coverage](https://github.com/rudybrrr/restock-ai/tree/feat/ml-multiday-coverage),
+based on main `32a01213da64009c603eae8d7061980bcdb71fdc` (PR #34).
+The feature branch contains the reviewable implementation; its pull request records merge status.
+
+### Multi-day numerical increment
+
+`src.coverage.calculate_coverage` calculates protected ingredient windows from
+explicit anchored dispositions and feasible routine opportunities.
+`src.multiday_projection.project_multiday` consumes existing ForecastVersion,
+canonical recipes, estimated opening and fixed commitments through the reused
+forward-depletion kernel. It returns per-ingredient coverage, dated balances,
+unmet demand/first shortages, expiry, safety/storage breaches and completeness.
+The public one-day projector remains compatible. No Backend, Agent or UI contract
+is changed; no new orders, multi-day purchase optimiser or final economic score.
+
+Worked fixture: issue 15 Feb 2026 22:00 SGT; chicken protects to 17 Feb 10:00
+(1.500 kg), oil to 23 Feb 10:00 (.700 litres), rice to 2 Mar 10:00 (28.000 kg).
+The union forecast end does not extend the shorter ingredients' demand windows.
+Uncommitted future opportunities add zero inventory. A partial 10 kg rice receipt
+with 6 already in opening and 4 arriving 20 Feb 22:00 allocates only 10 of 28 kg;
+18 kg unmet, first shortage 19 Feb 11:00–11:30. Later supply does not erase it.
+A missing later forecast retains an earlier verified shortage plus incomplete
+findings. Neither complete-with-shortage nor incomplete means an approvable plan.
+
+Inputs, commands, 18-group acceptance map, fixture assumptions and examples are in
+[ML_NUMERICAL_FUNCTIONS.md](ML_NUMERICAL_FUNCTIONS.md). Production OPEN-at-decision
+semantics are not established by the inspected contracts: the supported convention
+and 21-day cap are explicit fixture inputs only. No terminal/continuation/economic
+policy is approved by this increment.
+
+Chun Yang must supply authoritative frozen schedules/domains/forecasts/opening/
+commitments and confirm production boundary/assessment policy. Rudy must preserve
+per-ingredient scope, source evidence and known risk alongside incomplete results.
+Continue shared confirmations in [issue #16](https://github.com/rudybrrr/restock-ai/issues/16).
+Next ML work: separately scoped multi-day procurement feasibility/search; full
+costing, adaptive driving and evaluation remain separate.
+
+Verification on 20 September: **749 numerical tests passed**, including 67 new
+coverage/projection cases and both physical simulators. Locked Linux Python 3.12 /
+disposable PostgreSQL 18 full suite: **822 passed, 1 failed**, 248.20 seconds, two
+dependency warnings. The exact sole failure reproduces on unchanged main `32a0121`
+in the same environment (4.72 seconds). Whole-API Ruff/Pyright and changed-Python
+format checks pass on Windows/Linux; diff checks pass. No Actions workflows or
+required status checks are configured; normal PR protection still applies.
+
+After the full run, the test-only supplier ID was aligned from the synthetic
+`fresh-market` to canonical `fresh`. All 67 focused cases and static checks were
+rerun; application source/configuration stayed byte-identical to the full-suite
+snapshot. No Backend assertion was changed. No browser, Bedrock or live workflow
+acceptance is claimed; shared PostgreSQL/API/frontend remain stopped.
+
+The user's **task-specific exception is applied** for ONLY the unchanged-main
+inventory-adjustment string assertion (expected "0.5", actual "0.500"). No other
+failure or setup error remains. This does not waive required checks or reviews.
+Chun Yang owns the correction; the assertion remains unchanged and prevents
+subsequent KEEP assertions from executing.
+
+Revision 1.16 adds coverage/projection and its bounded handoff; prior implementation
+commits and checks below remain historical.
+
+### Historical seven-day checkpoint (v1.15)
+
 **Version:** 1.15, 20 September 2026<br>
 **Status:** Continuous seven-day physical execution is implemented on
 [feat/ml-seven-day-simulator](https://github.com/rudybrrr/restock-ai/tree/feat/ml-seven-day-simulator),
