@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from typing import overload
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,21 @@ from src.operations_schemas import (
     InventoryAdjustmentLine,
 )
 from src.reconciliation import reconcile_sales
+
+
+@overload
+def _canonical_quantity(value: Decimal) -> Decimal: ...
+
+
+@overload
+def _canonical_quantity(value: None) -> None: ...
+
+
+def _canonical_quantity(value: Decimal | None) -> Decimal | None:
+    """Serialize correction quantities without database scale noise."""
+    if value is None:
+        return None
+    return Decimal(format(value.normalize(), "f"))
 
 
 def lock_inventory(session: Session) -> None:
@@ -207,9 +223,11 @@ def record_daily_revision(
                     lot_id=lot_id,
                     ingredient_id=lot["ingredient_id"],
                     unit=lot["unit"],
-                    previous_quantity=previous,
-                    corrected_quantity=corrected,
-                    delta=corrected - previous if previous is not None else None,
+                    previous_quantity=_canonical_quantity(previous),
+                    corrected_quantity=_canonical_quantity(corrected),
+                    delta=_canonical_quantity(corrected - previous)
+                    if previous is not None
+                    else None,
                 )
             )
         if adjustments:

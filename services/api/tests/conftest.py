@@ -1,7 +1,11 @@
 import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Iterator
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -10,6 +14,38 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 from pydantic import SecretStr
 from sqlalchemy.engine import make_url
+
+
+@pytest.fixture
+def tmp_path(request: pytest.FixtureRequest) -> Iterator[Path]:
+    """Use an explicit writable test temp directory with the managed runner."""
+    root = Path(os.environ.get("RESTOCK_TEST_TMP", ".pytest-local-tmp"))
+    root.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", request.node.name)
+    path = root / f"{safe_name}-{uuid4().hex}"
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def writable_python_temp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid mode-700 temp directories rejected by the managed Windows runner."""
+
+    def managed_mkdtemp(
+        suffix: str | None = None,
+        prefix: str | None = None,
+        dir: str | os.PathLike[str] | None = None,
+    ) -> str:
+        root = Path(dir or tempfile.gettempdir())
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / f"{prefix or 'tmp'}{uuid4().hex}{suffix or ''}"
+        path.mkdir()
+        return os.fspath(path)
+
+    monkeypatch.setattr(tempfile, "mkdtemp", managed_mkdtemp)
 
 
 @pytest.fixture

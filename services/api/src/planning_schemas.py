@@ -3,6 +3,8 @@ from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from src.agent_contracts import AgentOutcome, EscalationReason, PlanStatus
+
 
 class AssessmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -19,12 +21,7 @@ class PlanningRun(BaseModel):
     as_of: AwareDatetime
     input_revision: int
     snapshot: dict
-    outcome: (
-        Literal[
-            "KEEP_CURRENT_PLAN", "REVISE_PLAN", "REQUEST_HUMAN_APPROVAL", "ESCALATE"
-        ]
-        | None
-    ) = None
+    outcome: AgentOutcome | None = None
     plan_version_id: str | None = None
     escalation_reason: str | None = None
     failure_reason: str | None = None
@@ -42,6 +39,9 @@ class OptimiseRequest(BaseModel):
 class PlanLine(BaseModel):
     ingredient_id: str
     supplier_id: str
+    offer_id: str | None = None
+    opportunity_id: str | None = None
+    shipment_group_id: str | None = None
     quantity: Annotated[Decimal, Field(gt=0)]
     unit_price: Annotated[Decimal, Field(ge=0)]
     arrival_at: AwareDatetime
@@ -69,20 +69,8 @@ class StoredPlanLine(PlanLine):
 
 class Completion(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    outcome: Literal[
-        "KEEP_CURRENT_PLAN", "REVISE_PLAN", "REQUEST_HUMAN_APPROVAL", "ESCALATE"
-    ]
-    escalation_reason: (
-        Literal[
-            "MISSING_REQUIRED_DATA",
-            "NO_FEASIBLE_SUPPLIER",
-            "UNRESOLVED_SHORTAGE",
-            "POLICY_VIOLATION",
-            "CALCULATION_INCOMPLETE",
-            "TOOL_FAILURE",
-        ]
-        | None
-    ) = None
+    outcome: AgentOutcome
+    escalation_reason: EscalationReason | None = None
     candidate: Candidate | None = None
 
 
@@ -90,9 +78,7 @@ class PurchasePlanVersion(Candidate):
     id: str
     plan_id: str
     version: int
-    status: Literal[
-        "PENDING_APPROVAL", "APPROVED", "REJECTED", "INVALIDATED", "SUPERSEDED"
-    ]
+    status: PlanStatus
     run_id: str
     created_at: AwareDatetime
 

@@ -97,6 +97,25 @@ def incomplete_result(context: dict) -> dict:
     }
 
 
+def complete_safe_result(context: dict) -> dict:
+    result = incomplete_result(context)
+    result.update(
+        {
+            "material_change": True,
+            "complete": True,
+            "feasible_under_observed_state": True,
+            "inventory_feasible": True,
+            "assessed_scope": ["SALES_DEVIATION", "PHYSICAL_SHORTAGE", "SAFETY_STOCK"],
+            "findings": [],
+            "material_findings": [
+                {"code": "SALES_THRESHOLD_REACHED", "source": "chicken-rice"}
+            ],
+            "required_follow_up": [],
+        }
+    )
+    return result
+
+
 def test_agent_round_trip_persists_exact_policy_request_result_and_gate(
     client: TestClient,
 ) -> None:
@@ -215,3 +234,31 @@ def test_manager_cannot_write_agent_materiality_contract(client: TestClient) -> 
         json=request_body(context),
     )
     assert response.status_code == 403
+
+
+def test_material_sales_result_cannot_certify_keep_current_plan(
+    client: TestClient,
+) -> None:
+    run = claim_sales_run(client)
+    run_id = run["id"]
+    context = client.get(f"/api/v1/runs/{run_id}/sales-materiality-context").json()
+    body = request_body(context)
+    assessment = client.post(
+        f"/api/v1/runs/{run_id}/sales-materiality-requests", json=body
+    ).json()
+
+    saved = client.put(
+        f"/api/v1/runs/{run_id}/sales-materiality-requests/{body['request_id']}/result",
+        json={
+            "request_reference": assessment["request_reference"],
+            "result": complete_safe_result(context),
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    completed = client.post(
+        f"/api/v1/runs/{run_id}/complete",
+        json={"outcome": "KEEP_CURRENT_PLAN"},
+    )
+    assert completed.status_code == 409, completed.text
+    assert completed.json()["error"]["code"] == "UNCERTIFIED_OUTCOME"

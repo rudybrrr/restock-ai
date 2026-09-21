@@ -36,9 +36,28 @@ The development database was upgraded using the two existing additive migrations
 - PostgreSQL-backed `tests/test_procurement_contract.py`: seven tests passed, including manager/agent boundaries, missing versions, missing run contracts and exact frozen-run responses.
 - `tests/test_access.py`, `tests/test_sales.py`, and the isolated manager-evidence test: 17 tests passed together. Database tests used disposable, uniquely named test databases.
 - `tests/live-evidence-browser.cjs`: real manager login, policy/24-offer/24-opportunity read, historical inputs and estimated inventory passed against the local application. No operational records were created; only the test's login/logout session changed.
-- Ruff and Pyright passed for the changed backend modules/tests; browser screenshots were inspected. Mobile overflow checks cover sales, policy and forecast-history panels.
+- Ruff and Pyright passed for the changed backend modules/tests; screenshot-disabled browser assertions cover sales, policy and forecast-history panels. This hardening pass did not generate or inspect screenshots.
 
 An initial Windows listener check did not detect PostgreSQL, but a subsequent direct TCP/database check succeeded. This is no longer a verification blocker.
+
+## Next parallel pass: manager-safe run evidence and golden demo
+
+The manager-only `GET /api/v1/manager/runs/{run_id}/evidence` projection now
+whitelists persisted plan metadata/history, approval attempts including
+`PLAN_VERSION_STALE`, trigger/audit timeline entries, Coordinator specialist and
+tool routing, validation summaries, final decision/reason, and explicit evidence
+gaps. It does not return run snapshots, prompts, scratchpads, raw audit payloads,
+or private frozen state. Evaluation is currently reported as
+`EVALUATION_NOT_PERSISTED` because local result files are not authoritative
+run-linked records.
+
+Activity renders the full projection through the existing assessment evidence
+surface. Overview and Recommendations render compact summaries. The local demo
+wrapper selects supplier replanning, promotion routing, delivery disruption,
+sales-materiality fail-closed routing, and stale-version approval scenarios from the canonical
+evaluation suite. Preparation is evaluator-truth-free; execution resets and
+reseeds only a dedicated `restock_demo_...` database before each real Static,
+Rule, and local Adaptive run.
 
 ## Still deliberately unavailable
 

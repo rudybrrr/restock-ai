@@ -1,6 +1,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
 const assert = require("node:assert/strict");
 const base = process.env.UI_TEST_URL || "http://localhost:3012";
+const screenshotsEnabled = process.env.ENABLE_SCREENSHOTS === "1";
 const at = (time) => `2026-02-16T${time}:00+08:00`;
 const policy = {
   id: "policy-1",
@@ -154,6 +155,183 @@ let reports = [
     replaces_id: "batch-1",
   },
 ];
+const managerEvidence = {
+  run_id: "run-1",
+  run_status: "SUCCEEDED",
+  trigger: "SUPPLIER_AVAILABILITY_CHANGED",
+  trigger_event_id: "event-1",
+  operational_cutoff: at("08:00"),
+  input_revision: 42,
+  claimed_at: at("08:01"),
+  completed_at: at("09:00"),
+  active_plan: {
+    id: "version-1",
+    plan_id: "plan-1",
+    version: 1,
+    status: "PENDING_APPROVAL",
+    calculation_mode: "ENGINE",
+    run_id: "run-1",
+    created_at: at("08:30"),
+    line_count: 1,
+    total_expected_cost: "100.00",
+  },
+  plan_history: [],
+  approval: {
+    required: true,
+    status: "PENDING_APPROVAL",
+    plan_id: "plan-1",
+    plan_version: 1,
+    latest_attempt: null,
+    stale_attempts: [
+      {
+        id: "approval-stale-1",
+        status: "STALE",
+        timestamp: at("08:45"),
+        actor: "manager",
+        summary: "Approval used an older plan version.",
+        reason_codes: ["PLAN_VERSION_STALE"],
+      },
+    ],
+  },
+  timeline: [
+    {
+      id: "event-1",
+      kind: "TRIGGER_EVENT",
+      timestamp: at("08:00"),
+      actor: "backend",
+      event_type: "SUPPLIER_AVAILABILITY_CHANGED",
+      state_revision: null,
+      invocation_mode: null,
+      plan_id: null,
+      plan_version: null,
+      specialist: null,
+      specialist_call_id: null,
+      call_sequence: null,
+      tool_call_id: null,
+      tool_name: null,
+      attempt_number: null,
+      tool_succeeded: null,
+      reason_codes: [],
+      evidence_refs: [],
+      summary: "Supplier availability changed.",
+    },
+    {
+      id: "audit-specialist",
+      kind: "SPECIALIST_CALLED",
+      timestamp: at("08:10"),
+      actor: "COORDINATOR",
+      event_type: "SUPPLIER_AVAILABILITY_CHANGED",
+      state_revision: "42",
+      invocation_mode: "EVENT",
+      plan_id: "plan-1",
+      plan_version: 1,
+      specialist: "PROCUREMENT",
+      specialist_call_id: "task-1",
+      call_sequence: 1,
+      tool_call_id: null,
+      tool_name: null,
+      attempt_number: null,
+      tool_succeeded: null,
+      reason_codes: [],
+      evidence_refs: [],
+      summary: "Called PROCUREMENT specialist.",
+    },
+    {
+      id: "audit-tool",
+      kind: "TOOL_RESULT_RECORDED",
+      timestamp: at("08:20"),
+      actor: "PROCUREMENT",
+      event_type: null,
+      state_revision: "42",
+      invocation_mode: null,
+      plan_id: "plan-1",
+      plan_version: 1,
+      specialist: "PROCUREMENT",
+      specialist_call_id: "task-1",
+      call_sequence: 1,
+      tool_call_id: "tool-1",
+      tool_name: "check_supplier_feasibility",
+      attempt_number: 1,
+      tool_succeeded: true,
+      reason_codes: [],
+      evidence_refs: [],
+      summary: "Supplier evidence returned.",
+    },
+    {
+      id: "audit-validation",
+      kind: "VALIDATION_COMPLETED",
+      timestamp: at("08:25"),
+      actor: "BACKEND",
+      event_type: null,
+      state_revision: "42",
+      invocation_mode: null,
+      plan_id: "plan-1",
+      plan_version: 1,
+      specialist: null,
+      specialist_call_id: null,
+      call_sequence: null,
+      tool_call_id: null,
+      tool_name: null,
+      attempt_number: null,
+      tool_succeeded: true,
+      reason_codes: [],
+      evidence_refs: [],
+      summary: "Candidate is feasible.",
+    },
+    {
+      id: "audit-complete",
+      kind: "RUN_COMPLETED",
+      timestamp: at("09:00"),
+      actor: "COORDINATOR",
+      event_type: null,
+      state_revision: "42",
+      invocation_mode: "EVENT",
+      plan_id: "plan-1",
+      plan_version: 1,
+      specialist: null,
+      specialist_call_id: null,
+      call_sequence: null,
+      tool_call_id: null,
+      tool_name: null,
+      attempt_number: null,
+      tool_succeeded: null,
+      reason_codes: [],
+      evidence_refs: [],
+      summary: "A validated plan is ready for manager approval.",
+    },
+  ],
+  routing: {
+    invocation_mode: "EVENT",
+    trigger_type: "SUPPLIER_AVAILABILITY_CHANGED",
+    specialists: ["PROCUREMENT"],
+    specialist_calls: 1,
+    tool_calls: ["check_supplier_feasibility"],
+    tool_call_count: 1,
+    retries: 0,
+  },
+  validation: [
+    {
+      id: "audit-validation",
+      timestamp: at("08:25"),
+      state_revision: "42",
+      succeeded: true,
+      evidence_refs: [],
+      summary: "Candidate is feasible.",
+    },
+  ],
+  decision: {
+    outcome: "REQUEST_HUMAN_APPROVAL",
+    reason_codes: [],
+    summary: "A validated plan is ready for manager approval.",
+  },
+  evaluation: null,
+  gaps: [
+    {
+      code: "EVALUATION_NOT_PERSISTED",
+      message: "Local evaluation results are not persisted with this run.",
+    },
+  ],
+};
 let savedResult = null;
 async function main() {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
@@ -161,6 +339,8 @@ async function main() {
     reducedMotion: "reduce",
     viewport: { width: 1440, height: 1000 },
   });
+  page.setDefaultTimeout(5000);
+  page.setDefaultNavigationTimeout(5000);
   const errors = [],
     paths = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -261,6 +441,28 @@ async function main() {
           snapshot: { known_at: at("08:00"), missing_offer_history: [] },
         },
       ];
+    if (path === "/plan-history")
+      body = [
+        {
+          id: "version-1",
+          plan_id: "plan-1",
+          version: 1,
+          status: "PENDING_APPROVAL",
+          calculation_mode: "ENGINE",
+          lines: [],
+          total_purchase_cost: "100.00",
+          delivery_cost: "0",
+          total_expected_cost: "100.00",
+          expected_waste_cost: "0",
+          expected_stockout_cost: "0",
+          emergency_penalty: "0",
+          forecast_id: "forecast-1",
+          inventory_snapshot_id: "inventory-1",
+          run_id: "run-1",
+          created_at: at("08:30"),
+        },
+      ];
+    if (path === "/manager/runs/run-1/evidence") body = managerEvidence;
     if (path === "/manager/runs/run-1/sales-materiality")
       body = {
         result_reference: null,
@@ -335,10 +537,12 @@ async function main() {
       await page.getByRole("cell", { name: "0.875 kg", exact: true }).count(),
       0,
     );
-    await page.screenshot({
-      path: "test-results/intraday-wide.png",
-      fullPage: true,
-    });
+    if (screenshotsEnabled) {
+      await page.screenshot({
+        path: "test-results/intraday-wide.png",
+        fullPage: true,
+      });
+    }
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       assert(
@@ -350,15 +554,20 @@ async function main() {
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/recommendations");
+    await page.getByText("Calculation references", { exact: true }).click();
+    await page.getByText("Assessment evidence", { exact: true }).waitFor();
+    await page.getByText(/1 stale attempt/).waitFor();
     await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page.getByText("S$100.00", { exact: true }).waitFor();
     await page.getByText("fresh · chicken · offer-1", { exact: true }).click();
     await page.getByText("4.50", { exact: true }).waitFor();
     await page.getByText(/opportunity-1 · NORMAL/).waitFor();
-    await page.screenshot({
-      path: "test-results/policy-wide.png",
-      fullPage: true,
-    });
+    if (screenshotsEnabled) {
+      await page.screenshot({
+        path: "test-results/policy-wide.png",
+        fullPage: true,
+      });
+    }
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       assert(
@@ -424,6 +633,12 @@ async function main() {
     await page.getByRole("tab", { name: "Assessments", exact: true }).click();
     await page.locator("details").first().locator("summary").first().click();
     await page.getByText("42", { exact: true }).waitFor();
+    await page.getByText(/Pending approval for version 1/).waitFor();
+    await page.getByText("procurement", { exact: true }).waitFor();
+    await page.getByText("check supplier feasibility", { exact: true }).waitFor();
+    await page.getByText("Candidate is feasible.", { exact: true }).first().waitFor();
+    await page.getByText("Evidence gaps (1)", { exact: true }).click();
+    await page.getByText("Local evaluation results are not persisted with this run.", { exact: true }).waitFor();
     await page.getByRole("link", { name: "View recommendation" }).click();
     await page
       .getByText("Requested version is unavailable", { exact: true })

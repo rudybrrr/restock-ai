@@ -1,0 +1,172 @@
+{
+  "configuration_version": "pass10-local-v1",
+  "scenario_count": 7,
+  "scenarios": [
+    {
+      "evidence_focus": [
+        "materiality",
+        "procurement routing",
+        "replacement plan"
+      ],
+      "family": "supplier_shortage",
+      "fixture_refs": [
+        "tests/fixtures/procurement_v1.json"
+      ],
+      "label": "supplier_replanning",
+      "observed_event_types": [
+        "SUPPLIER_AVAILABILITY_CHANGED"
+      ],
+      "policy_config_versions": {
+        "decision_engine": "first-slice-v1",
+        "procurement": "seed-policy-v1"
+      },
+      "runtime_boundary_fingerprint": "e2388147fc293766e92a149422bbafea675cff43d0b09147f8f4436407bf8ff3",
+      "scenario_id": "development-supplier-availability-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "promotion event",
+        "demand routing",
+        "plan revision"
+      ],
+      "family": "promotion",
+      "fixture_refs": [
+        "tests/fixtures/promotion_forecast_v1.json"
+      ],
+      "label": "promotion_route",
+      "observed_event_types": [
+        "PROMOTION_CREATED"
+      ],
+      "policy_config_versions": {
+        "forecast": "promotion-v1",
+        "procurement": "seed-policy-v1"
+      },
+      "runtime_boundary_fingerprint": "2b9e4edd85ccc709aeaea658178e970390cd42b1698429507f1f441878fcd996",
+      "scenario_id": "development-promotion-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "delivery event",
+        "inventory routing",
+        "replanning"
+      ],
+      "family": "delivery_delay",
+      "fixture_refs": [
+        "tests/fixtures/inventory_projection_v1.json"
+      ],
+      "label": "delivery_disruption",
+      "observed_event_types": [
+        "DELIVERY_DELAYED"
+      ],
+      "policy_config_versions": {
+        "inventory": "projection-v1",
+        "procurement": "seed-policy-v1"
+      },
+      "runtime_boundary_fingerprint": "f8301a255291068beabaa635c214f58a16bfe65bfa99747cd0eef582f7fa045d",
+      "scenario_id": "development-delivery-delay-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "INVENTORY_ADJUSTED",
+        "authoritative assessment",
+        "KEEP_CURRENT_PLAN"
+      ],
+      "family": "inventory_correction",
+      "fixture_refs": [
+        "tests/fixtures/inventory_projection_v1.json"
+      ],
+      "label": "inventory_correction_safe",
+      "observed_event_types": [
+        "INVENTORY_ADJUSTED"
+      ],
+      "policy_config_versions": {
+        "inventory": "projection-v1",
+        "procurement": "seed-policy-v1"
+      },
+      "runtime_boundary_fingerprint": "7c5ebe8753eb4ed9a67f6a1d887d590dae28888d33f17541d52257adfea218f9",
+      "scenario_id": "development-inventory-correction-safe-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "INVENTORY_ADJUSTED",
+        "Inventory to Procurement",
+        "REVISE_PLAN"
+      ],
+      "family": "inventory_correction",
+      "fixture_refs": [
+        "tests/fixtures/inventory_projection_v1.json",
+        "tests/fixtures/procurement_v1.json"
+      ],
+      "label": "inventory_correction_material",
+      "observed_event_types": [
+        "INVENTORY_ADJUSTED"
+      ],
+      "policy_config_versions": {
+        "decision_engine": "first-slice-v1",
+        "inventory": "projection-v1",
+        "procurement": "seed-policy-v1"
+      },
+      "runtime_boundary_fingerprint": "d994dd6b2e7b9b409aa612671acc0a126d3af4b8df3c1001f6f6415f3c433277",
+      "scenario_id": "development-inventory-correction-material-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "sales batch",
+        "materiality contract",
+        "fail-closed routing"
+      ],
+      "family": "sales_materiality",
+      "fixture_refs": [
+        "tests/fixtures/sales_materiality_v1.json",
+        "tests/fixtures/sales_threshold_policy_v1.json"
+      ],
+      "label": "sales_materiality",
+      "observed_event_types": [
+        "SALES_UPDATED"
+      ],
+      "policy_config_versions": {
+        "forecast": "SALES_MATERIALITY_V1"
+      },
+      "runtime_boundary_fingerprint": "06c6f06e08b2f4e495f19e6892dc6bb9c0f8809ab6842c81615d652637e06c7b",
+      "scenario_id": "development-sales-materiality-001",
+      "scenario_version": "1",
+      "split": "development"
+    },
+    {
+      "evidence_focus": [
+        "exact version",
+        "stale approval",
+        "audit trace"
+      ],
+      "family": "stale_approval",
+      "fixture_refs": [
+        "tests/test_planning.py",
+        "tests/test_decision_engine_adapter.py"
+      ],
+      "label": "approval_stale_version",
+      "observed_event_types": [
+        "SUPPLIER_PRICE_CHANGED"
+      ],
+      "policy_config_versions": {
+        "procurement": "seed-policy-v1",
+        "publication": "current-revision-v1"
+      },
+      "runtime_boundary_fingerprint": "d37bd6a78c736aed5c860adcc7c7e317feebbc62dafaf567457b82f1ad479ba8",
+      "scenario_id": "development-stale-approval-001",
+      "scenario_version": "1",
+      "split": "development"
+    }
+  ],
+  "schema_version": "restock-golden-demo/1",
+  "suite_id": "restock-local-authoritative-v1"
+}

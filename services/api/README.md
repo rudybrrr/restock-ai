@@ -193,6 +193,38 @@ The current [backend handover](../../docs/BACKEND_HANDOVER.md) lists all new rou
 ownership boundaries, exact-version approval payloads, cycle decisions, promotion
 and supplier triggers, reconciliation assumptions, and outstanding integration.
 
+## Coordinator runtime smoke test
+
+ReStock uses the organiser-provided LLM gateway. Configure the Agent/LLM runtime
+in the local or deployed environment with:
+
+```dotenv
+LLM_GATEWAY_URL=https://api.softwaresystems.app
+LLM_GATEWAY_API_KEY=
+LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
+`LLM_GATEWAY_API_KEY` is a secret. Set the real value only in local or runtime
+environment configuration; never commit it or add it to `.env.example`.
+The environment template reflects the canonical gateway configuration. Updating
+the Coordinator provider wiring is intentionally outside the scope of this
+configuration change.
+
+The Pass 1A Coordinator uses OpenClaw's isolated, embedded `agent exec` command.
+It has the `minimal` tool profile and does not expose ReStock business tools,
+database writes, plan publication, or approval operations.
+
+Pipe one canonical `AgentInvocation` JSON object to:
+
+```sh
+uv run python -m src.coordinator_runtime
+```
+
+The command returns either a validated `AgentCompletionPublication` JSON object
+or the existing backend error envelope. It never falls back to another provider.
+The runtime-only smoke outcome is `ESCALATE / MISSING_REQUIRED_DATA`; it does not
+claim that a purchasing calculation or plan publication occurred.
+
 ## Pass 3E Agent procurement contract
 
 For the first connected cash slice, Backend seeds a versioned, read-only policy

@@ -68,7 +68,9 @@ def test_supplier_and_promotion_history_survives_later_revisions(
     )
     assert [event["payload"]["revision"] for event in later["promotions"]] == [1, 2]
     assert later["offer_version_ids"] != original["offer_version_ids"]
-    assert snapshot(client, at, original["known_at"]) == original
+    replay = snapshot(client, at, original["known_at"])
+    assert replay == original
+    assert snapshot(client, at, original["known_at"]) == replay
     # A newly recorded observation at the SAME effective instant also respects
     # the real knowledge cutoff when replaying a saved assessment.
     assert (
@@ -202,8 +204,13 @@ def test_commitments_receipts_cancellations_and_cycles_obey_operational_cutoff(
     assert closed["expiry_date"] is None
     assert closed["projected_lot_id"] is None
     assert len(later["cycle_decisions"]) == 1
+    replay = snapshot(
+        client, "2026-02-16T10:00:00+08:00", original["known_at"]
+    )
+    assert replay == original
     assert (
-        snapshot(client, "2026-02-16T10:00:00+08:00", original["known_at"]) == original
+        snapshot(client, "2026-02-16T10:00:00+08:00", original["known_at"])
+        == replay
     )
 
 
@@ -232,7 +239,9 @@ def test_later_sales_and_daily_corrections_do_not_change_known_snapshot(
         ).status_code
         == 201
     )
-    assert snapshot(client, batch["period_end"], before["known_at"]) == before
+    replay = snapshot(client, batch["period_end"], before["known_at"])
+    assert replay == before
+    assert snapshot(client, batch["period_end"], before["known_at"]) == replay
     after = snapshot(client, batch["period_end"])
     assert after["sales_batches"][0]["revision"] == 2
     assert after["inventory"] != before["inventory"]

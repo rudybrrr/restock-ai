@@ -1,6 +1,7 @@
 import { Run } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
 import { ProcurementEvidence } from "./procurement-evidence";
+import { ManagerEvidencePanel } from "./manager-run-evidence";
 import { ChangeAssessments } from "./change-assessments";
 
 const explanations: Record<string, string> = {
@@ -70,6 +71,7 @@ export function RunEvidence({ run }: { run: Run }) {
         an independent certification.
       </p>
       {snapshot?.procurement_contract && <ProcurementEvidence runId={run.id} />}
+      <ManagerEvidencePanel runId={run.id} />
       <ChangeAssessments
         runId={run.id}
         active={run.status === "QUEUED" || run.status === "RUNNING"}

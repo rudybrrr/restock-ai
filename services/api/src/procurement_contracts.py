@@ -284,6 +284,56 @@ def freeze_first_slice_contract(
     ).model_dump(mode="json")
 
 
+def bind_frozen_supplier_state(
+    contract: dict, offers: list[dict], offer_version_ids: list[str]
+) -> dict:
+    """Freeze authoritative current supplier revisions inside the approved domain.
+
+    The policy still authorizes the exact offer identities and ordering
+    opportunities.  This only substitutes the already-versioned operational offer
+    facts captured in the claimed run, so a supplier disruption is visible to the
+    deterministic engine without creating a new policy or domain contract.
+    """
+    if len(offers) != len(offer_version_ids):
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Supplier revision evidence is incomplete")
+    by_id = {str(offer["id"]): offer for offer in offers}
+    revision_by_id = {
+        str(offer["id"]): version_id
+        for offer, version_id in zip(offers, offer_version_ids, strict=True)
+    }
+    domain = dict(contract["domain"])
+    domain_offers = []
+    for domain_offer in domain["offers"]:
+        offer_id = str(domain_offer["offer_id"])
+        offer = by_id.get(offer_id)
+        revision = revision_by_id.get(offer_id)
+        if offer is None or revision is None:
+            raise ApiError(
+                409,
+                "MISSING_REQUIRED_DATA",
+                "Approved supplier domain is missing a frozen offer revision",
+            )
+        # Availability/status are the only authoritative operational fields wired
+        # for Pass 3F.  Preserve the approved domain's frozen commercial terms and
+        # opportunities rather than silently importing a broader live offer shape.
+        bound_offer = {
+            **domain_offer["offer"],
+            "available_quantity": offer["available_quantity"],
+            "current_status": offer["current_status"],
+        }
+        domain_offers.append(
+            {
+                **domain_offer,
+                "source_revision": revision,
+                "offer": bound_offer,
+            }
+        )
+    domain["offers"] = domain_offers
+    return ProcurementContract.model_validate(
+        {**contract, "domain": domain}
+    ).model_dump(mode="json")
+
+
 def freeze_operational_activity(contract: dict, frozen_state: dict) -> dict:
     """Attach activity and adapter-ready fixed commitments to one run contract."""
     selected = ProcurementContract.model_validate(contract)

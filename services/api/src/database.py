@@ -16,6 +16,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Session
 
@@ -317,6 +318,12 @@ planning_runs = Table(
     Column("claimed_at", DateTime(timezone=True)),
     Column("deadline_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
+    Index(
+        "one_active_planning_run",
+        "status",
+        unique=True,
+        postgresql_where=text("status IN ('QUEUED', 'RUNNING')"),
+    ),
 )
 assessment_requests = Table(
     "assessment_requests",
@@ -375,9 +382,9 @@ plan_versions = Table(
 )
 Index(
     "one_actionable_plan",
-    plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+    text("(status IN ('PENDING_APPROVAL', 'APPROVED'))"),
     unique=True,
-    postgresql_where=plan_versions.c.status.in_(("PENDING_APPROVAL", "APPROVED")),
+    postgresql_where=text("status IN ('PENDING_APPROVAL', 'APPROVED')"),
 )
 
 purchase_plan_lines = Table(
@@ -387,6 +394,9 @@ purchase_plan_lines = Table(
     Column("plan_version_id", ForeignKey("plan_versions.id"), nullable=False),
     Column("ingredient_id", ForeignKey("ingredients.id"), nullable=False),
     Column("supplier_id", ForeignKey("suppliers.id"), nullable=False),
+    Column("offer_id", String),
+    Column("opportunity_id", String),
+    Column("shipment_group_id", String),
     Column("quantity", Numeric(12, 3), nullable=False),
     Column("unit_price", Numeric(12, 2), nullable=False),
     Column("arrival_at", DateTime(timezone=True), nullable=False),
@@ -400,6 +410,7 @@ audit_entries = Table(
     Column("actor", String, nullable=False),
     Column("action", String, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON),
 )
 
 

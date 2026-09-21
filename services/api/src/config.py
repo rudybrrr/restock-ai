@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     session_hours: int = 8
     enable_development_calculator: bool = False
+    llm_gateway_url: str = ""
+    llm_gateway_api_key: SecretStr = SecretStr("")
+    llm_model: str = ""
+    llm_gateway_timeout_seconds: int = 30
+    llm_num_predict: int = 2048
 
     @model_validator(mode="after")
     def validate_access(self) -> "Settings":

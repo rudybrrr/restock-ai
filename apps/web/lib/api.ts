@@ -133,3 +133,106 @@ export type Run = {
   failure_reason: string | null;
   plan_version_id: string | null;
 };
+
+export type ManagerEvidenceRef = {
+  category: string;
+  source: string;
+  reference_id: string;
+  version: number | null;
+  state_revision: string | null;
+  producer_tool: string | null;
+};
+export type ManagerPlanReference = {
+  id: string;
+  plan_id: string;
+  version: number;
+  status: string;
+  calculation_mode: string;
+  run_id: string;
+  created_at: string;
+  line_count: number;
+  total_expected_cost: string;
+};
+export type ManagerTimelineEntry = {
+  id: string;
+  kind: string;
+  timestamp: string;
+  actor: string;
+  event_type: string | null;
+  state_revision: string | null;
+  invocation_mode: string | null;
+  plan_id: string | null;
+  plan_version: number | null;
+  specialist: string | null;
+  specialist_call_id: string | null;
+  call_sequence: number | null;
+  tool_call_id: string | null;
+  tool_name: string | null;
+  attempt_number: number | null;
+  tool_succeeded: boolean | null;
+  approval_decision: "APPROVED" | "REJECTED" | null;
+  reason_codes: string[];
+  evidence_refs: ManagerEvidenceRef[];
+  summary: string;
+};
+export type ManagerApprovalAttempt = {
+  id: string;
+  plan_id: string | null;
+  plan_version: number | null;
+  actor: string;
+  timestamp: string;
+  status: "APPROVED" | "REJECTED" | "STALE" | "UNKNOWN";
+  reason_codes: string[];
+  summary: string;
+};
+export type ManagerRunEvidence = {
+  run_id: string;
+  run_status: string;
+  trigger: string;
+  trigger_event_id: string | null;
+  trigger_event_ids: string[];
+  operational_cutoff: string;
+  input_revision: number;
+  claimed_at: string | null;
+  completed_at: string | null;
+  active_plan: ManagerPlanReference | null;
+  plan_history: ManagerPlanReference[];
+  approval: {
+    required: boolean;
+    status: string;
+    plan_id: string | null;
+    plan_version: number | null;
+    latest_attempt: ManagerApprovalAttempt | null;
+    stale_attempts: ManagerApprovalAttempt[];
+  };
+  timeline: ManagerTimelineEntry[];
+  routing: {
+    invocation_mode: string | null;
+    trigger_type: string | null;
+    specialists: string[];
+    specialist_calls: number;
+    tool_calls: string[];
+    tool_call_count: number;
+    retries: number;
+  };
+  validation: {
+    id: string;
+    timestamp: string;
+    state_revision: string | null;
+    succeeded: boolean | null;
+    evidence_refs: ManagerEvidenceRef[];
+    summary: string;
+  }[];
+  decision: {
+    outcome: string | null;
+    reason_codes: string[];
+    summary: string | null;
+  };
+  evaluation: {
+    status: "available" | "pending" | "unsupported";
+    suite_id: string | null;
+    scenario_id: string | null;
+    summary: string;
+  } | null;
+  gaps: { code: string; message: string }[];
+};
