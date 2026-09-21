@@ -61,7 +61,7 @@ def test_safe_inventory_correction_can_certify_keep_current_plan(
     )
     assert event["payload"]["revision_id"] == submitted.json()["id"]
     assert event["payload"]["adjustments"][0]["lot_id"] == corrected_lot["id"]
-    assert event["payload"]["adjustments"][0]["delta"] == "0.5"
+    assert Decimal(event["payload"]["adjustments"][0]["delta"]) == Decimal("0.5")
 
     use_agent(client)
     claimed = client.post("/api/v1/runs/claim")
@@ -104,6 +104,16 @@ def test_safe_inventory_correction_can_certify_keep_current_plan(
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["result_sha256"]
+    manager_path = f"/api/v1/manager/runs/{run['id']}/inventory-adjustment"
+    assert client.get(manager_path).status_code == 403
+    del client.headers["Authorization"]
+    displayed = client.get(manager_path)
+    assert displayed.status_code == 200
+    assert displayed.json() == saved.json()
+    links = client.get(f"/api/v1/manager/events/{event['id']}/assessments")
+    assert links.status_code == 200
+    assert [link["run_id"] for link in links.json()] == [run["id"]]
+    use_agent(client)
     completed = client.post(
         f"/api/v1/runs/{run['id']}/complete",
         json={"outcome": "KEEP_CURRENT_PLAN"},

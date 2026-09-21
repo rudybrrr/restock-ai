@@ -53,7 +53,14 @@ def test_manager_policy_display_preserves_role_boundaries(client: TestClient) ->
     response = client.get(display)
     assert response.status_code == 200
     assert response.json() == {
-        key: canonical[key] for key in ("policy", "domain", "forecast_input")
+        key: canonical[key]
+        for key in (
+            "policy",
+            "domain",
+            "forecast_input",
+            "activity_semantics",
+            "commitment_projection",
+        )
     }
     assert "frozen_state" not in response.json()
     assert client.get(listing + "/MISSING/versions/1").status_code == 409
@@ -175,7 +182,14 @@ def test_agent_reads_the_exact_contract_frozen_with_run_context(
     display = client.get(manager_endpoint)
     assert display.status_code == 200
     assert display.json() == {
-        key: contract[key] for key in ("policy", "domain", "forecast_input")
+        key: contract[key]
+        for key in (
+            "policy",
+            "domain",
+            "forecast_input",
+            "activity_semantics",
+            "commitment_projection",
+        )
     }
 
 

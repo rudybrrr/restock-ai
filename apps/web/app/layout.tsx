@@ -9,7 +9,7 @@ const sourceSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ReStock — Restaurant inventory & purchasing",
+  title: "ReStock",
   description:
     "Keep track of kitchen stock, review purchase recommendations, and manage incoming deliveries.",
 };

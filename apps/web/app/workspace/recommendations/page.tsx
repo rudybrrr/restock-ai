@@ -382,8 +382,8 @@ function PlanDetail({ plan }: { plan: Plan }) {
                 </div>
               ))}
             </dl>
-            <Link href="/workspace/activity">
-              View assessment and audit history →
+            <Link href={`/workspace/activity/${encodeURIComponent(plan.run_id)}`}>
+              View assessment and existing-purchase evidence →
             </Link>
           </details>
         </div>
