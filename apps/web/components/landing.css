@@ -1,0 +1,237 @@
+/* Landing-only depth and motion: no effect on operational screens. */
+.landing-dynamic .landing-hero {
+  position: relative;
+  min-height: 740px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 95% 45%, #e7ecdf 0, transparent 62%);
+}
+.landing-dynamic .hero-scroll {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: #234d3c;
+  border: 1px solid #bdcbb8;
+  border-radius: 50%;
+  transition: background 180ms ease;
+}
+.landing-dynamic .hero-scroll:hover { background: #e5ecdf; }
+.landing-dynamic .hero-scroll svg { transition: transform 180ms ease; }
+.landing-dynamic .hero-scroll:hover svg { transform: translateY(3px); }
+@media (max-width: 700px) {
+  .landing-dynamic .hero-scroll { bottom: 10px; width: 44px; height: 44px; }
+}
+.landing-dynamic .hero-copy {
+  width: 100%;
+  max-width: 660px;
+  justify-self: center;
+  padding-left: clamp(0px, 3vw, 56px);
+}
+.landing-dynamic .hero-copy em {
+  position: relative;
+}
+.landing-dynamic .hero-copy em::after {
+  content: "";
+  position: absolute;
+  height: 8px;
+  background: #c6d5ab;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  z-index: -1;
+  transform: rotate(-3deg);
+}
+.landing-dynamic .preview-wrap {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  padding: 30px 28px 40px;
+  perspective: 1400px;
+  animation: none;
+  max-width: 820px;
+  width: 100%;
+  justify-self: center;
+}
+.landing-dynamic .preview-wrap::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 8%;
+  height: 55px;
+  bottom: 52px;
+  background: #233e3226;
+  border-radius: 50%;
+  filter: blur(24px);
+  z-index: -1;
+  pointer-events: none;
+}
+.landing-dynamic .ledger-preview {
+  border: 7px solid #253e34;
+  border-radius: 16px;
+  background: #fdfefb;
+  transform: rotateX(8deg) rotateY(-13deg) rotateZ(2deg);
+  transform-origin: center;
+  box-shadow: 1px 1px 0 #6b8072, 3px 3px 0 #263d32, 6px 6px 0 #263d32,
+    9px 9px 0 #1a3027, 14px 18px 22px #16382a18, 28px 38px 60px #193d302b;
+  transition:
+    transform 400ms ease,
+    box-shadow 400ms ease;
+}
+.landing-dynamic .ledger-heading {
+  background: linear-gradient(120deg, #eff3e9, #fff 75%);
+  border-top: 1px solid #ffffff;
+}
+.landing-dynamic .preview-label { margin-bottom: 30px; }
+.landing-dynamic .preview-footnote { margin-top: 30px; }
+.landing-dynamic .service-note { margin-top: 34px; }
+.landing-dynamic .ledger-tabs button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #596653;
+  font: inherit;
+  transition:
+    color 180ms,
+    border-color 180ms;
+  min-height: 44px;
+}
+.landing-dynamic .ledger-tabs button[aria-pressed="true"] {
+  color: #234d3c;
+  border-bottom-color: #234d3c;
+  font-weight: 650;
+}
+.landing-dynamic button:focus-visible {
+  outline: 2px solid #234d3c;
+  outline-offset: 4px;
+}
+.landing-dynamic .preview-content {
+  animation: restock-enter 300ms ease both;
+}
+.landing-dynamic .ledger-row {
+  transition:
+    background 160ms,
+    padding-left 160ms;
+}
+.landing-dynamic .ledger-row:hover {
+  background: #f0f4e9;
+  padding-left: 29px;
+}
+.service-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 24px -5px -6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #36513d;
+}
+.service-note > span:last-child {
+  margin-left: auto;
+  letter-spacing: 0;
+}
+.service-dot {
+  width: 7px;
+  height: 7px;
+  background: #55744a;
+  border-radius: 50%;
+}
+.landing-dynamic .approach-section {
+  padding-top: 100px;
+  padding-bottom: 100px;
+}
+.landing-dynamic .approach-section .section-heading {
+  padding-left: clamp(24px, 8vw, 160px);
+}
+.landing-dynamic .approach-list article {
+  position: relative;
+  transition:
+    background 220ms ease,
+    transform 220ms ease;
+}
+.landing-dynamic .approach-list article > svg {
+  transition: transform 220ms ease;
+}
+.landing-dynamic .closing-section {
+  position: relative;
+  overflow: hidden;
+  padding-inline: calc(32px + clamp(24px, 8vw, 160px));
+}
+.landing-dynamic .closing-section::after {
+  content: "";
+  width: 400px;
+  height: 400px;
+  border: 1px solid #ffffff20;
+  border-radius: 50%;
+  position: absolute;
+  right: 12%;
+  top: -180px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 70px #ffffff05,
+    0 0 0 140px #ffffff04;
+}
+.landing-dynamic .closing-section > * {
+  position: relative;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .landing-dynamic [data-reveal].reveal-ready {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 700ms ease,
+      transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .landing-dynamic [data-reveal].is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  .landing-dynamic .approach-list article:nth-child(2) {
+    transition-delay: 80ms;
+  }
+  .landing-dynamic .approach-list article:nth-child(3) {
+    transition-delay: 160ms;
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .landing-dynamic .preview-wrap:hover .ledger-preview {
+    transform: rotateX(4deg) rotateY(-6deg) rotateZ(1deg) translateY(-6px);
+  }
+  .landing-dynamic .preview-wrap:focus-within .ledger-preview {
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  .landing-dynamic .approach-list article:hover {
+    background: #e8eddf70;
+  }
+  .landing-dynamic .approach-list article:hover > svg {
+    transform: translate(3px, -3px);
+  }
+}
+@media (max-width: 700px) {
+  .landing-dynamic .landing-hero {
+    min-height: auto;
+  }
+  .landing-dynamic .preview-wrap {
+    padding: 12px 10px 28px;
+    margin: 12px 0;
+  }
+  .landing-dynamic .hero-copy { padding-left: 0; }
+  .landing-dynamic .approach-section .section-heading { padding-left: 0; }
+  .landing-dynamic .closing-section { padding-inline: 6%; }
+  .landing-dynamic .ledger-preview { transform: rotateX(3deg) rotateY(-4deg); border-width: 4px; }
+  .landing-dynamic .approach-section {
+    padding-top: 56px;
+    padding-bottom: 56px;
+  }
+  .landing-dynamic .ledger-tabs {
+    gap: 16px;
+  }
+  .service-note {
+    flex-wrap: wrap;
+  }
+}

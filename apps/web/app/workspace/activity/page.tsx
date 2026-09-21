@@ -1,5 +1,10 @@
 "use client";
 import Link from "next/link";
+import {
+  CorrectionDetails,
+  DeliveryDisruption,
+  EventAssessments,
+} from "@/components/change-events";
 import { RunEvidence } from "@/components/run-evidence";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -155,6 +160,19 @@ export default function Activity() {
                           ))}
                       </dl>
                       <p className="quiet">Event reference: {e.id}</p>
+                      {e.type === "INVENTORY_ADJUSTED" && (
+                        <CorrectionDetails event={e} />
+                      )}
+                      {[
+                        "DELIVERY_DELAYED",
+                        "DELIVERY_SHORT",
+                        "DELIVERY_CANCELLED",
+                      ].includes(e.type) && (
+                        <>
+                          <DeliveryDisruption event={e} />
+                          <EventAssessments eventId={e.id} />
+                        </>
+                      )}
                       {e.type.startsWith("DELIVERY") ||
                       e.type === "EXTERNAL_ORDER_RECORDED" ? (
                         <Link href="/workspace/deliveries">

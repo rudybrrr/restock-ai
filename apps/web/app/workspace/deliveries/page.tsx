@@ -11,6 +11,7 @@ import {
   useServiceDate,
 } from "@/components/workspace";
 import { PurchaseForm, DeliveryAction } from "@/components/delivery-forms";
+import { ChangeHistory } from "@/components/change-events";
 export default function DeliveriesPage() {
   const { day } = useServiceDate();
   const [create, setCreate] = useState(false);
@@ -128,6 +129,7 @@ export default function DeliveriesPage() {
                             ?.name ?? d.supplier_id}
                         </small>
                         <Status value={d.source_validation} />
+                        <ChangeHistory deliveryId={d.id} />
                         <details>
                           <summary>Receipt history</summary>
                           {d.receipts.length ? (

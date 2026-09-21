@@ -1,13 +1,79 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Check } from "lucide-react";
 import { Wordmark } from "./wordmark";
 import "./restock.css";
+import "./landing.css";
+
+const previews = [
+  {
+    label: "Kitchen stock",
+    title: "Ready for service.",
+    columns: ["Ingredient", "Counted stock", "Unit"],
+    rows: [
+      ["Chicken", "17.000", "kg"],
+      ["Rice", "25.000", "kg"],
+      ["Eggs", "80", "pieces"],
+      ["Vegetables", "12.000", "kg"],
+    ],
+    note: "Physical counts stay separate from estimates.",
+  },
+  {
+    label: "Incoming",
+    title: "Know what’s next.",
+    columns: ["Ingredient", "Expected arrival", "Quantity"],
+    rows: [
+      ["Chicken", "Today, 10 am", "5 kg"],
+      ["Vegetables", "Today, 11 am", "8 kg"],
+      ["Rice", "Tomorrow", "10 kg"],
+      ["Eggs", "Tomorrow", "60 pieces"],
+    ],
+    note: "Arranged purchases are not stock until received.",
+  },
+  {
+    label: "Purchase plan",
+    title: "Your call, clearly.",
+    columns: ["Ingredient", "Suggested quantity", "Supplier"],
+    rows: [
+      ["Chicken", "5 kg", "Fresh"],
+      ["Rice", "10 kg", "Pantry"],
+      ["Tofu", "4 kg", "Market"],
+      ["Oil", "3 litres", "Pantry"],
+    ],
+    note: "A recommendation, not an order. You decide.",
+  },
+];
 
 export function Landing() {
+  const [preview, setPreview] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const selected = previews[preview];
+  useEffect(() => {
+    const nodes = root.current?.querySelectorAll<HTMLElement>("[data-reveal]");
+    if (!nodes || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 },
+    );
+    nodes.forEach((node) => {
+      node.classList.add("reveal-ready");
+      observer.observe(node);
+    });
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div className="restock-site">
+    <div className="restock-site landing-dynamic" ref={root}>
       <header className="site-nav">
-        <Wordmark />
+        <Wordmark showIcon />
         <nav aria-label="Main navigation">
           <a href="#approach">Our approach</a>
           <a href="#workspace">The workspace</a>
@@ -33,9 +99,6 @@ export function Landing() {
               <Link href="/login" className="button button-primary">
                 Open workspace
               </Link>
-              <a href="#approach" className="text-link">
-                Explore ReStock
-              </a>
             </div>
             <p className="quiet hero-note">
               You make the decisions. ReStock keeps the details together.
@@ -49,45 +112,59 @@ export function Landing() {
               <div className="ledger-heading">
                 <div>
                   <p className="eyebrow">MONDAY, 16 FEBRUARY</p>
-                  <h2>Ready for service.</h2>
+                  <h2>{selected.title}</h2>
                 </div>
                 <span className="mini-wordmark">ReStock.</span>
               </div>
-              <div className="ledger-tabs">
-                <strong>Kitchen stock</strong>
-                <span>Incoming</span>
-                <span>Purchase plan</span>
+              <div
+                className="ledger-tabs"
+                aria-label="Explore illustrative workspace"
+              >
+                {previews.map((item, index) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    aria-pressed={preview === index}
+                    onClick={() => setPreview(index)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
-              <div className="ledger-columns">
-                <span>Ingredient</span>
-                <span>Counted stock</span>
-                <span>Unit</span>
-              </div>
-              {[
-                ["Chicken", "17.000", "kg"],
-                ["Rice", "25.000", "kg"],
-                ["Eggs", "80", "pieces"],
-                ["Vegetables", "12.000", "kg"],
-              ].map(([name, qty, unit]) => (
-                <div className="ledger-row" key={name}>
-                  <span>{name}</span>
-                  <strong>{qty}</strong>
-                  <span>{unit}</span>
+              <div key={preview} className="preview-content" aria-live="polite">
+                <div className="ledger-columns">
+                  {selected.columns.map((column) => (
+                    <span key={column}>{column}</span>
+                  ))}
                 </div>
-              ))}
-              <div className="ledger-footer">
-                <Check size={16} />
-                <span>Physical counts stay separate from estimates.</span>
+                {selected.rows.map(([name, qty, unit]) => (
+                  <div className="ledger-row" key={name}>
+                    <span>{name}</span>
+                    <strong>{qty}</strong>
+                    <span>{unit}</span>
+                  </div>
+                ))}
+                <div className="ledger-footer">
+                  <Check size={16} />
+                  <span>{selected.note}</span>
+                </div>
               </div>
+            </div>
+            <div className="service-note">
+              <span className="service-dot" /> THE SERVICE BOARD{" "}
+              <span>Try the three views above ↗</span>
             </div>
             <div className="preview-footnote">
               <span>COUNT → PLAN → RECEIVE</span>
               <span>One clear record.</span>
             </div>
           </div>
+          <a className="hero-scroll" href="#approach" aria-label="Explore ReStock" title="Explore ReStock">
+            <ArrowDown size={26} strokeWidth={1.5} aria-hidden="true" />
+          </a>
         </section>
         <section className="approach-section" id="approach">
-          <div className="section-heading">
+          <div className="section-heading" data-reveal>
             <p className="eyebrow">Built around a working kitchen</p>
             <h2>
               From the first count
@@ -118,7 +195,7 @@ export function Landing() {
                 "Track partial deliveries and supplier changes, and review assessments as conditions change. Existing purchases stay in the picture.",
               ],
             ].map(([n, title, body]) => (
-              <article key={n}>
+              <article key={n} data-reveal>
                 <span className="step-number">{n}</span>
                 <div>
                   <h3>{title}</h3>
@@ -129,7 +206,7 @@ export function Landing() {
             ))}
           </div>
         </section>
-        <section className="closing-section">
+        <section className="closing-section" data-reveal>
           <div>
             <p className="eyebrow">A clearer view of the everyday</p>
             <h2>

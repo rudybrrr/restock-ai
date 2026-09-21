@@ -229,3 +229,5 @@ class ProcurementDisplay(BaseModel):
     policy: ProcurementPolicyVersion
     domain: ApprovedProcurementDomain
     forecast_input: ForecastInputArtifact
+    activity_semantics: ForecastActivitySemantics | None = None
+    commitment_projection: FrozenCommitmentProjection | None = None
