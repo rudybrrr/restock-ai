@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
 from src import planning
@@ -24,6 +25,8 @@ from src.agent_contracts import (
     StateRevisionStaleError,
 )
 from src.backend_control_plane import run_backend_coordinator
+from src.config import Settings
+from src.organiser_gateway import build_organiser_reasoning_models
 from src.planning_schemas import Completion
 from src.procurement_specialist import ProcurementReasoningModel, ProcurementToolPort
 
@@ -212,6 +215,65 @@ def test_local_backend_runner_composes_coordinator_and_publication(
 
     assert execution.completion.outcome is AgentOutcome.KEEP_CURRENT_PLAN
     assert execution.publication_result is expected
+
+
+def test_explicit_organiser_models_use_existing_backend_injection_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src import backend_control_plane
+
+    live_models = build_organiser_reasoning_models(
+        Settings(
+            llm_gateway_url="https://api.softwaresystems.app",
+            llm_gateway_api_key=SecretStr("typed-reasoning-secret"),
+            llm_model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        ),
+        opener=lambda request, *, timeout: object(),
+    )
+    live_invocation = AgentInvocation(
+        run_id="run-1",
+        invocation_mode=InvocationMode.EVENT,
+        trigger_id="event-1",
+        trigger_type=EventType.SUPPLIER_AVAILABILITY_CHANGED,
+        captured_state_revision="7",
+        affected_plan_id=None,
+        affected_plan_version=None,
+    )
+    captured: dict[SpecialistType, Any] = {}
+
+    monkeypatch.setattr(
+        backend_control_plane.BackendCoordinatorControlPlane,
+        "get_invocation",
+        lambda self, run_id: live_invocation,
+    )
+
+    def capture_models(self: Any, invocation: AgentInvocation) -> Any:
+        specialists = self._specialist_executor._specialists
+        captured.update(
+            {
+                specialist_type: specialist._model
+                for specialist_type, specialist in specialists.items()
+            }
+        )
+        return object()
+
+    monkeypatch.setattr(backend_control_plane.Coordinator, "run", capture_models)
+
+    result = run_backend_coordinator(
+        fake_session(),
+        "run-1",
+        live_models.procurement,
+        cast(ProcurementToolPort, object()),
+        demand_model=live_models.demand,
+        inventory_model=live_models.inventory,
+    )
+
+    assert result is not None
+    assert captured == {
+        SpecialistType.PROCUREMENT: live_models.procurement,
+        SpecialistType.DEMAND: live_models.demand,
+        SpecialistType.INVENTORY: live_models.inventory,
+    }
 
 
 def test_adapter_builds_invocation_from_claimed_backend_run(
