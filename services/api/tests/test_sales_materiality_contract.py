@@ -236,7 +236,7 @@ def test_manager_cannot_write_agent_materiality_contract(client: TestClient) -> 
     assert response.status_code == 403
 
 
-def test_safe_material_sales_result_certifies_keep_current_plan(
+def test_material_sales_result_cannot_certify_keep_current_plan(
     client: TestClient,
 ) -> None:
     run = claim_sales_run(client)
@@ -260,5 +260,5 @@ def test_safe_material_sales_result_certifies_keep_current_plan(
         f"/api/v1/runs/{run_id}/complete",
         json={"outcome": "KEEP_CURRENT_PLAN"},
     )
-    assert completed.status_code == 200, completed.text
-    assert completed.json()["status"] == "SUCCEEDED"
+    assert completed.status_code == 409, completed.text
+    assert completed.json()["error"]["code"] == "UNCERTIFIED_OUTCOME"

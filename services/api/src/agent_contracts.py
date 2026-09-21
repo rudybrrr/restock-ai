@@ -520,6 +520,7 @@ class AuditEvent(ContractModel):
     from_plan_status: PlanStatus | None = None
     to_plan_status: PlanStatus | None = None
     approval_id: Identifier | None = None
+    approval_decision: ApprovalDecision | None = None
     final_outcome: AgentOutcome | None = None
     reason_codes: list[Identifier] = Field(default_factory=list)
     materiality: "MaterialityAssessment | None" = None
@@ -549,6 +550,11 @@ class AuditEvent(ContractModel):
             raise ValueError("request schema version requires a tool call id")
         if self.tool_succeeded is not None and self.tool_call_id is None:
             raise ValueError("tool success requires a tool call id")
+        if (
+            self.approval_decision is not None
+            and self.action is not AuditAction.APPROVAL_RECORDED
+        ):
+            raise ValueError("approval decision requires an approval audit action")
         return self
 
 

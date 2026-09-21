@@ -14,6 +14,7 @@ from src import database as db
 from src.agent_contracts import (
     AgentCompletionPublication,
     AgentOutcome,
+    ApprovalDecision,
     AuditAction,
     AuditEvent,
     EvidenceCategory,
@@ -857,15 +858,7 @@ def complete_run(
     sales_materiality_keep = bool(
         sales_materiality is not None
         and sales_materiality.complete
-        and (
-            sales_materiality.material_change is False
-            or (
-                sales_materiality.material_change is True
-                and sales_materiality.inventory_feasible is True
-                and sales_materiality.first_stockout_interval is None
-                and not sales_materiality.safety_breaches
-            )
-        )
+        and sales_materiality.material_change is False
     )
     inventory_materiality_keep = bool(
         inventory_materiality is not None
@@ -884,7 +877,6 @@ def complete_run(
         if (
             sales_materiality.material_change is True
             and body.outcome == "KEEP_CURRENT_PLAN"
-            and not sales_materiality_keep
         ):
             raise ApiError(
                 409,
@@ -1362,6 +1354,7 @@ def _record_approval_audit(
         plan_id=plan.plan_id,
         plan_version=plan.version,
         run_id=run.id,
+        approval_decision=ApprovalDecision(decision),
         reason_codes=[reason_code] if reason_code is not None else [],
         summary=(
             f"Approval of exact plan version {plan.version} was rejected as stale."

@@ -6,7 +6,7 @@
 >
 > **Submission deadline:** **28 September 2026, 9:00 AM SGT**
 >
-> Keep this file updated as work progresses. Mark completed work with `[x]`. Add short notes only where useful.
+> This file records Agent implementation evidence. GitHub Issues remain the authoritative source for project scope, dependencies, and ticket status; checklist marks here do not close or reopen those issues.
 
 ---
 
@@ -411,7 +411,7 @@
   - [x] Backend persists request/result transport with revision, `as_of`, and `known_at`
   - [x] `get_materiality()` exposes the persisted result with immutable evidence
   - [x] Missing/incomplete sales evidence fails closed
-  - [x] Complete material sales with safe inventory certifies `KEEP_CURRENT_PLAN`
+  - [x] Complete material sales cannot certify `KEEP_CURRENT_PLAN`; a missing validated revision fails closed
   - [x] Sales specialist routing is Coordinator-owned; no specialist recursion
 
 - [x] Implement delivery-disruption route

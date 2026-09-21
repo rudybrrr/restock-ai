@@ -14,6 +14,7 @@ from src.agent_contracts import (
     EvidenceRef,
     EvidenceSource,
     InvocationMode,
+    MaterialityAssessment,
     PlanPublicationResult,
     RecommendedNextStep,
     SpecialistDelegation,
@@ -514,13 +515,43 @@ def test_human_approval_outcome_uses_control_plane_without_approving() -> None:
     assert not hasattr(control_plane, "approve_plan")
 
 
-def test_non_full_scheduled_invocation_does_not_run_full_planning_chain() -> None:
+@pytest.mark.parametrize(
+    ("mode", "trigger"),
+    [
+        (InvocationMode.SCHEDULED, "DAILY_HEALTH_CHECK"),
+        (InvocationMode.EVENT, "UNKNOWN_EVENT"),
+    ],
+)
+def test_unknown_invocation_trigger_fails_closed(mode, trigger) -> None:
     executor = FakeExecutor()
     result = Coordinator(FakeControlPlane(), executor, clock=lambda: NOW).run(
-        invocation(InvocationMode.SCHEDULED, "DAILY_HEALTH_CHECK")
+        invocation(mode, trigger)
     )
     assert executor.calls == []
-    assert result.completion.outcome is AgentOutcome.KEEP_CURRENT_PLAN
+    assert result.completion.outcome is AgentOutcome.ESCALATE
+    assert result.completion.escalation_reason is EscalationReason.MISSING_REQUIRED_DATA
+
+
+def test_material_change_without_validated_revision_escalates() -> None:
+    class MaterialControlPlane(FakeControlPlane):
+        def get_materiality(self, invocation: AgentInvocation) -> MaterialityAssessment:
+            return MaterialityAssessment(
+                source_event_ids=[invocation.trigger_id],
+                captured_state_revision=invocation.captured_state_revision,
+                affected_plan_id=invocation.affected_plan_id,
+                affected_plan_version=invocation.affected_plan_version,
+                material=True,
+                current_plan_unactionable=False,
+                reason_codes=["DEMAND_THRESHOLD_EXCEEDED"],
+                evidence_ref=ref(EvidenceCategory.MATERIALITY, "MATERIALITY-1"),
+            )
+
+    result = Coordinator(
+        MaterialControlPlane(), FakeExecutor(), clock=lambda: NOW
+    ).run(invocation())
+
+    assert result.completion.outcome is AgentOutcome.ESCALATE
+    assert result.completion.escalation_reason is EscalationReason.POLICY_VIOLATION
 
 
 def test_manual_injection_text_cannot_change_routes_or_permissions() -> None:

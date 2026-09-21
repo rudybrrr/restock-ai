@@ -106,7 +106,7 @@ The local safety suite covers permission boundaries, prompt-injection attempts, 
 
 ## Evaluation
 
-The checked-in manifest contains 18 scenario rows: 17 currently runnable rows and one open inventory-correction row. It includes development and held-out splits and keeps expected truth separate from runtime inputs. The supported golden pass measures five runnable development scenarios across Static, Rule, and local Adaptive ReStock adapters: 15 executions, zero failed executions, stable observed-boundary fingerprints across two runs, and stale approval evidence with a persisted audit reference.
+The checked-in manifest contains 19 runnable scenario rows. It includes development and held-out splits and keeps expected truth separate from runtime inputs. The supported golden pass measures seven development scenarios across Static, Rule, and local Adaptive ReStock adapters: 21 executions, zero failed executions, stable observed-boundary fingerprints across two runs, and stale approval evidence with a persisted audit reference.
 
 Fresh local verification on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). The complete PostgreSQL backend suite passed 782 tests. The database-independent synthetic-history suite passed 68 tests with an external temp root. Ruff, Pyright, Alembic upgrade/check, clean seed/reseed, and screenshot-disabled frontend evidence assertions also passed; frontend source was unchanged by this pass.
 
@@ -114,7 +114,7 @@ The local evaluation reports routing, outcome, specialist-call, tool-call, retry
 
 ## Current open items
 
-- Authoritative inventory-adjustment event contract and its safe correction route.
+- Queued assessments still need an external Agent worker or local demo runner to execute the Coordinator.
 - Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
 - Live OpenClaw/Sonnet gateway behavior, AWS/Bedrock verification, live token/cost metrics, and live-model evaluation.
 - Deployment, production reliability, hosted URLs, video, screenshots, and external submission actions.

@@ -170,6 +170,7 @@ export type ManagerTimelineEntry = {
   tool_name: string | null;
   attempt_number: number | null;
   tool_succeeded: boolean | null;
+  approval_decision: "APPROVED" | "REJECTED" | null;
   reason_codes: string[];
   evidence_refs: ManagerEvidenceRef[];
   summary: string;
@@ -189,6 +190,7 @@ export type ManagerRunEvidence = {
   run_status: string;
   trigger: string;
   trigger_event_id: string | null;
+  trigger_event_ids: string[];
   operational_cutoff: string;
   input_revision: number;
   claimed_at: string | null;

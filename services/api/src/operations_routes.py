@@ -215,15 +215,24 @@ def read_manager_run_evidence(run_id: str, session: SessionDep, manager: Manager
         )
     ).mappings().all()
     plans = [planning.read_plan(session, row["id"]) for row in plan_rows]
-    trigger_event = None
-    if run.trigger_event_id is not None:
-        trigger_event = (
-            session.execute(
-                select(db.events).where(db.events.c.id == run.trigger_event_id)
-            )
-            .mappings()
-            .one_or_none()
+    trigger_event_ids = [
+        str(event_id)
+        for event_id in run.snapshot.get("trigger_event_ids", [])
+        if event_id
+    ]
+    if run.trigger_event_id is not None and run.trigger_event_id not in trigger_event_ids:
+        trigger_event_ids.insert(0, run.trigger_event_id)
+    trigger_events = (
+        session.execute(
+            select(db.events)
+            .where(db.events.c.id.in_(trigger_event_ids))
+            .order_by(db.events.c.timestamp, db.events.c.id)
         )
+        .mappings()
+        .all()
+        if trigger_event_ids
+        else []
+    )
     audits = (
         session.execute(
             select(db.audit_entries)
@@ -235,7 +244,7 @@ def read_manager_run_evidence(run_id: str, session: SessionDep, manager: Manager
         if run.trigger_event_id is not None
         else []
     )
-    return build_manager_run_evidence(run, plans, trigger_event, audits)
+    return build_manager_run_evidence(run, plans, trigger_events, audits)
 
 
 @router.get(

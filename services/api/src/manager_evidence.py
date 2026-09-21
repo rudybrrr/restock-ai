@@ -54,6 +54,7 @@ class ManagerTimelineEntry(BaseModel):
     invocation_mode: str | None = None
     plan_id: str | None = None
     plan_version: int | None = None
+    approval_decision: Literal["APPROVED", "REJECTED"] | None = None
     specialist: str | None = None
     specialist_call_id: str | None = None
     call_sequence: int | None = None
@@ -146,6 +147,7 @@ class ManagerRunEvidence(BaseModel):
     run_status: str
     trigger: str
     trigger_event_id: str | None = None
+    trigger_event_ids: list[str] = Field(default_factory=list)
     operational_cutoff: AwareDatetime
     input_revision: int
     claimed_at: AwareDatetime | None = None
@@ -234,6 +236,11 @@ def _timeline_entry(entry: Mapping[str, Any]) -> ManagerTimelineEntry:
         ),
         plan_id=str(payload["plan_id"]) if payload.get("plan_id") else None,
         plan_version=payload.get("plan_version"),
+        approval_decision=(
+            payload.get("approval_decision")
+            if payload.get("approval_decision") in {"APPROVED", "REJECTED"}
+            else None
+        ),
         specialist=(str(payload["specialist"]) if payload.get("specialist") else None),
         specialist_call_id=(
             str(payload["specialist_call_id"])
@@ -259,9 +266,9 @@ def _approval_attempt(entry: ManagerTimelineEntry) -> ManagerApprovalAttempt:
     reason_codes = set(entry.reason_codes)
     if "PLAN_VERSION_STALE" in reason_codes:
         status: Literal["APPROVED", "REJECTED", "STALE", "UNKNOWN"] = "STALE"
-    elif "APPROVED" in entry.summary.upper():
+    elif entry.approval_decision == "APPROVED":
         status = "APPROVED"
-    elif "REJECTED" in entry.summary.upper():
+    elif entry.approval_decision == "REJECTED":
         status = "REJECTED"
     else:
         status = "UNKNOWN"
@@ -280,7 +287,7 @@ def _approval_attempt(entry: ManagerTimelineEntry) -> ManagerApprovalAttempt:
 def build_manager_run_evidence(
     run: PlanningRun,
     plans: Sequence[PurchasePlanVersion],
-    trigger_event: Mapping[Any, Any] | None,
+    trigger_events: Sequence[Mapping[Any, Any]],
     audits: Sequence[Mapping[Any, Any]],
 ) -> ManagerRunEvidence:
     """Build a manager-safe read projection from authoritative records."""
@@ -294,7 +301,7 @@ def build_manager_run_evidence(
         (plan for plan in plan_history if plan.id == run.plan_version_id), None
     )
     timeline: list[ManagerTimelineEntry] = []
-    if trigger_event is not None:
+    for trigger_event in trigger_events:
         timeline.append(
             ManagerTimelineEntry(
                 id=str(trigger_event["id"]),
@@ -392,6 +399,7 @@ def build_manager_run_evidence(
         run_status=run.status,
         trigger=run.trigger,
         trigger_event_id=run.trigger_event_id,
+        trigger_event_ids=[str(event["id"]) for event in trigger_events],
         operational_cutoff=run.as_of,
         input_revision=run.input_revision,
         claimed_at=run.claimed_at,

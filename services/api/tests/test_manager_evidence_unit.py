@@ -131,6 +131,7 @@ def test_manager_run_projection_preserves_structured_trace_without_private_paylo
                 "run_id": "run-1",
                 "plan_id": "plan-1",
                 "plan_version": 1,
+                "approval_decision": "APPROVED",
                 "reason_codes": ["PLAN_VERSION_STALE"],
                 "summary": "Approval of exact plan version 1 was rejected as stale.",
             },
@@ -150,9 +151,37 @@ def test_manager_run_projection_preserves_structured_trace_without_private_paylo
                 "frozen_state": {"private": "must not appear"},
             },
         },
+        {
+            "id": "audit-rejected",
+            "event_id": "event-1",
+            "actor": "manager",
+            "action": "APPROVAL_RECORDED",
+            "timestamp": "2026-02-16T08:00:05+08:00",
+            "payload": {
+                "run_id": "run-1",
+                "plan_id": "plan-1",
+                "plan_version": 2,
+                "approval_decision": "REJECTED",
+                "reason_codes": [],
+                "summary": "Manager decision captured.",
+            },
+        },
     ]
 
-    result = build_manager_run_evidence(run, plans, {"id": "event-1", "type": run.trigger, "source": "backend", "timestamp": run.as_of, "payload": {"secret": "hidden"}}, audits)
+    result = build_manager_run_evidence(
+        run,
+        plans,
+        [
+            {
+                "id": "event-1",
+                "type": run.trigger,
+                "source": "backend",
+                "timestamp": run.as_of,
+                "payload": {"secret": "hidden"},
+            }
+        ],
+        audits,
+    )
     dumped = result.model_dump_json()
 
     assert result.active_plan is not None
@@ -162,6 +191,8 @@ def test_manager_run_projection_preserves_structured_trace_without_private_paylo
     assert result.routing.tool_calls == ["check_supplier_feasibility"]
     assert result.validation[0].succeeded is True
     assert result.decision.summary == "A validated plan is ready for manager approval."
+    assert result.approval.latest_attempt is not None
+    assert result.approval.latest_attempt.status == "REJECTED"
     assert result.approval.stale_attempts[0].reason_codes == ["PLAN_VERSION_STALE"]
     assert "prompt" not in dumped
     assert "scratchpad" not in dumped
@@ -190,7 +221,14 @@ def test_manager_run_projection_surfaces_validation_result_tool_evidence():
     result = build_manager_run_evidence(
         run,
         [],
-        {"id": "event-1", "type": run.trigger, "source": "backend", "timestamp": run.as_of},
+        [
+            {
+                "id": "event-1",
+                "type": run.trigger,
+                "source": "backend",
+                "timestamp": run.as_of,
+            }
+        ],
         [
             {
                 "id": "audit-validation-tool",
@@ -230,7 +268,7 @@ def test_manager_run_evidence_route_is_manager_only_and_uses_projection(monkeypa
             "trigger_event_id": "event-1",
             "as_of": "2026-02-16T08:00:00+08:00",
             "input_revision": 12,
-            "snapshot": {},
+            "snapshot": {"trigger_event_ids": ["event-1", "event-2"]},
             "outcome": "KEEP_CURRENT_PLAN",
             "created_at": "2026-02-16T08:00:01+08:00",
             "completed_at": "2026-02-16T08:00:03+08:00",
@@ -261,13 +299,22 @@ def test_manager_run_evidence_route_is_manager_only_and_uses_projection(monkeypa
         if "plan_versions.plan_id" in text or "plan_versions.run_id" in text:
             result.mappings.return_value.all.return_value = [{"id": "version-1"}]
         elif "events.id" in text:
-            result.mappings.return_value.one_or_none.return_value = {
-                "id": "event-1",
-                "type": "MANUAL_REASSESSMENT_REQUESTED",
-                "source": "manager",
-                "timestamp": "2026-02-16T08:00:00+08:00",
-                "payload": {"private": "not returned"},
-            }
+            result.mappings.return_value.all.return_value = [
+                {
+                    "id": "event-1",
+                    "type": "MANUAL_REASSESSMENT_REQUESTED",
+                    "source": "manager",
+                    "timestamp": "2026-02-16T08:00:00+08:00",
+                    "payload": {"private": "not returned"},
+                },
+                {
+                    "id": "event-2",
+                    "type": "PROMOTION_CHANGED",
+                    "source": "manager",
+                    "timestamp": "2026-02-16T08:00:01+08:00",
+                    "payload": {"private": "also not returned"},
+                },
+            ]
         else:
             result.mappings.return_value.all.return_value = []
         return result
@@ -283,6 +330,12 @@ def test_manager_run_evidence_route_is_manager_only_and_uses_projection(monkeypa
         response = client.get("/api/v1/manager/runs/run-1/evidence")
         assert response.status_code == 200, response.text
         assert response.json()["run_id"] == "run-1"
+        assert response.json()["trigger_event_ids"] == ["event-1", "event-2"]
+        trigger_entries = [
+            entry for entry in response.json()["timeline"]
+            if entry["kind"] == "TRIGGER_EVENT"
+        ]
+        assert [entry["id"] for entry in trigger_entries] == ["event-1", "event-2"]
         assert response.json()["plan_history"][0]["version"] == 1
         assert "private" not in response.text
 

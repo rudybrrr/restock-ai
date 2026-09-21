@@ -201,7 +201,7 @@ class Coordinator:
                 AgentOutcome.ESCALATE,
                 evidence_refs,
                 trace,
-                "Manual intent could not be safely classified.",
+                "The invocation trigger could not be safely routed.",
                 EscalationReason.MISSING_REQUIRED_DATA,
             )
         if not initial:
@@ -443,10 +443,23 @@ class Coordinator:
             return self._record(invocation, completion, trace)
         return self._finish(
             invocation,
-            AgentOutcome.KEEP_CURRENT_PLAN,
+            (
+                AgentOutcome.ESCALATE
+                if materiality is not None and materiality.material
+                else AgentOutcome.KEEP_CURRENT_PLAN
+            ),
             evidence_refs,
             trace,
-            "The bounded investigation produced no validated revision.",
+            (
+                "A material change did not produce a validated revised plan."
+                if materiality is not None and materiality.material
+                else "The bounded investigation produced no validated revision."
+            ),
+            (
+                EscalationReason.POLICY_VIOLATION
+                if materiality is not None and materiality.material
+                else None
+            ),
         )
 
     def _initial_routes(
@@ -459,13 +472,13 @@ class Coordinator:
                     SpecialistType.INVENTORY,
                     SpecialistType.PROCUREMENT,
                 ]
-            return []
+            return None
         if invocation.invocation_mode is InvocationMode.MANUAL:
             return self._classify_manual(invocation, refs)
         try:
             event_type = EventType(invocation.trigger_type)
         except ValueError:
-            return []
+            return None
         if event_type is EventType.MANAGER_INSTRUCTION:
             return self._classify_manual(invocation, refs)
         route = EVENT_INITIAL_ROUTE[event_type]
