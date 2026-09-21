@@ -1,0 +1,14 @@
+{
+  "fixture_id": "synthetic-multiday-coverage-v1",
+  "catalogue_fixture": "seasonal_baseline_v3.json",
+  "issue_time": "2026-02-15T22:00:00+08:00",
+  "captured_revision": "fixture-capture-v1",
+  "decision_time": "22:00:00",
+  "occasion_policy": "FIXTURE_OPEN_AT_DECISION_PROTECT_NEXT_V1",
+  "max_horizon_days": 21,
+  "assumptions": "Explicit fixture only: order at 22:00 SGT, receipt next day 10:00, one service bucket 11:00-11:30, 30-day shelf life. No renewal supply is ordered. Not approved production calendar/policy.",
+  "daily_portions": {"chicken-rice": "10", "fried-rice": "10", "chicken-noodles": "0", "tofu-bowl": "0", "vegetable-noodles": "0"},
+  "opening": {"chicken": "1.5", "rice": "28", "noodles": "0", "eggs": "30", "tofu": "0", "vegetables": "0.5", "oil": "0.7", "soy-sauce": "0.7"},
+  "expected_required": {"chicken": "1.5", "rice": "28", "noodles": "0", "eggs": "30", "tofu": "0", "vegetables": "0.5", "oil": "0.7", "soy-sauce": "0.7"},
+  "expected_end": {"chicken": "2026-02-17T10:00:00+08:00", "rice": "2026-03-02T10:00:00+08:00", "oil": "2026-02-23T10:00:00+08:00"}
+}

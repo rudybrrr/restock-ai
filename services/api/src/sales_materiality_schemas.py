@@ -157,3 +157,14 @@ class SalesMaterialityAssessment(StrictModel):
     result: SalesMaterialityResult | None
     created_at: AwareDatetime
     completed_at: AwareDatetime | None
+
+
+class SalesMaterialityDisplay(StrictModel):
+    """Manager evidence without the full engine request or frozen operational state."""
+
+    run_id: str
+    request_reference: str
+    result_reference: str | None
+    created_at: AwareDatetime
+    completed_at: AwareDatetime | None
+    result: SalesMaterialityResult | None

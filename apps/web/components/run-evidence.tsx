@@ -2,8 +2,11 @@ import { Run } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
 import { ProcurementEvidence } from "./procurement-evidence";
 import { ManagerEvidencePanel } from "./manager-run-evidence";
+import { ChangeAssessments } from "./change-assessments";
 
 const explanations: Record<string, string> = {
+  CALCULATION_INCOMPLETE:
+    "The calculation could not be completed with the available evidence. Review missing inputs and required follow-up before deciding whether a purchase is needed.",
   MISSING_REQUIRED_DATA:
     "Required inputs are missing. A purchasing conclusion cannot be drawn from this assessment.",
   NO_FEASIBLE_SUPPLIER:
@@ -69,6 +72,10 @@ export function RunEvidence({ run }: { run: Run }) {
       </p>
       {snapshot?.procurement_contract && <ProcurementEvidence runId={run.id} />}
       <ManagerEvidencePanel runId={run.id} />
+      <ChangeAssessments
+        runId={run.id}
+        active={run.status === "QUEUED" || run.status === "RUNNING"}
+      />
     </section>
   );
 }

@@ -63,6 +63,7 @@ from src.procurement_contract_schemas import (
 from src.sales_materiality_schemas import (
     SalesMaterialityAssessment,
     SalesMaterialityContext,
+    SalesMaterialityDisplay,
     SalesMaterialityRequestCreate,
     SalesMaterialityResultWrite,
 )
@@ -238,6 +239,21 @@ def read_manager_run_evidence(run_id: str, session: SessionDep, manager: Manager
 
 
 @router.get(
+    "/manager/events/{event_id}/assessments", response_model=list[AssessmentTrigger]
+)
+def manager_event_assessments(event_id: str, session: SessionDep, manager: Manager):
+    return (
+        session.execute(
+            select(db.assessment_requests).where(
+                db.assessment_requests.c.event_id == event_id
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+@router.get(
     "/manager/procurement-policies", response_model=list[ProcurementPolicyVersion]
 )
 def list_manager_procurement_policies(session: SessionDep, manager: Manager):
@@ -266,6 +282,7 @@ def read_manager_procurement_policy(
         policy=contract.policy,
         domain=contract.domain,
         forecast_input=contract.forecast_input,
+        activity_semantics=contract.activity_semantics,
     )
 
 
@@ -288,7 +305,44 @@ def read_manager_run_procurement_evidence(
         policy=contract.policy,
         domain=contract.domain,
         forecast_input=contract.forecast_input,
+        activity_semantics=(
+            contract.activity_semantics if "activity_semantics" in value else None
+        ),
+        commitment_projection=contract.commitment_projection,
     )
+
+
+@router.get(
+    "/manager/runs/{run_id}/sales-materiality",
+    response_model=SalesMaterialityDisplay | None,
+)
+def read_manager_sales_materiality(run_id: str, session: SessionDep, manager: Manager):
+    planning.get_run(session, run_id)
+    try:
+        assessment = sales_materiality_contracts.read_assessment(session, run_id)
+    except ApiError as error:
+        if error.detail.code == "MATERIALITY_ASSESSMENT_NOT_FOUND":
+            return None
+        raise
+    return SalesMaterialityDisplay.model_validate(
+        assessment.model_dump(include=set(SalesMaterialityDisplay.model_fields))
+    )
+
+
+@router.get(
+    "/manager/runs/{run_id}/inventory-adjustment",
+    response_model=InventoryAdjustmentAssessment | None,
+)
+def read_manager_inventory_adjustment(
+    run_id: str, session: SessionDep, manager: Manager
+):
+    planning.get_run(session, run_id)
+    try:
+        return inventory_adjustment_contracts.read_assessment(session, run_id)
+    except ApiError as error:
+        if error.detail.code == "INVENTORY_ADJUSTMENT_ASSESSMENT_NOT_FOUND":
+            return None
+        raise
 
 
 @router.get(

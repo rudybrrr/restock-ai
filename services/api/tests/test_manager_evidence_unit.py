@@ -379,12 +379,30 @@ def test_manager_evidence_uses_canonical_contract_and_frozen_run(monkeypatch):
         response = client.get(listing + "/CASH_SLICE_V1/versions/1")
         assert response.status_code == 200, response.text
         read.assert_called_once_with(session, "CASH_SLICE_V1", 1)
-        assert set(response.json()) == {"policy", "domain", "forecast_input"}
+        assert set(response.json()) == {
+            "policy",
+            "domain",
+            "forecast_input",
+            "activity_semantics",
+            "commitment_projection",
+        }
         assert len(response.json()["domain"]["offers"]) == 24
         frozen = client.get("/api/v1/manager/runs/run-1/procurement-evidence")
         assert frozen.status_code == 200
         assert frozen.json() == response.json()
         assert "private_marker" not in frozen.text
+        historical = contract.model_dump(mode="json")
+        historical.pop("activity_semantics")
+        monkeypatch.setattr(
+            planning,
+            "get_run",
+            lambda *_: SimpleNamespace(snapshot={"procurement_contract": historical}),
+        )
+        historical_response = client.get(
+            "/api/v1/manager/runs/run-1/procurement-evidence"
+        )
+        assert historical_response.status_code == 200
+        assert historical_response.json()["activity_semantics"] is None
         monkeypatch.setattr(
             planning, "get_run", lambda *_: SimpleNamespace(snapshot={})
         )
@@ -401,3 +419,55 @@ def test_manager_evidence_uses_canonical_contract_and_frozen_run(monkeypatch):
             client.get("/api/v1/manager/runs/run-1/procurement-evidence").status_code
             == 403
         )
+
+
+def test_manager_assessment_empty_states_and_access(monkeypatch):
+    from src import (
+        inventory_adjustment_contracts,
+        planning,
+        sales_materiality_contracts,
+    )
+    from src.errors import ApiError
+
+    monkeypatch.setattr(planning, "get_run", Mock(return_value=SimpleNamespace()))
+    readers = [
+        (
+            sales_materiality_contracts,
+            "sales-materiality",
+            "MATERIALITY_ASSESSMENT_NOT_FOUND",
+        ),
+        (
+            inventory_adjustment_contracts,
+            "inventory-adjustment",
+            "INVENTORY_ADJUSTMENT_ASSESSMENT_NOT_FOUND",
+        ),
+    ]
+    app = create_app(Settings(database_url="sqlite://"))
+    app.dependency_overrides[get_session] = lambda: Mock()
+    app.dependency_overrides[auth.authenticate] = lambda: Identity(
+        role="manager", username="manager"
+    )
+    with TestClient(app) as client:
+        for module, path, code in readers:
+            read = Mock(side_effect=ApiError(404, code, "No saved result"))
+            monkeypatch.setattr(module, "read_assessment", read)
+            url = f"/api/v1/manager/runs/run-1/{path}"
+            response = client.get(url)
+            assert response.status_code == 200
+            assert response.json() is None
+            read.side_effect = ApiError(409, "INVALID_EVIDENCE", "Evidence mismatch")
+            assert client.get(url).status_code == 409
+            app.dependency_overrides[auth.authenticate] = lambda: Identity(
+                role="agent", username="agent"
+            )
+            assert client.get(url).status_code == 403
+            app.dependency_overrides[auth.authenticate] = lambda: Identity(
+                role="manager", username="manager"
+            )
+        monkeypatch.setattr(
+            planning,
+            "get_run",
+            Mock(side_effect=ApiError(404, "NOT_FOUND", "Unknown run")),
+        )
+        for _, path, _ in readers:
+            assert client.get(f"/api/v1/manager/runs/missing/{path}").status_code == 404

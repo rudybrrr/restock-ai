@@ -1,0 +1,452 @@
+{
+  "catalogue_sha256": "0704fa2f1658e140d9cc5fd1f090f64d094d14403d698da97d5ea22ea8e0e3da",
+  "recipe_sha256": "12a039e95453255236a9d49f7514e42188c63811ebe032e111662a16168098af",
+  "fefo_policy": "FEFO_EXPIRY_RECEIVED_LOT_ID_V1",
+  "event_policy": "EXPIRY_LOSS_SALE_RECEIPT_CANCEL_V1",
+  "fixture_id": "physical-seven-days-v1-synthetic",
+  "scenario_version": "PHYSICAL_SCENARIO_V1",
+  "timezone": "Asia/Singapore",
+  "scenario_event_policy": "EXPIRY_PLACEMENT_LOSS_SALE_RECEIPT_CANCEL_DISPOSAL_COUNT_V1",
+  "start": "2026-02-16T00:00:00+08:00",
+  "end": "2026-02-23T00:00:00+08:00",
+  "opening_available_at": "2026-02-16T00:05:00+08:00",
+  "days": [
+    {
+      "target_date": "2026-02-16",
+      "profile": [
+        {
+          "start": "2026-02-16T11:00:00+08:00",
+          "end": "2026-02-16T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-16T17:00:00+08:00",
+          "end": "2026-02-16T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-16T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-17",
+      "profile": [
+        {
+          "start": "2026-02-17T11:00:00+08:00",
+          "end": "2026-02-17T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-17T17:00:00+08:00",
+          "end": "2026-02-17T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-17T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-18",
+      "profile": [
+        {
+          "start": "2026-02-18T11:00:00+08:00",
+          "end": "2026-02-18T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-18T17:00:00+08:00",
+          "end": "2026-02-18T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-18T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-19",
+      "profile": [
+        {
+          "start": "2026-02-19T11:00:00+08:00",
+          "end": "2026-02-19T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-19T17:00:00+08:00",
+          "end": "2026-02-19T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-19T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-20",
+      "profile": [
+        {
+          "start": "2026-02-20T11:00:00+08:00",
+          "end": "2026-02-20T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-20T17:00:00+08:00",
+          "end": "2026-02-20T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-20T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-21",
+      "profile": [
+        {
+          "start": "2026-02-21T11:00:00+08:00",
+          "end": "2026-02-21T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-21T17:00:00+08:00",
+          "end": "2026-02-21T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-21T22:05:00+08:00"
+    },
+    {
+      "target_date": "2026-02-22",
+      "profile": [
+        {
+          "start": "2026-02-22T11:00:00+08:00",
+          "end": "2026-02-22T14:00:00+08:00",
+          "weight": ".4"
+        },
+        {
+          "start": "2026-02-22T17:00:00+08:00",
+          "end": "2026-02-22T21:00:00+08:00",
+          "weight": ".6"
+        }
+      ],
+      "batch_reporting_delay_seconds": 60,
+      "daily_available_at": "2026-02-22T22:05:00+08:00"
+    }
+  ],
+  "opening_lots": [
+    {
+      "id": "chicken-opening",
+      "ingredient_id": "chicken",
+      "unit": "kg",
+      "initial_quantity": ".600",
+      "quantity": ".600",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T00:00:00+08:00",
+      "expiry_date": "2026-02-16"
+    },
+    {
+      "id": "rice-opening",
+      "ingredient_id": "rice",
+      "unit": "kg",
+      "initial_quantity": "3.000",
+      "quantity": "3.000",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T00:00:00+08:00",
+      "expiry_date": "2026-02-28"
+    },
+    {
+      "id": "soy-opening",
+      "ingredient_id": "soy-sauce",
+      "unit": "litres",
+      "initial_quantity": "1.000",
+      "quantity": "1.000",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T00:00:00+08:00",
+      "expiry_date": "2026-02-28"
+    },
+    {
+      "id": "veg-old",
+      "ingredient_id": "vegetables",
+      "unit": "kg",
+      "initial_quantity": ".100",
+      "quantity": ".100",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T00:00:00+08:00",
+      "expiry_date": "2026-02-15"
+    },
+    {
+      "id": "veg-fresh",
+      "ingredient_id": "vegetables",
+      "unit": "kg",
+      "initial_quantity": ".200",
+      "quantity": ".200",
+      "received_at": "2026-02-15T08:00:00+08:00",
+      "counted_at": "2026-02-16T00:00:00+08:00",
+      "expiry_date": "2026-02-17"
+    }
+  ],
+  "opening_manifest": {
+    "chicken": [
+      "chicken-opening"
+    ],
+    "rice": [
+      "rice-opening"
+    ],
+    "noodles": [],
+    "eggs": [],
+    "tofu": [],
+    "vegetables": [
+      "veg-old",
+      "veg-fresh"
+    ],
+    "oil": [],
+    "soy-sauce": [
+      "soy-opening"
+    ]
+  },
+  "commitments": [
+    {
+      "id": "opening-chicken",
+      "supplier_id": "fresh",
+      "ingredient_id": "chicken",
+      "kind": "NORMAL",
+      "expected_quantity": "1.500",
+      "received_quantity": ".600",
+      "cancelled_quantity": "0",
+      "outstanding_quantity": ".900",
+      "ordered_at": "2026-02-14T22:00:00+08:00",
+      "expected_at": "2026-02-16T09:00:00+08:00",
+      "receipts": [
+        {
+          "id": "prior-receipt",
+          "delivery_id": "opening-chicken",
+          "lot_id": "chicken-opening",
+          "request_id": "prior-receipt-slip",
+          "quantity": ".600",
+          "received_at": "2026-02-15T08:00:00+08:00",
+          "expiry_date": "2026-02-16",
+          "remainder": "EXPECTED"
+        }
+      ],
+      "source_validation": "MANUAL"
+    }
+  ],
+  "purchases": [
+    {
+      "delivery": {
+        "id": "contingency-chicken",
+        "supplier_id": "fresh",
+        "ingredient_id": "chicken",
+        "kind": "NORMAL",
+        "expected_quantity": ".900",
+        "received_quantity": "0",
+        "cancelled_quantity": "0",
+        "outstanding_quantity": ".900",
+        "ordered_at": "2026-02-18T12:30:00+08:00",
+        "expected_at": "2026-02-18T17:00:00+08:00",
+        "receipts": [],
+        "source_validation": "MANUAL"
+      },
+      "available_at": "2026-02-18T12:35:00+08:00"
+    }
+  ],
+  "receipts": [
+    {
+      "receipt": {
+        "id": "partial-overnight",
+        "delivery_id": "opening-chicken",
+        "lot_id": "chicken-partial",
+        "request_id": "partial-overnight-slip",
+        "quantity": ".450",
+        "received_at": "2026-02-17T01:00:00+08:00",
+        "expiry_date": "2026-02-18",
+        "remainder": "EXPECTED"
+      },
+      "available_at": "2026-02-17T01:05:00+08:00"
+    },
+    {
+      "receipt": {
+        "id": "contingency-first",
+        "delivery_id": "contingency-chicken",
+        "lot_id": "chicken-new",
+        "request_id": "contingency-first-slip",
+        "quantity": ".600",
+        "received_at": "2026-02-19T01:00:00+08:00",
+        "expiry_date": "2026-02-22",
+        "remainder": "EXPECTED"
+      },
+      "available_at": "2026-02-19T01:05:00+08:00"
+    },
+    {
+      "receipt": {
+        "id": "contingency-rest",
+        "delivery_id": "contingency-chicken",
+        "lot_id": "chicken-last",
+        "request_id": "contingency-rest-slip",
+        "quantity": ".300",
+        "received_at": "2026-02-22T01:00:00+08:00",
+        "expiry_date": "2026-02-24",
+        "remainder": "EXPECTED"
+      },
+      "available_at": "2026-02-22T01:05:00+08:00"
+    }
+  ],
+  "cancellations": [
+    {
+      "id": "cancel-opening-rest",
+      "delivery_id": "opening-chicken",
+      "at": "2026-02-18T08:00:00+08:00",
+      "available_at": "2026-02-18T08:05:00+08:00",
+      "quantity": ".450"
+    }
+  ],
+  "hidden_losses": [
+    {
+      "id": "hidden-chicken",
+      "at": "2026-02-20T07:00:00+08:00",
+      "lot_id": "chicken-new",
+      "quantity": ".150"
+    },
+    {
+      "id": "hidden-rice",
+      "at": "2026-02-20T07:00:00+08:00",
+      "lot_id": "rice-opening",
+      "quantity": ".200"
+    }
+  ],
+  "disposals": [
+    {
+      "id": "dispose-expired-chicken",
+      "at": "2026-02-21T08:00:00+08:00",
+      "available_at": "2026-02-21T08:05:00+08:00",
+      "lot_id": "chicken-opening",
+      "quantity": ".100",
+      "pool": "EXPIRED"
+    }
+  ],
+  "counts": [
+    {
+      "id": "count-16",
+      "at": "2026-02-16T22:00:00+08:00",
+      "available_at": "2026-02-16T22:05:00+08:00"
+    },
+    {
+      "id": "count-17",
+      "at": "2026-02-17T22:00:00+08:00",
+      "available_at": "2026-02-17T22:05:00+08:00"
+    },
+    {
+      "id": "count-18",
+      "at": "2026-02-18T22:00:00+08:00",
+      "available_at": "2026-02-18T22:05:00+08:00"
+    },
+    {
+      "id": "count-19",
+      "at": "2026-02-19T22:00:00+08:00",
+      "available_at": "2026-02-19T22:05:00+08:00"
+    },
+    {
+      "id": "count-20",
+      "at": "2026-02-20T22:00:00+08:00",
+      "available_at": "2026-02-20T22:05:00+08:00"
+    },
+    {
+      "id": "count-21",
+      "at": "2026-02-21T22:00:00+08:00",
+      "available_at": "2026-02-21T22:05:00+08:00"
+    },
+    {
+      "id": "count-22",
+      "at": "2026-02-22T22:00:00+08:00",
+      "available_at": "2026-02-22T22:05:00+08:00"
+    }
+  ],
+  "orders": [
+    {
+      "id": "order-16-0",
+      "at": "2026-02-16T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-16-1",
+      "at": "2026-02-16T11:10:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 1,
+      "unit_price": "5.00",
+      "promotion_reference": "synthetic-pair-v1"
+    },
+    {
+      "id": "order-17-0",
+      "at": "2026-02-17T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-18-0",
+      "at": "2026-02-18T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 1,
+      "unit_price": "5.00",
+      "promotion_reference": "synthetic-pair-v1"
+    },
+    {
+      "id": "order-18-1",
+      "at": "2026-02-18T11:10:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-19-0",
+      "at": "2026-02-19T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-19-1",
+      "at": "2026-02-19T11:10:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 1,
+      "unit_price": "5.00",
+      "promotion_reference": "synthetic-pair-v1"
+    },
+    {
+      "id": "order-20-0",
+      "at": "2026-02-20T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-20-1",
+      "at": "2026-02-20T11:10:00+08:00",
+      "menu_item_id": "tofu-bowl",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    },
+    {
+      "id": "order-22-0",
+      "at": "2026-02-22T11:05:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 1,
+      "unit_price": "5.00",
+      "promotion_reference": "synthetic-pair-v1"
+    },
+    {
+      "id": "order-22-1",
+      "at": "2026-02-22T11:10:00+08:00",
+      "menu_item_id": "chicken-rice",
+      "free_portions": 0,
+      "unit_price": "5.00",
+      "promotion_reference": null
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import {
   useServiceDate,
 } from "@/components/workspace";
 import { SalesEntry } from "@/components/sales-entry";
+import { ChangeHistory } from "@/components/change-events";
 
 export default function DailyPage() {
   const { day } = useServiceDate();
@@ -36,7 +37,10 @@ export default function DailyPage() {
         ))}
       </div>
       {tab === "Closing update" ? (
-        <DailyEditor key={day} day={day} />
+        <>
+          <DailyEditor key={day} day={day} />
+          <ChangeHistory key={`corrections-${day}`} day={day} />
+        </>
       ) : (
         <SalesEntry key={day} day={day} />
       )}

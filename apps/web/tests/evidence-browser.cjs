@@ -37,6 +37,41 @@ const policy = {
 };
 const evidence = {
   policy,
+  activity_semantics: {
+    version: "FORECAST_ACTIVITY_V1",
+    baseline_history_mode: "VERSIONED_FORECAST_INPUT_IMMUTABLE",
+    intraday_sales_mode: "INVENTORY_ESTIMATE_AND_REASSESSMENT_ONLY",
+    closing_sales_mode: "LATEST_DAILY_REVISION_AUTHORITATIVE",
+    reconciliation_mode: "COMPARE_NEVER_ADD",
+  },
+  commitment_projection: {
+    complete: true,
+    as_of: at("08:00"),
+    known_at: at("08:00"),
+    captured_state_revision: "42",
+    findings: [],
+    supplies: [
+      {
+        delivery: {
+          id: "delivery-fixed",
+          ingredient_id: "chicken",
+          supplier_id: "fresh",
+          expected_quantity: "10.000",
+          received_quantity: "2.000",
+          cancelled_quantity: "3.000",
+          outstanding_quantity: "5.000",
+          expected_at: at("10:00"),
+        },
+        expiry_date: "2026-02-20",
+        projected_lot_id: "projected-delivery:delivery-fixed",
+        expiry_evidence: {
+          reference: "frozen-offer-expiry",
+          available_at: at("08:00"),
+          captured_revision: "42",
+        },
+      },
+    ],
+  },
   domain: {
     id: "domain",
     domain_id: "TEST_DOMAIN",
@@ -297,6 +332,7 @@ const managerEvidence = {
     },
   ],
 };
+let savedResult = null;
 async function main() {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   const page = await browser.newPage({
@@ -331,6 +367,51 @@ async function main() {
         source: "simulator",
         payload: { batch },
       }));
+    if (path === "/events")
+      body.push({
+        id: "correction-1",
+        type: "INVENTORY_ADJUSTED",
+        timestamp: at("09:00"),
+        source: "manager",
+        payload: {
+          day: "2026-02-16",
+          effective_at: at("08:00"),
+          revision_id: "count-2",
+          replaces_revision_id: "count-1",
+          adjustments: [
+            {
+              ingredient_id: "chicken",
+              lot_id: "lot-1",
+              unit: "kg",
+              previous_quantity: "12.000",
+              corrected_quantity: "9.000",
+              delta: "-3.000",
+            },
+          ],
+        },
+      });
+    if (path === "/manager/events/correction-1/assessments")
+      body = [{ run_id: "run-1" }];
+    if (path === "/events")
+      body.push({
+        id: "delay-1",
+        type: "DELIVERY_DELAYED",
+        timestamp: at("09:00"),
+        source: "manager",
+        payload: {
+          effective_at: at("08:30"),
+          delivery: {
+            id: "delivery-fixed",
+            expected_at: at("13:00"),
+            expected_quantity: "10.000",
+            outstanding_quantity: "5.000",
+            cancelled_quantity: "3.000",
+          },
+        },
+      });
+    if (path === "/manager/events/delay-1/assessments")
+      body = [{ run_id: "run-delay" }];
+    if (path === "/manager/runs/run-1/procurement-evidence") body = evidence;
     if (path === "/inventory/estimated")
       body = [
         {
@@ -382,6 +463,24 @@ async function main() {
         },
       ];
     if (path === "/manager/runs/run-1/evidence") body = managerEvidence;
+    if (path === "/manager/runs/run-1/sales-materiality")
+      body = {
+        result_reference: null,
+        completed_at: null,
+        result: savedResult,
+      };
+    if (path === "/manager/runs/run-1/inventory-adjustment") body = null;
+    if (path === "/runs/run-1")
+      body = {
+        id: "run-1",
+        status: "SUCCEEDED",
+        trigger: "MANUAL",
+        as_of: at("08:00"),
+        created_at: at("08:00"),
+        input_revision: 42,
+        outcome: "CALCULATION_INCOMPLETE",
+        snapshot: { procurement_contract: { captured_state_revision: "42" } },
+      };
     if (path === "/plans/missing-version") {
       status = 404;
       body = {
@@ -495,6 +594,42 @@ async function main() {
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/activity");
+    await page
+      .locator("summary")
+      .filter({ hasText: "delivery delayed" })
+      .click();
+    assert.equal(
+      await page
+        .getByRole("link", { name: "Open assessment run-delay →", exact: true })
+        .getAttribute("href"),
+      "/workspace/activity/run-delay",
+    );
+    await page
+      .getByText(/delivery delayed · recorded by manager · expected arrival/)
+      .waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: "inventory adjusted" })
+      .click();
+    await page.getByRole("cell", { name: "-3.000 kg", exact: true }).waitFor();
+    await page
+      .getByRole("link", { name: "Open assessment run-1 →", exact: true })
+      .click();
+    await page
+      .getByRole("heading", { name: "Purchases already accounted for" })
+      .waitFor();
+    await page.getByRole("cell", { name: "5.000", exact: true }).waitFor();
+    await page
+      .getByText(
+        "Closing totals are compared with intraday reports for reconciliation; the two are never added together.",
+        { exact: true },
+      )
+      .waitFor();
+    await page.getByText("Purchase evidence", { exact: true }).click();
+    await page
+      .getByText("Expiry source: frozen-offer-expiry", { exact: true })
+      .waitFor();
+    await page.goto(base + "/workspace/activity");
     await page.getByRole("tab", { name: "Assessments", exact: true }).click();
     await page.locator("details").first().locator("summary").first().click();
     await page.getByText("42", { exact: true }).waitFor();
@@ -516,6 +651,112 @@ async function main() {
       "older-version",
     );
     assert(paths.includes("/plans/older-version"));
+    await page.goto(base + "/workspace/activity/run-1");
+    await page
+      .getByRole("heading", { name: "Review this assessment." })
+      .waitFor();
+    await page.getByText("CALCULATION_INCOMPLETE", { exact: true }).waitFor();
+    await page
+      .getByText("Sales and stock-correction assessments", { exact: true })
+      .click();
+    await page
+      .getByText("Calculation requested; result has not been recorded.", {
+        exact: true,
+      })
+      .waitFor();
+    await page
+      .getByText("No assessment recorded for this run.", { exact: true })
+      .waitFor();
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        `Assessment overflow at ${width}`,
+      );
+    }
+    await page.screenshot({
+      path: "test-results/assessment-wide.png",
+      fullPage: true,
+    });
+    savedResult = {
+      complete: false,
+      material_change: null,
+      inventory_feasible: null,
+      as_of: at("09:00"),
+      known_at: at("09:00"),
+      captured_state_revision: "42",
+      findings: [{ code: "MISSING_SALES_INTERVAL", source: "batch-gap" }],
+      required_follow_up: ["SUBMIT_MISSING_INTERVAL"],
+      evidence_refs: ["snapshot-42"],
+      sales: [
+        {
+          dish_id: "dish",
+          expected: "10",
+          observed: null,
+          deviation: null,
+          threshold: "0.2",
+          adequate_exposure: null,
+          material: null,
+        },
+      ],
+      missing_intervals: [[at("08:30"), at("09:00")]],
+      limitations: [],
+    };
+    await page.reload();
+    await page
+      .getByText("Sales and stock-correction assessments", { exact: true })
+      .click();
+    await page
+      .getByText(
+        "Assessment incomplete. The effect on the plan remains unresolved.",
+        { exact: true },
+      )
+      .waitFor();
+    await page.getByText("submit missing interval", { exact: true }).waitFor();
+    await page
+      .getByRole("cell", { name: "Unknown", exact: true })
+      .first()
+      .waitFor();
+    assert.equal(
+      await page
+        .getByText(/completed assessment found no material change/)
+        .count(),
+      0,
+    );
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        `Populated assessment overflow at ${width}`,
+      );
+    }
+    await page.screenshot({
+      path: "test-results/assessment-populated.png",
+      fullPage: true,
+    });
+    savedResult = {
+      ...savedResult,
+      complete: true,
+      material_change: false,
+      inventory_feasible: true,
+      findings: [],
+      missing_intervals: [],
+      required_follow_up: [],
+    };
+    await page.reload();
+    await page
+      .getByText("Sales and stock-correction assessments", { exact: true })
+      .click();
+    await page
+      .getByText(
+        "The completed assessment found no material change within its assessed scope.",
+        { exact: true },
+      )
+      .waitFor();
     assert.deepEqual(errors, []);
     console.log(
       "PASS: correction-aware totals, exact usage, overlap suppression, estimates, policy/domain/history display, mobile overflow, run evidence, exact-version failure, no agent token or writes.",

@@ -4,6 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { humanize, singaporeTime } from "@/lib/format";
 import { ErrorNotice } from "./workspace";
+import {
+  OperationalEvidence,
+  ActivitySemantics,
+  CommitmentProjection,
+} from "./operational-evidence";
 
 type Policy = {
   id: string;
@@ -38,6 +43,8 @@ type Policy = {
   };
 };
 type Evidence = {
+  activity_semantics?: ActivitySemantics | null;
+  commitment_projection?: CommitmentProjection | null;
   policy: Policy;
   domain: {
     id: string;
@@ -180,6 +187,11 @@ export function ProcurementEvidence({
         )}
         {data && payload && (
           <>
+            <OperationalEvidence
+              semantics={data.activity_semantics}
+              commitments={data.commitment_projection}
+              runId={runId}
+            />
             {!historyOnly && (
               <>
                 <h3>

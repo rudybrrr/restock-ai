@@ -177,6 +177,15 @@ def test_agent_round_trip_persists_exact_policy_request_result_and_gate(
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["result_sha256"]
+    manager_path = f"/api/v1/manager/runs/{run_id}/sales-materiality"
+    assert client.get(manager_path).status_code == 403
+    del client.headers["Authorization"]
+    displayed = client.get(manager_path)
+    assert displayed.status_code == 200
+    assert displayed.json()["result"] == saved.json()["result"]
+    assert "engine_request" not in displayed.json()
+    assert displayed.json()["result"]["material_change"] is None
+    use_agent(client)
     assert (
         client.put(
             f"/api/v1/runs/{run_id}/sales-materiality-requests/{body['request_id']}/result",
