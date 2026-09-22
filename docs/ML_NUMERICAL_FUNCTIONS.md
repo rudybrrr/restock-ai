@@ -1,5 +1,52 @@
 # ReStock numerical functions and development datasets
 
+## Contingency implementation boundary — 22 September 2026
+
+Implementation note recorded before source changes. Base: main `843efe59b8217d7ba23c15ff02fd5ad978a7720a`.
+Approved basis: v2 §§7, 8.1–8.6, 10 and T05–08/T11/T13/T16–20;
+v3 §§3, 5–8 overrides; issue #11's 22 September Backend handoff.
+Add `src/contingency.py`, focused tests and an explicit synthetic fixture.
+Reuse `project_multiday`, `ForecastVersion`, canonical catalogue/Delivery/offer
+models and procurement's exact cash primitives. Leave normal search guards intact.
+
+The numerical contract is `BOUNDED_CONTINGENCY_CASH_V1`, with
+`CONTINGENCY_CARTESIAN_V1` exhaustive finite search and
+`EXPLICIT_NEW_SHIPMENT_ONCE_V1` fee grouping. Existing FEFO, arrival shelf-life,
+supplier-first semantic ties and CONTEXT_ONLY reliability apply. All business
+values, windows, complete manifests and captured evidence are explicit inputs.
+The scope places additional orders at the decision instant, supports fixed
+commitments and residual multi-day forecasts, and returns independent validation,
+cash, dated risks and a diagnostic no-new-purchase comparison. No continuation,
+terminal credit, dish-loss inference or full economic ranking is supplied.
+
+Construction and evaluation count against the work limit; interruption has no
+actionable candidate. Tiny complete domains test partial/late/cancelled supply,
+splits, shared capacity, fees, safety/storage/budget, timing/expiry, exact arithmetic,
+semantic ties, tampering, missing evidence and external-recording reassessment.
+Backend NORMAL_ONLY, persistence and Agent adapters remain unchanged. The focused
+contract handoff specifies their mapping and pending live acceptance:
+[ML_CONTINGENCY_CONTRACT.md](ML_CONTINGENCY_CONTRACT.md).
+
+Implemented signatures: `search_contingency(p: ContingencyInputs) -> ContingencyResult`
+and `validate_contingency(p: ContingencyInputs, candidate: ContingencyCandidate)
+-> ContingencyValidation`. The complete argument table, supported caps, fee/timing
+semantics, typed result mapping and independent examples are in that single contract.
+`NoPurchase` preserves known earlier risk and later fixed arrivals; dish-level loss
+and full economics are unavailable. New cash does not include sunk commitments.
+
+Fresh Windows verification: 48 contingency tests passed; the full relevant numerical
+regression command passed **797 tests** in 34.09 seconds, two dependency warnings.
+Whole-API Ruff and Pyright passed. The numerical command covers contingency,
+multiday coverage, forecasting, requirements, service buckets, inventory projection,
+synthetic history (including service-profile correction), procurement, Pass 3E,
+promotion forecasting, materiality, sales policy and both physical simulators.
+`RESTOCK_TEST_TMP` was an absolute scratch directory outside the repository.
+Locked Linux Python 3.12 / isolated disposable PostgreSQL 18 full gate: **1,067
+passed**, 486.35s, two dependency warnings, zero failures. Linux whole-API
+Ruff/Pyright and changed-Python formatting passed; exact source/test/fixture hashes
+match the executed snapshot. No waiver, operational database mutation or live
+contingency integration claim. `git diff --check` passed.
+
 ## Ingredient-specific multi-day coverage and projection — 20 September 2026
 
 Approved basis: v2 §§6.1, 7, 8.1 and T05/T11/T17, with v3 §§3, 5–8 overrides.
