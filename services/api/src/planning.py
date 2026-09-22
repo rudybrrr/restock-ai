@@ -1173,6 +1173,28 @@ def complete_run(
     return get_run(session, run_id)
 
 
+def fail_run(session: Session, run_id: str, failure_reason: str) -> PlanningRun:
+    """Persist an operational failure for a claimed run without inventing a completion."""
+
+    lock_inventory(session)
+    run = get_run(session, run_id)
+    if run.status == "FAILED":
+        return run
+    if run.status != "RUNNING":
+        raise ApiError(409, "RUN_NOT_RUNNING", "Only a claimed assessment can fail")
+    session.execute(
+        update(db.planning_runs)
+        .where(db.planning_runs.c.id == run_id)
+        .values(
+            status="FAILED",
+            failure_reason=failure_reason,
+            completed_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+    return get_run(session, run_id)
+
+
 def _persist_agent_audit(
     session: Session,
     run: PlanningRun,
@@ -1235,6 +1257,7 @@ def _canonical_plan_version(
         raise ApiError(409, "PLAN_INVALID", "Published plan has no candidate reference")
     revision = completion.captured_state_revision
     return CanonicalPurchasePlanVersion(
+        id=stored.id,
         plan_id=stored.plan_id,
         version=stored.version,
         status=stored.status,

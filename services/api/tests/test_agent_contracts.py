@@ -53,6 +53,7 @@ def evidence(
 
 def plan_version(status: PlanStatus = PlanStatus.PENDING_APPROVAL) -> PurchasePlanVersion:
     return PurchasePlanVersion(
+        id="PLAN-VERSION-1",
         plan_id="PLAN-1",
         version=1,
         status=status,

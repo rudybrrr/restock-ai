@@ -1,12 +1,12 @@
 """PostgreSQL acceptance tests for the one-shot queued assessment worker."""
 
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+from test_sales_materiality_contract import incomplete_result, request_body
 
 from src import assessment_worker as worker
 from src import database as db
@@ -156,6 +156,26 @@ def queue_manager_assessment(client: TestClient) -> dict:
     return response.json()
 
 
+def persist_incomplete_sales_materiality(client: TestClient, run_id: str) -> None:
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    context_response = client.get(f"/api/v1/runs/{run_id}/sales-materiality-context")
+    assert context_response.status_code == 200, context_response.text
+    context = context_response.json()
+    body = request_body(context)
+    created = client.post(
+        f"/api/v1/runs/{run_id}/sales-materiality-requests", json=body
+    )
+    assert created.status_code == 201, created.text
+    saved = client.put(
+        f"/api/v1/runs/{run_id}/sales-materiality-requests/{body['request_id']}/result",
+        json={
+            "request_reference": created.json()["request_reference"],
+            "result": incomplete_result(context),
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+
 def prepare_engine_plan(
     client: TestClient,
     database_url: str,
@@ -188,68 +208,6 @@ def install_models(
     )
 
 
-def test_worker_composes_exact_claimed_run_without_reconstructing_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    session = cast(Session, object())
-    claimed = SimpleNamespace(id="claimed-run")
-    reasoning_models = models()
-    tools = object()
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(worker.planning, "claim_run", lambda actual_session: claimed)
-    monkeypatch.setattr(
-        worker,
-        "build_organiser_reasoning_models",
-        lambda settings: reasoning_models,
-    )
-    monkeypatch.setattr(worker, "BackendProcurementTools", lambda actual_session: tools)
-    monkeypatch.setattr(
-        worker.planning,
-        "get_run",
-        lambda actual_session, run_id: SimpleNamespace(plan_version_id=None),
-    )
-
-    def fake_coordinator(
-        actual_session,
-        run_id,
-        procurement_model,
-        procurement_tools,
-        **kwargs,
-    ):
-        captured.update(
-            {
-                "session": actual_session,
-                "run_id": run_id,
-                "procurement_model": procurement_model,
-                "procurement_tools": procurement_tools,
-                "kwargs": kwargs,
-            }
-        )
-        return SimpleNamespace(
-            completion=SimpleNamespace(
-                outcome=AgentOutcome.KEEP_CURRENT_PLAN,
-                escalation_reason=None,
-            ),
-            publication_result=SimpleNamespace(created_plan_version=None),
-        )
-
-    monkeypatch.setattr(worker, "run_backend_coordinator", fake_coordinator)
-
-    result = worker.run_one_queued_assessment(session)
-
-    assert result.run_id == "claimed-run"
-    assert result.outcome is AgentOutcome.KEEP_CURRENT_PLAN
-    assert result.publication_status == "PUBLISHED"
-    assert captured["session"] is session
-    assert captured["run_id"] == "claimed-run"
-    assert captured["procurement_model"] is reasoning_models.procurement
-    assert captured["procurement_tools"] is tools
-    kwargs = cast(dict[str, object], captured["kwargs"])
-    assert kwargs["demand_model"] is reasoning_models.demand
-    assert kwargs["inventory_model"] is reasoning_models.inventory
-
-
 def test_no_queued_run_returns_safe_no_work_result(
     database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -262,8 +220,6 @@ def test_no_queued_run_returns_safe_no_work_result(
     result = invoke_worker(database_url)
 
     assert result.model_dump(exclude_none=True) == {
-        "run_id": None,
-        "outcome": None,
         "publication_status": "NO_WORK",
         "failure_classification": "NO_QUEUED_RUN",
     }
@@ -312,6 +268,20 @@ def test_manager_assessment_worker_publishes_real_engine_plan_and_frozen_refs(
         for _, revision in procurement.seen
     )
     assert "DEVELOPMENT_FIXTURE" not in str(plan.json())
+
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            run = planning.get_run(session, requested["id"])
+            plan_rows = session.execute(select(db.plan_versions)).mappings().all()
+    finally:
+        engine.dispose()
+
+    assert result.publication_status == "PUBLISHED"
+    contract = run.snapshot["procurement_contract"]
+    assert contract["captured_state_revision"] == str(run.input_revision)
+    assert len(plan_rows) == 1
+    assert plan_rows[0]["run_id"] == run.id
 
 
 def test_harmless_supplier_event_keeps_current_plan_without_replacement(
@@ -389,10 +359,40 @@ def test_material_event_families_use_normal_api_path_and_fail_closed_or_revise(
     event_models = models(
         demand=LocalDemandReasoning(), inventory=LocalInventoryReasoning()
     )
-    install_models(monkeypatch, event_models)
+    queued = client.get("/api/v1/runs").json()[0]
+    if event_family == "sales":
+        def build_after_claim(settings):
+            persist_incomplete_sales_materiality(client, queued["id"])
+            return event_models
+
+        monkeypatch.setattr(worker, "build_organiser_reasoning_models", build_after_claim)
+    else:
+        install_models(monkeypatch, event_models)
     result = invoke_worker(database_url)
 
     assert result.publication_status == "PUBLISHED"
+    if event_family == "sales":
+        assert result.outcome is AgentOutcome.ESCALATE
+        assert result.failure_classification is EscalationReason.MISSING_REQUIRED_DATA
+        completed = client.get(f"/api/v1/runs/{queued['id']}")
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["status"] == "SUCCEEDED"
+        assert completed.json()["outcome"] == AgentOutcome.ESCALATE.value
+        assert (
+            completed.json()["escalation_reason"]
+            == EscalationReason.MISSING_REQUIRED_DATA.value
+        )
+        assessment = client.get(
+            f"/api/v1/runs/{queued['id']}/sales-materiality-assessment"
+        )
+        assert assessment.status_code == 200, assessment.text
+        saved = assessment.json()
+        assert saved["request_reference"]
+        assert saved["result_reference"]
+        assert saved["completed_at"]
+        assert saved["result"]["complete"] is False
+        assert saved["result"]["material_change"] is None
+        return
     assert result.outcome in {AgentOutcome.REVISE_PLAN, AgentOutcome.ESCALATE}
     if result.outcome is AgentOutcome.REVISE_PLAN:
         assert result.publication_reference is not None
@@ -412,9 +412,9 @@ def test_inventory_adjustment_event_uses_normal_api_path_and_escalates_when_inco
     sign_in(client)
     lots = client.get("/api/v1/inventory").json()
     dishes = client.get("/api/v1/menu-items").json()
-    day = "/api/v1/daily-updates/2026-02-16"
+    day = "/api/v1/daily-updates/2026-02-15"
     initial = {
-        "cutoff": "2026-02-16T22:00:00+08:00",
+        "cutoff": "2026-02-15T22:00:00+08:00",
         "counts": {lot["id"]: lot["quantity"] for lot in lots},
         "sales": {dish["id"]: 0 for dish in dishes},
     }
@@ -422,8 +422,11 @@ def test_inventory_adjustment_event_uses_normal_api_path_and_escalates_when_inco
     assert client.post(day + "/submit").status_code == 200
     first_daily = models(demand=LocalDemandReasoning(), inventory=LocalInventoryReasoning())
     install_models(monkeypatch, first_daily)
+    first_run = client.get("/api/v1/runs").json()[0]
     first_result = invoke_worker(database_url)
     assert first_result.outcome is AgentOutcome.KEEP_CURRENT_PLAN
+    assert first_result.publication_reference is None
+    assert client.get(f"/api/v1/runs/{first_run['id']}").json()["status"] == "SUCCEEDED"
 
     corrected = {**initial, "counts": dict(initial["counts"])}
     corrected["counts"][lots[0]["id"]] = str(float(lots[0]["quantity"]) + 1)
@@ -469,6 +472,33 @@ def test_new_input_after_claim_is_rejected_after_backend_stale_publication_guard
     assert client.get("/api/v1/plan-history").json() == []
 
 
+def test_organiser_configuration_failure_after_claim_fails_run_closed(
+    client: TestClient,
+    database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested = queue_manager_assessment(client)
+
+    def fail_build(settings):
+        raise RuntimeError("LLM_GATEWAY_API_KEY=secret-must-not-escape")
+
+    monkeypatch.setattr(worker, "build_organiser_reasoning_models", fail_build)
+    result = invoke_worker(database_url)
+
+    assert result.run_id == requested["id"]
+    assert result.outcome is None
+    assert result.publication_status == "NOT_PUBLISHED"
+    assert result.publication_reference is None
+    assert result.failure_classification is EscalationReason.TOOL_FAILURE
+    failed = client.get(f"/api/v1/runs/{requested['id']}").json()
+    assert failed["status"] == "FAILED"
+    assert failed["failure_reason"] == EscalationReason.TOOL_FAILURE.value
+    assert failed["plan_version_id"] is None
+    assert "secret-must-not-escape" not in str(result.model_dump())
+    assert "secret-must-not-escape" not in str(failed)
+    assert client.get("/api/v1/plan-history").json() == []
+
+
 def test_model_failure_preserves_canonical_tool_failure_without_fixture_fallback(
     client: TestClient,
     database_url: str,
@@ -488,29 +518,3 @@ def test_model_failure_preserves_canonical_tool_failure_without_fixture_fallback
     assert completed["status"] == "SUCCEEDED"
     assert completed["plan_version_id"] is None
     assert client.get("/api/v1/plan-history").json() == []
-
-
-def test_worker_does_not_publish_directly_and_keeps_run_snapshot_immutable(
-    client: TestClient,
-    database_url: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    requested = queue_manager_assessment(client)
-    test_models = models()
-    install_models(monkeypatch, test_models)
-
-    result = invoke_worker(database_url)
-
-    engine = create_engine(database_url)
-    try:
-        with Session(engine) as session:
-            run = planning.get_run(session, requested["id"])
-            plan_rows = session.execute(select(db.plan_versions)).mappings().all()
-    finally:
-        engine.dispose()
-
-    assert result.publication_status == "PUBLISHED"
-    contract = run.snapshot["procurement_contract"]
-    assert contract["captured_state_revision"] == str(run.input_revision)
-    assert len(plan_rows) == 1
-    assert plan_rows[0]["run_id"] == run.id

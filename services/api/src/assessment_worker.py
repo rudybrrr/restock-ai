@@ -79,7 +79,16 @@ def run_one_queued_assessment(
             return _no_work_result()
         raise
 
-    reasoning_models = build_organiser_reasoning_models(settings)
+    try:
+        reasoning_models = build_organiser_reasoning_models(settings)
+    except Exception:  # noqa: BLE001 - configuration failures must close the claim safely
+        planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
+        return QueuedAssessmentWorkerResult(
+            run_id=claimed.id,
+            outcome=None,
+            publication_status="NOT_PUBLISHED",
+            failure_classification=EscalationReason.TOOL_FAILURE,
+        )
     try:
         execution = run_backend_coordinator(
             session,
@@ -99,12 +108,16 @@ def run_one_queued_assessment(
         )
 
     publication = execution.publication_result
-    persisted = planning.get_run(session, claimed.id)
+    created_plan_version = (
+        publication.created_plan_version if publication is not None else None
+    )
     return QueuedAssessmentWorkerResult(
         run_id=claimed.id,
         outcome=execution.completion.outcome,
         publication_status="PUBLISHED" if publication is not None else "NOT_PUBLISHED",
-        publication_reference=persisted.plan_version_id,
+        publication_reference=(
+            created_plan_version.id if created_plan_version is not None else None
+        ),
         failure_classification=execution.completion.escalation_reason,
     )
 
