@@ -329,6 +329,7 @@ line. `GET /plans/{version_id}/lines` exposes `linked_quantity` and
 `uncommitted_quantity`; record actual deviations with no `source_plan_line_id`.
 
 See the [shared integration contract](../../docs/SHARED_INTEGRATION_CONTRACT.md)
-before connecting the real engine or Agent. The first-slice policy, domain, fee
-grouping and Backend sales-materiality exchange are frozen; the real Agent call,
-full plan publication and contingency acceptance still need teammate integration.
+when connecting the application worker. The first-slice policy, domain, fee
+grouping, deterministic engine adapter, local Coordinator publication, and Backend
+materiality exchanges are merged. Automatic worker execution, live-provider proof,
+and contingency acceptance still need teammate integration.

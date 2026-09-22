@@ -5,8 +5,9 @@ available daily-update and delivery APIs. Start PostgreSQL, apply migrations, se
 as described in [README.md](README.md), then open [Swagger UI](http://localhost:8000/docs).
 
 For promotion/supplier changes, sales reconciliation, plan decisions and ordering occasions, see the
-[current backend handover](../../docs/BACKEND_HANDOVER.md). The ML/agent implementation is deferred to
-teammates. The optional development calculator is explicitly labelled and is not the final optimiser.
+[current backend handover](../../docs/BACKEND_HANDOVER.md). The deterministic ML modules and local Agent
+control plane are merged. Queued application assessments still need the pending worker to invoke that path.
+The optional development calculator remains a separate, explicitly labelled workflow fixture.
 
 ## Configure test credentials
 

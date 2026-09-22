@@ -1,6 +1,6 @@
 # Backend handover
 
-The backend owner is the first contributor. On 2026-09-12 the owner explicitly deferred ML and OpenClaw implementation to teammates. This document separates the working backend from that integration work; it does not declare tickets 1–8 fully complete.
+The backend owner was the first contributor. The deterministic ML modules and local Agent control plane are now merged. This document separates that working local path from the automatic worker, live provider, contingency, and deployment work that remains.
 
 ## Start here
 
@@ -17,16 +17,16 @@ The backend owner is the first contributor. On 2026-09-12 the owner explicitly d
 | 1 | Auth, seeded catalog, supplier terms, expiry-dated batches, migration/setup, connection page | Verify an actual second-machine connection when a teammate is available |
 | 2 | Atomic closing revisions, complete counts/sales, authoritative physical baseline, reconciliation | None for basic daily entry |
 | 3 | Actual external purchases, delay/cancellation, partial receipts, retry protection and count corrections | None for basic delivery entry |
-| 4 | Timestamped sales/corrections, chronological lot estimates, expiry history, missing coverage, versioned sales-threshold policy, and immutable materiality request/result boundary | Agent calls the merged numerical materiality function; optional explicit waste/adjustment tools |
-| 5 | Durable queue, claim/status/retry, frozen inputs, Pass 3E policy/domain, trigger links, candidate persistence, outcome checks | Connect the merged forecasting/procurement functions through the Agent adapter and real publication path |
-| 6 | Exact plan/version decisions with instructions and actor/time, ordering occasions, actual-purchase source links | Deterministic latest-state certification/invalidation for real calculated plans |
-| 7 | Daily, promotion, supplier and explicit delivery-disruption triggers; coalescing; stale-result rejection; sales-result completion gates | Agent mapping for ordinary-event materiality and full material invalidation |
+| 4 | Timestamped sales/corrections, chronological lot estimates, expiry history, missing coverage, deterministic projection/materiality, provenance, and immutable request/result evidence | Optional explicit waste-entry tooling only; discrepancies are never labelled waste |
+| 5 | Durable queue, frozen inputs, real first-slice engine adapter, local Coordinator execution, candidate validation/publication, and manager evidence | Add a bounded worker that claims queued runs and invokes the merged Coordinator |
+| 6 | Exact plan/version decisions with instructions and actor/time, lifecycle transitions, ordering occasions, actual-purchase source links, and stale approval rejection | None for the supported normal-plan slice |
+| 7 | Daily, promotion, supplier, delivery, sales and inventory-correction triggers; coalescing; deterministic materiality; Coordinator routing; stale-result rejection; supersession/invalidation | Connect normal event traffic to the same bounded worker used by ticket 5 |
 | 8 | Immutable recommendation history and separate fixed external commitments in run inputs | Residual-horizon contingency calculation, split suppliers, emergency fees and integrated no-double-ordering acceptance |
 
 ## Backend workflow
 
 1. Manager submits physical closing counts and final dish sales. The revision, comparison evidence, event and assessment request commit together. Drafts do not queue a run.
-2. Sales batches retain timestamps and source identities. They update estimates without an LLM call. Closing counts remain unchanged. Backend freezes the approved threshold and records the exact materiality request/result; the Agent still has to call the ML-owned function.
+2. Sales batches retain timestamps and source identities. They update estimates without an LLM call. Closing counts remain unchanged. The local Demand path calls the approved deterministic materiality function through the immutable Backend request/result boundary. Normal application traffic still needs a worker to execute that path.
 3. Promotion revisions and supplier facts request assessment immediately. Frozen promotions retain strict canonical event envelopes and complete known revision history. Closing-count changes emit `INVENTORY_ADJUSTED` and use an immutable deterministic assessment before a safe correction can keep the plan. Delivery delay, shortfall and cancellation events also request assessment. Ordinary receipts/orders/cycle decisions remain stored facts; their impact checks belong to the pending integration.
 4. One agent attempt can run while one follow-up request waits. New triggers coalesce into the waiting run and retain event links. Claims freeze inputs effective by simulation as_of and recorded by real known_at. Supplier versions, event histories and recorded revisions prevent future facts from entering earlier snapshots. The backend rejects completion based on newer inputs and releases expired/stale attempts.
 5. A new normal assessment may create a new plan identity; pass `revises_plan_id` when changing an existing horizon. Only one actionable version exists across all identities. Publication atomically supersedes the prior actionable version, preserving its status-change audit and actual commitments. Revisions do not inherit approval.
@@ -57,27 +57,27 @@ All operational routes below have `/api/v1` prefixes. Manager mutations require 
 
 ## ML and agent handoff
 
-The OpenClaw package still contains the original echo tool. It has deliberately not been implemented on the agent owner's behalf.
+The OpenClaw package still contains only its smoke-test echo tool. Typed organiser reasoning adapters exist, but the OpenClaw runtime has no business tools and is not the application worker.
 
-`planning.py` contains a **limited development calculator**, not the final optimiser. It accepts aggregate dish quantities, converts recipes, checks basic stock/offer constraints and chooses one supplier per ingredient. It does not implement daily forecasting, lead-time stockout projections, all cutoff/shelf-life rules, supplier splitting, residual commitment subtraction or full economic costs. Do not use it to demonstrate those claims.
+`planning.py` retains a **limited development calculator** for direct Backend workflow tests. It is not the real first-slice engine and must not be used to demonstrate forecasting, projection, supplier-splitting, expiry, fee, or economic-policy claims.
 
-The pure numerical modules in `forecasting.py`, `inventory_projection.py`, and `procurement.py` are present on `main`, but they are not connected to the run/tool/publication path. The Agent adapter owns that connection and must consume the frozen procurement contract rather than rebuilding Backend inputs.
+The real local first-slice path is connected: `decision_engine_adapter.run_first_slice_engine` consumes the frozen procurement contract, `BackendProcurementTools` exposes reference-only tools, and `backend_control_plane.run_backend_coordinator` joins the three specialists to Backend publication. The evaluation harness calls this path today. The missing piece is a worker entrypoint that claims queued application runs and invokes it.
 
-The calculator is disabled by default. Its tool returns `503 DECISION_ENGINE_NOT_CONNECTED` until the teammate connects the engine or a developer explicitly sets `ENABLE_DEVELOPMENT_CALCULATOR=true` for backend workflow tests. Tests opt in deliberately. Candidates and stored plans include `calculation_mode: DEVELOPMENT_FIXTURE`; the connected engine must explicitly label its own results `ENGINE`. Development results must not be presented as real first-plan or contingency acceptance.
+The development calculator is disabled by default and returns `503 DECISION_ENGINE_NOT_CONNECTED` unless a developer explicitly sets `ENABLE_DEVELOPMENT_CALCULATOR=true`. Tests opt in deliberately. Its candidates remain labelled `DEVELOPMENT_FIXTURE`; the merged first-slice adapter publishes `ENGINE` results. Neither path implements the contingency policy.
 
 Integration points:
 
 - `planning._snapshot`: frozen inventory, recipes, offers, ingredient schedules, promotions, holidays, incoming commitments, cycle decisions, raw historical evidence and authoritative daily sales. Final sales appear once per day using the latest revision; never add its intraday batches again.
 - `GET /runs/{id}/procurement-contract`: Agent-only exact first-slice input after claim. It contains `CASH_SLICE_V1` policy version 1, all 24 frozen offer/opportunity revisions, the versioned four-Monday `forecast_input`, fee grouping, state revision, `as_of`, `known_at`, frozen operational activity, explicit forecast-activity semantics, and an adapter-ready fixed-commitment projection. Feed `forecast_input.payload.history` to the deterministic forecaster; do not inject test history or replace any contract value with current facts or adapter defaults. Intraday batches update estimated stock and request reassessment but never alter or get added to the versioned baseline history. The companion policy route is useful for validating the policy, domain, and forecast input before a run exists.
 - `fact_history.py`: select supplier versions and promotion/delivery histories at operational and recording cutoffs. Snapshot `known_at` and version IDs support deterministic replay. Delivery receipts include only effective/recorded receipts; future closing-count corrections are excluded. Historical views must not call the current-state `read_delivery` helper.
-- `planning.optimise` / `planning_schemas.py`: replace the limited calculator behind the HTTP adapter with the teammate's deterministic engine. Preserve artifact references, cost fields and typed candidate output. Store the exact engine result before completion.
+- `decision_engine_adapter.py`: authoritative normal-plan adapter over the frozen contract and pure engine. `planning.optimise` remains only the opt-in development HTTP tool; do not route the worker through it.
 - `assessment_queue.enqueue_event`: queue a material event inside the same transaction that records it. `operations.record_event` already routes explicit triggers. Do not call the LLM from sales ingestion.
 - `planning.complete_run`: publication and outcome checks; `planning.decide_plan`: manager identity/version enforcement. Sales-triggered runs now require the immutable materiality result. Incomplete results must escalate, material results cannot keep the plan, and complete non-material results may keep it without procurement optimisation. The broader real-plan feasibility and invalidation integration remains.
-- `sales_materiality_contracts.py`: Backend-owned selection, persistence, hashing, idempotency, freshness, and completion gate. Rudy should read the frozen context, POST the exact numerical request, execute `assess_sales_materiality`, and PUT its exact result. The request already supplies `SALES_MATERIALITY_V1` with evidence in the numerical model's shape; the adapter must not use the old fixture threshold or a fallback.
+- `sales_materiality_contracts.py` and `demand_tools.py`: Backend-owned selection, persistence, hashing, idempotency, freshness, completion gate, and merged Agent adapter. The worker must preserve this path and must not use the old fixture threshold or a fallback.
 - `deliveries.read_delivery`: separates received, cancelled and outstanding quantities. The run contract's `commitment_projection` freezes those quantities after delay, shortfall, receipt, and cancellation history, derives expected expiry from the captured approved offer revision, and assigns stable projected-lot identities. Pass outstanding commitments as fixed dated supply, not as new recommendation lines. Agent tools must never mutate those commitments.
 - `sales.estimated_inventory`: historical replay now follows `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`, ordering usable lots by expiry, receipt time, then lot ID. This matches the merged numerical projector for equal-expiry lots.
 
-Revision checks continue to block approval/publication after newer events. Sales materiality now has Backend persistence and outcome gates, but full ticket closure still requires Rudy's real adapter and the integrated acceptance scenarios.
+Revision checks continue to block approval/publication after newer events. The local adapter scenarios pass; automatic application execution still depends on the pending worker.
 
 ## Demo data and time
 
@@ -87,7 +87,7 @@ Apply `alembic upgrade head` before starting the updated API. Existing overlappi
 
 Sales corrections retain source, batch ID and exact period. Cycle decisions should supply effective_at in simulation time; omission means real time. Promotion and delivery-term revisions cannot precede already recorded relevant activity. Late receipt reconciliation remains supported.
 
-The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, forecast input, fee grouping, Agent read boundary, and Backend materiality exchange. The real engine adapter, full plan publication, and contingency acceptance remain integration work. This backend is not yet the complete integrated demo.
+The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, forecast input, fee grouping, Agent read boundary, and Backend materiality exchange. The normal engine adapter and plan publication are merged. Automatic worker execution, live-provider proof, and contingency acceptance remain integration work.
 
 One review recommendation is deliberately not adopted: reported `AVAILABLE` status does not prove an offer is calculable. Partial supplier facts may retain unknown fields; the calculator rejects missing required inputs before using them. This follows the approved architecture's distinction between reported status and certified feasibility, rather than replacing unknown values with zero or discarding partial facts.
 
@@ -105,6 +105,6 @@ python -m pyright
 python -m pytest -q
 ```
 
-Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. Backend tests do not prove real ML/OpenClaw integration, a hosted deployment, or a second-machine connection.
+Tests create isolated databases, apply all migrations, seed twice and drop those test databases afterward. They prove the local deterministic ML/Agent/Backend integration, but not live OpenClaw/Bedrock behavior, a hosted deployment, or a second-machine connection.
 
-Verification on 2026-09-17: Ruff and Pyright passed, and the full PostgreSQL suite passed all 431 tests after the Pass 3E numerical merge, timezone-agnostic contract-test correction, FEFO replay alignment, and versioned forecast-input addition. These results verify the repository's backend and numerical behavior, but do not prove the unimplemented Agent adapter or end-to-end demo.
+Verification on 2026-09-22: the complete PostgreSQL suite passed all 1,018 tests on merged PR #37 commit `fe81a29`; Ruff, Pyright, frontend lint, and the production frontend build also passed. PR #38 added and passed the exact-version rejection/retry acceptance test. These results do not prove the pending application worker, live model/provider, contingency flow, hosted deployment, or second-machine demo.
