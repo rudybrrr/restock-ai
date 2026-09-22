@@ -141,6 +141,61 @@ def test_agent_claims_a_frozen_run_and_publishes_a_calculated_plan(
     assert all(row["status"] == "OPEN" for row in cycles.json())
 
 
+def test_manager_rejects_exact_version_with_instructions_then_requests_retry(
+    client: TestClient,
+) -> None:
+    sign_in(client)
+    requested = client.post(
+        "/api/v1/assessments", json={"as_of": "2026-02-15T22:00:00+08:00"}
+    )
+    assert requested.status_code == 202, requested.text
+
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    run = client.post("/api/v1/runs/claim").json()
+    candidate = client.post(
+        f"/api/v1/runs/{run['id']}/tools/optimise",
+        json={"dish_quantities": {"chicken-rice": 200}},
+    ).json()
+    completed = client.post(
+        f"/api/v1/runs/{run['id']}/complete",
+        json={"outcome": "REVISE_PLAN", "candidate": candidate},
+    )
+    assert completed.status_code == 200, completed.text
+    version = client.get(f"/api/v1/plans/{completed.json()['plan_version_id']}").json()
+    del client.headers["Authorization"]
+
+    decision_url = f"/api/v1/plans/{version['id']}/decision"
+    decision = {
+        "decision": "REJECTED",
+        "plan_id": version["plan_id"],
+        "plan_version": version["version"],
+        "instructions": "Reduce the cash requirement before proposing another version.",
+    }
+    rejected = client.post(decision_url, json=decision)
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "REJECTED"
+    assert client.post(decision_url, json=decision).status_code == 200
+
+    conflicting_retry = client.post(
+        decision_url,
+        json={**decision, "instructions": "Use a different supplier instead."},
+    )
+    assert conflicting_retry.status_code == 409, conflicting_retry.text
+    assert conflicting_retry.json()["error"]["code"] == "DECISION_CONFLICT"
+    assert client.get("/api/v1/deliveries").json() == []
+
+    retry = client.post(
+        "/api/v1/assessments",
+        json={
+            "as_of": "2026-02-16T22:00:00+08:00",
+            "revises_plan_id": version["plan_id"],
+        },
+    )
+    assert retry.status_code == 202, retry.text
+    assert retry.json()["status"] == "QUEUED"
+    assert retry.json()["snapshot"]["revises_plan_id"] == version["plan_id"]
+
+
 def test_live_agent_claim_uses_current_revision_for_stale_protection(
     client: TestClient,
 ) -> None:
