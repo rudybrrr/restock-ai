@@ -33,6 +33,7 @@ export default function Activity() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [message, setMessage] = useState("");
+  const [requestedId, setRequestedId] = useState<string | null>(null);
   const events = useQuery({
     queryKey: ["events"],
     queryFn: ({ signal }) => api<EventRecord[]>("/events", { signal }),
@@ -56,6 +57,7 @@ export default function Activity() {
     try {
       const result = await api<Run>(path, { method: "POST", body });
       setMessage(`Assessment ${result.id} is ${humanize(result.status)}.`);
+      setRequestedId(result.id);
       await cache.invalidateQueries();
     } catch (e) {
       setError(
@@ -100,6 +102,16 @@ export default function Activity() {
       {message && (
         <p role="status" className="notice">
           {message}
+          {requestedId && (
+            <>
+              {" "}
+              <Link
+                href={`/workspace/activity/${encodeURIComponent(requestedId)}`}
+              >
+                Open requested assessment →
+              </Link>
+            </>
+          )}
         </p>
       )}
       <div className="tabs" role="tablist" aria-label="Activity views">
