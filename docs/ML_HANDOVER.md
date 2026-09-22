@@ -1,5 +1,70 @@
 # ReStock ML and Decision Engine Handover
 
+## Current handover — v1.17, 22 September 2026
+
+Aniq's bounded contingency numerical policy is implemented on
+[feat/ml-contingency-procurement](https://github.com/rudybrrr/restock-ai/tree/feat/ml-contingency-procurement),
+based on main `843efe59b8217d7ba23c15ff02fd5ad978a7720a`.
+The normal PR records publication/merge status; this document does not activate a
+Backend policy. Read **[ML_CONTINGENCY_CONTRACT.md](ML_CONTINGENCY_CONTRACT.md)** for
+the exact input/output mapping and acceptance examples.
+
+New `src.contingency.search_contingency` and independently callable
+`validate_contingency` reuse multi-day projection, canonical forecast/recipe/stock/
+delivery/offer models and exact cash arithmetic. They preserve fixed commitments,
+consume only future demand, recommend additional quantities only, account for
+explicit new-shipment fees, and return validated additions plus a diagnostic
+no-new-purchase projection. The normal search and its pruning guards are unchanged.
+
+Frozen numerical tags: `BOUNDED_CONTINGENCY_CASH_V1`,
+`CONTINGENCY_CARTESIAN_V1`, `EXPLICIT_NEW_SHIPMENT_ONCE_V1`, with existing cash,
+FEFO, expiry, semantic tie and CONTEXT_ONLY reliability policies. Business amounts,
+windows and evidence are explicit authorised inputs, not guessed defaults. Scope:
+current-instant placement in a complete finite domain, residual one/multi-day
+protection, complete assessment of supplied late originals; no continuation or
+full economic objective. Complete search, candidate feasibility and finite-domain
+optimality are separate. Search-limit incumbents are never actionable.
+
+Synthetic example: 100 remaining tofu bowls need 10 kg vegetables. Original10kg
+has6 received in opening and4 delayed until next day. Rescue4kg at S$2/kg plus
+deliveryS$3 and exclusive emergencyS$4 gives **S$15**, no protected shortage,
+and the original4kg remains in later stock. On-time original remainder gives
+**no addition/S$0**. No timely slot gives typed supplier infeasibility; budgetS$14
+gives policy infeasibility. Missing expiry or interrupted search is incomplete.
+
+Fresh verification: **48 new contingency tests and 797 total numerical regressions
+passed** (34.09s). Locked Linux Python 3.12 / isolated disposable PostgreSQL 18:
+**1,067 full Backend tests passed** in 486.35s, two dependency warnings, no failures.
+Whole-API Ruff/Pyright and changed-Python formatting passed on Windows and Linux;
+diff checks passed. All source/tests/fixtures match the isolated gate snapshot;
+only handover documentation changed afterwards. No failure waiver was used.
+No live provider, normal worker, hosted deployment or
+activated contingency API workflow is claimed.
+
+Current source reconciliation: multi-day projection merged via #35; the old
+decimal-string assertion was fixed in #36; Agent/control-plane adapters merged
+via #37. Historical failure waivers below do not apply to this increment.
+Backend still freezes `NORMAL_ONLY` / normal first-slice transport. Chun Yang's
+latest #11 comment explicitly requests this numerical policy before changing that.
+Rudy's current adapter maps all finite-domain infeasibility to supplier failure;
+the contract specifies the required discriminating contingency mapping.
+
+**Chun Yang:** persist/map/activate the new policy and complete residual-window,
+shipment, commitment, forecast and evidence inputs; preserve freshness and exact
+approval/version rules. **Rudy:** consume that frozen contract, call both kernels,
+persist resolvable results, preserve incomplete/policy/supplier distinctions, and
+complete the external-emergency recording/reassessment story with Backend.
+Continue live evidence/freshness confirmations in
+[issue #16](https://github.com/rudybrrr/restock-ai/issues/16), and contingency
+activation/acceptance in [issue #11](https://github.com/rudybrrr/restock-ai/issues/11).
+Neither issue is closed by the numerical increment. Full economic OPEN-02 and
+production dataset/calendar decisions remain separate.
+
+Revision 1.17 adds this bounded implementation and the focused contract; previous
+commits, tests and task-specific exceptions below are **historical records**.
+
+## Historical multi-day checkpoint — v1.16
+
 **From:** Aniq<br>
 **For:** Chun Yang, Rudy and Ethan, including their ChatGPT/Codex assistants<br>
 **Version:** 1.16, 20 September 2026<br>

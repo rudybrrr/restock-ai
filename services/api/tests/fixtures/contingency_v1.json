@@ -1,0 +1,17 @@
+{
+  "status": "SYNTHETIC_NUMERICAL_ACCEPTANCE_NOT_ACTIVATED_BACKEND_POLICY",
+  "catalogue_fixture": "seasonal_baseline_v3.json",
+  "as_of": "2026-02-16T10:00:00+08:00",
+  "known_at": "2026-09-22T10:00:00+08:00",
+  "revision": "synthetic-contingency-capture-1",
+  "protected_end": "2026-02-16T12:00:00+08:00",
+  "assessment_end": "2026-02-17T12:00:00+08:00",
+  "profile": [["11:00", "11:30", "0.7"], ["11:30", "12:00", "0.3"]],
+  "portions": {"chicken-rice": "0", "fried-rice": "0", "chicken-noodles": "0", "tofu-bowl": "100", "vegetable-noodles": "0"},
+  "opening": {"chicken": "0", "rice": "20", "noodles": "0", "eggs": "0", "tofu": "20", "vegetables": "6", "oil": "0", "soy-sauce": "0"},
+  "new_offer": {"supplier_id": "market", "ingredient_id": "vegetables", "unit_price": "2", "available_quantity": "6", "moq": "1", "pack_size": "1", "delivery_fee_sgd": "3", "emergency_fee_sgd": "4"},
+  "budget_sgd": "30",
+  "storage_each_base_unit": "30",
+  "safety_each_base_unit": "0",
+  "expected": {"addition_kg": "4", "acquisition": "8", "delivery": "3", "exclusive_emergency": "4", "cash": "15", "vegetables_assessment_close": "4", "no_purchase_unmet": "4"}
+}
