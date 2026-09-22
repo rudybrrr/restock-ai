@@ -3,6 +3,7 @@ import { singaporeTime } from "@/lib/format";
 import { ProcurementEvidence } from "./procurement-evidence";
 import { ManagerEvidencePanel } from "./manager-run-evidence";
 import { ChangeAssessments } from "./change-assessments";
+import { AssessmentProgress } from "./assessment-progress";
 
 const explanations: Record<string, string> = {
   CALCULATION_INCOMPLETE:
@@ -31,47 +32,55 @@ export function RunEvidence({ run }: { run: Run }) {
   const missing = snapshot?.missing_offer_history;
   return (
     <section className="evidence-display" aria-label="Assessment evidence">
+      <AssessmentProgress status={run.status} />
       {code && explanations[code] && <p>{explanations[code]}</p>}
-      <dl>
-        <dt>Operational cutoff</dt>
-        <dd>{singaporeTime(run.as_of)}</dd>
-        <dt>Knowledge cutoff</dt>
-        <dd>
-          {snapshot?.known_at
-            ? singaporeTime(snapshot.known_at)
-            : "Not captured"}
-        </dd>
-        <dt>Input revision</dt>
-        <dd>{run.input_revision ?? "Not available"}</dd>
-        <dt>Frozen procurement inputs</dt>
-        <dd>
-          {snapshot?.procurement_contract
-            ? `Captured at state revision ${snapshot.procurement_contract.captured_state_revision}`
-            : run.status === "QUEUED"
-              ? "Awaiting agent claim and capture"
-              : (snapshot?.procurement_contract_unavailable_reason ??
-                "No frozen first-slice contract recorded")}
-        </dd>
-        <dt>Missing supplier-offer history</dt>
-        <dd>
-          {missing
-            ? missing.length
-              ? missing.join(", ")
-              : "None reported"
-            : "Not captured"}
-        </dd>
-        <dt>Completed</dt>
-        <dd>
-          {run.completed_at ? singaporeTime(run.completed_at) : "Not completed"}
-        </dd>
-      </dl>
-      <p className="quiet">
-        Captured inputs do not prove a successful forecast or complete
-        optimisation. Outcomes above are the backend’s recorded assessment, not
-        an independent certification.
-      </p>
-      {snapshot?.procurement_contract && <ProcurementEvidence runId={run.id} />}
       <ManagerEvidencePanel runId={run.id} />
+      <details className="record-details">
+        <summary>Captured inputs and procurement evidence</summary>
+        <dl>
+          <dt>Operational cutoff</dt>
+          <dd>{singaporeTime(run.as_of)}</dd>
+          <dt>Knowledge cutoff</dt>
+          <dd>
+            {snapshot?.known_at
+              ? singaporeTime(snapshot.known_at)
+              : "Not captured"}
+          </dd>
+          <dt>Input revision</dt>
+          <dd>{run.input_revision ?? "Not available"}</dd>
+          <dt>Frozen procurement inputs</dt>
+          <dd>
+            {snapshot?.procurement_contract
+              ? `Captured at state revision ${snapshot.procurement_contract.captured_state_revision}`
+              : run.status === "QUEUED"
+                ? "Awaiting agent claim and capture"
+                : (snapshot?.procurement_contract_unavailable_reason ??
+                  "No frozen first-slice contract recorded")}
+          </dd>
+          <dt>Missing supplier-offer history</dt>
+          <dd>
+            {missing
+              ? missing.length
+                ? missing.join(", ")
+                : "None reported"
+              : "Not captured"}
+          </dd>
+          <dt>Completed</dt>
+          <dd>
+            {run.completed_at
+              ? singaporeTime(run.completed_at)
+              : "Not completed"}
+          </dd>
+        </dl>
+        <p className="quiet">
+          Captured inputs do not prove a successful forecast or complete
+          optimisation. Outcomes above are the backend’s recorded assessment,
+          not an independent certification.
+        </p>
+        {snapshot?.procurement_contract && (
+          <ProcurementEvidence runId={run.id} />
+        )}
+      </details>
       <ChangeAssessments
         runId={run.id}
         active={run.status === "QUEUED" || run.status === "RUNNING"}

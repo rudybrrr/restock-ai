@@ -555,7 +555,7 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/recommendations");
     await page.getByText("Calculation references", { exact: true }).click();
-    await page.getByText("Assessment evidence", { exact: true }).waitFor();
+    await page.getByText("Assessment summary", { exact: true }).waitFor();
     await page.getByText(/1 stale attempt/).waitFor();
     await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page.getByText("S$100.00", { exact: true }).waitFor();
@@ -616,6 +616,9 @@ async function main() {
       .getByRole("link", { name: "Open assessment run-1 →", exact: true })
       .click();
     await page
+      .getByText("Captured inputs and procurement evidence", { exact: true })
+      .click();
+    await page
       .getByRole("heading", { name: "Purchases already accounted for" })
       .waitFor();
     await page.getByRole("cell", { name: "5.000", exact: true }).waitFor();
@@ -632,13 +635,33 @@ async function main() {
     await page.goto(base + "/workspace/activity");
     await page.getByRole("tab", { name: "Assessments", exact: true }).click();
     await page.locator("details").first().locator("summary").first().click();
+    await page
+      .getByText("Captured inputs and procurement evidence", { exact: true })
+      .click();
     await page.getByText("42", { exact: true }).waitFor();
     await page.getByText(/Pending approval for version 1/).waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: "Coordinator routing" })
+      .click();
     await page.getByText("procurement", { exact: true }).waitFor();
-    await page.getByText("check supplier feasibility", { exact: true }).waitFor();
-    await page.getByText("Candidate is feasible.", { exact: true }).first().waitFor();
+    await page
+      .getByText("check supplier feasibility", { exact: true })
+      .waitFor();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Validation/ })
+      .click();
+    await page
+      .getByText("Candidate is feasible.", { exact: true })
+      .first()
+      .waitFor();
     await page.getByText("Evidence gaps (1)", { exact: true }).click();
-    await page.getByText("Local evaluation results are not persisted with this run.", { exact: true }).waitFor();
+    await page
+      .getByText("Local evaluation results are not persisted with this run.", {
+        exact: true,
+      })
+      .waitFor();
     await page.getByRole("link", { name: "View recommendation" }).click();
     await page
       .getByText("Requested version is unavailable", { exact: true })
