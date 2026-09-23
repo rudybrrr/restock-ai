@@ -114,7 +114,7 @@ The local evaluation reports routing, outcome, specialist-call, tool-call, retry
 
 ## Current open items
 
-- A one-shot worker can claim and process one queued assessment; deployment-level invocation is not yet automatic.
+- Run `python -m src.assessment_worker --loop` alongside the API for local queue polling; the one-shot command remains available. A hosted process supervisor and live-provider verification are still pending.
 - Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
 - Live organiser-gateway/Sonnet behavior, AWS/Bedrock verification, live token/cost metrics, and live-model evaluation.
 - Deployment, production reliability, hosted URLs, video, screenshots, and external submission actions.

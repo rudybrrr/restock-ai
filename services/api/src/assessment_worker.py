@@ -1,5 +1,7 @@
-"""One-shot application worker for queued ReStock assessments."""
+"""Application worker for queued ReStock assessments."""
 
+import argparse
+import time
 from collections.abc import Sequence
 from typing import Literal
 
@@ -20,7 +22,10 @@ from src.backend_control_plane import run_backend_coordinator
 from src.config import Settings
 from src.decision_engine_adapter import BackendProcurementTools
 from src.errors import ApiError
-from src.organiser_gateway import build_organiser_reasoning_models
+from src.organiser_gateway import (
+    OrganiserGatewaySettings,
+    build_organiser_reasoning_models,
+)
 
 WorkerPublicationStatus = Literal[
     "NO_WORK", "PUBLISHED", "NOT_PUBLISHED", "STALE_REJECTED"
@@ -122,15 +127,32 @@ def run_one_queued_assessment(
     )
 
 
-def main() -> None:
-    """Execute one queued assessment using the configured application services."""
-
+def main(argv: list[str] | None = None) -> None:
+    """Process one run, or poll the queue for a small local demo deployment."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Keep polling for queued assessments until interrupted",
+    )
+    args = parser.parse_args(argv)
     settings = Settings()
+    # A missing provider must stop startup before the first run is claimed.
+    OrganiserGatewaySettings.from_settings(settings)
     engine = create_engine(settings.database_url, pool_pre_ping=True)
     try:
-        with Session(engine) as session:
-            result = run_one_queued_assessment(session, settings)
-            print(result.model_dump_json(exclude_none=True))
+        try:
+            while True:
+                with Session(engine) as session:
+                    result = run_one_queued_assessment(session, settings)
+                if result.publication_status != "NO_WORK" or not args.loop:
+                    print(result.model_dump_json(exclude_none=True), flush=True)
+                if not args.loop:
+                    break
+                if result.publication_status == "NO_WORK":
+                    time.sleep(2)
+        except KeyboardInterrupt:
+            pass
     finally:
         engine.dispose()
 
