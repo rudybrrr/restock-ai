@@ -235,6 +235,15 @@ evidence fails closed without interrupting the normal policy. Verify the emergen
 offer's authority before activation; do not silently substitute offer terms in the
 Agent adapter.
 
+The Agent-only `GET /api/v1/runs/{run_id}/staged-contingency-diagnostic` now maps
+that exact frozen case into `search_contingency` and independently calls
+`validate_contingency`. It reports the first-case 4 kg/S$15 rescue when the frozen
+stock, catalogue and commitment match. The response is always marked
+`STAGED_DIAGNOSTIC` and `actionable: false`; it does not persist a candidate, publish
+a plan, authorize the synthetic market offer, or change `NORMAL_ONLY`. Mismatched or
+unavailable cases return 409. This proves the Backend-to-numerical mapping while
+the offer-authority and active-policy/Agent publication contracts remain open.
+
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and
 shared offer capacity; supplier proof versus budget/storage/safety; missing refs/
