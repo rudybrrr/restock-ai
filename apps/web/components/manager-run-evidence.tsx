@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import {
   api,
   ManagerApprovalAttempt,
@@ -8,7 +9,7 @@ import {
   ManagerTimelineEntry,
 } from "@/lib/api";
 import { humanize, singaporeTime } from "@/lib/format";
-import { ErrorNotice } from "./workspace";
+import { ErrorNotice, Status } from "./workspace";
 
 function isManagerEvidence(value: unknown): value is ManagerRunEvidence {
   return !!value && typeof value === "object" && "run_id" in value;
@@ -46,12 +47,20 @@ export function ManagerEvidencePanel({
         "/manager/runs/" + encodeURIComponent(runId) + "/evidence",
         { signal },
       ),
+    refetchInterval: (query) =>
+      query.state.data &&
+      ["QUEUED", "RUNNING"].includes(query.state.data.run_status)
+        ? 5000
+        : false,
   });
 
   if (evidence.error) {
-    return <ErrorNotice error={evidence.error} retry={() => evidence.refetch()} />;
+    return (
+      <ErrorNotice error={evidence.error} retry={() => evidence.refetch()} />
+    );
   }
-  if (evidence.isPending) return <p role="status">Loading structured evidence…</p>;
+  if (evidence.isPending)
+    return <p role="status">Loading structured evidence…</p>;
   if (!isManagerEvidence(evidence.data)) {
     return (
       <p className="quiet">
@@ -70,17 +79,60 @@ export function ManagerEvidencePanel({
     : value.timeline;
 
   return (
-    <section className="evidence-display" aria-label="Structured manager evidence">
+    <section
+      className="evidence-display"
+      aria-label="Structured manager evidence"
+    >
       <header className="panel-head">
         <div>
-          <h3>{compact ? "Assessment evidence" : "Structured evidence"}</h3>
+          <h3>Assessment summary</h3>
           <p className="quiet">
             Persisted facts for run {value.run_id}; private prompts and working
             notes are excluded.
           </p>
         </div>
-        <span className="status-tag status-succeeded">{humanize(value.run_status)}</span>
+        <Status value={value.run_status} />
       </header>
+
+      <dl>
+        <dt>What prompted this assessment?</dt>
+        <dd>{humanize(value.routing.trigger_type ?? value.trigger)}</dd>
+        <dt>What did ReStock conclude?</dt>
+        <dd>
+          {["QUEUED", "RUNNING"].includes(value.run_status)
+            ? "No conclusion yet."
+            : (value.decision.summary ??
+              (value.decision.outcome
+                ? humanize(value.decision.outcome)
+                : "No decision was recorded."))}
+        </dd>
+        <dt>What should I do next?</dt>
+        <dd>
+          {value.run_status === "QUEUED"
+            ? "Wait for processing. If the request stays queued, check that the assessment worker is running."
+            : value.run_status === "RUNNING"
+              ? "Wait for the recorded result before making a decision."
+              : value.run_status === "FAILED"
+                ? "Review the failure and missing inputs, then retry the assessment."
+                : value.approval.status === "REJECTED"
+                  ? "This recommendation was rejected. Request a reassessment if you need a new recommendation."
+                  : value.active_plan &&
+                      ["INVALIDATED", "SUPERSEDED"].includes(
+                        value.active_plan.status,
+                      )
+                    ? "This version is no longer actionable. Review the latest recommendation before deciding."
+                    : value.approval.required
+                      ? "Review the exact recommendation version before approving. Approval does not place an order."
+                      : value.decision.outcome === "KEEP_CURRENT_PLAN"
+                        ? "Review the retained plan and any recorded limitations. No additional purchase is implied."
+                        : value.approval.status === "APPROVED"
+                          ? "Arrange purchases separately and record what you actually ordered."
+                          : "Review the recorded decision, reasons and evidence gaps before acting."}
+        </dd>
+      </dl>
+      <Link href={`/workspace/activity/${encodeURIComponent(runId)}`}>
+        Open this assessment →
+      </Link>
 
       <dl>
         <dt>Plan / version / status</dt>
@@ -133,7 +185,7 @@ export function ManagerEvidencePanel({
         </details>
       )}
 
-      <details className="record-details" open={!compact}>
+      <details className="record-details">
         <summary>
           Coordinator routing · {value.routing.specialist_calls} specialist
           calls · {value.routing.tool_call_count} tool calls
@@ -167,7 +219,7 @@ export function ManagerEvidencePanel({
       </details>
 
       {!compact && value.validation.length > 0 && (
-        <details className="record-details" open>
+        <details className="record-details">
           <summary>Validation ({value.validation.length})</summary>
           <ul className="evidence-list">
             {value.validation.map((item) => (
@@ -183,7 +235,9 @@ export function ManagerEvidencePanel({
                 {item.evidence_refs.length > 0 && (
                   <small>
                     Evidence:{" "}
-                    {item.evidence_refs.map((ref) => ref.reference_id).join(", ")}
+                    {item.evidence_refs
+                      .map((ref) => ref.reference_id)
+                      .join(", ")}
                   </small>
                 )}
               </li>

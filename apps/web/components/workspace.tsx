@@ -17,6 +17,7 @@ import {
 import { api, ApiError, Identity } from "@/lib/api";
 import { Wordmark } from "./wordmark";
 import "./restock.css";
+import "./workspace-spacing.css";
 
 const DateContext = createContext<{
   day: string;

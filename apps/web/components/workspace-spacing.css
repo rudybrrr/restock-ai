@@ -1,0 +1,59 @@
+/* Shared workspace rhythm. Landing-page composition remains independent. */
+.restock-app {
+  --workspace-gutter: 32px;
+  --panel-padding: 24px;
+}
+.restock-app .workspace-header,
+.restock-app .workspace-footer { padding-inline: var(--workspace-gutter); }
+.restock-app .workspace-content { padding: var(--workspace-gutter); }
+.restock-app .panel-head { padding: 20px var(--panel-padding); flex-wrap: wrap; }
+.restock-app .panel-body { padding: var(--panel-padding); }
+.restock-app .panel-head :is(h2,h3) { font-size: 18px; font-weight: 600; line-height: 1.35; margin: 0; }
+.restock-app .panel-head p { margin: 6px 0 0; }
+.restock-app .panel-body > :first-child { margin-top: 0; }
+.restock-app .panel-body > :last-child { margin-bottom: 0; }
+.restock-app .panel-body > p + :is(table,.table-scroll) { margin-top: 16px; }
+.restock-app .panel-body > :is(table,.table-scroll) + p { margin-top: 16px; }
+.restock-app .panel-body > h3 { margin: 24px 0 12px; font-size: 17px; font-weight: 600; }
+.restock-app .panel-body > h4 { margin: 20px 0 8px; font-size: 15px; font-weight: 600; }
+.restock-app .field-label { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; }
+.restock-app .workspace-content > .field-label { margin: 0 0 24px; }
+.restock-app .field-label > :is(input,select,textarea) { width: 100%; }
+.restock-app .workspace-content > .field-label > :is(input,select) { width: min(100%, 360px); }
+.restock-app .form-grid { gap: 20px 24px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.restock-app .form-grid > label { min-width: 0; gap: 8px; }
+.restock-app :is(input:not([type=checkbox]):not([type=radio]),select) { min-height: 44px; }
+.restock-app textarea { min-height: 100px; resize: vertical; }
+.restock-app .service-date input { min-height: 36px; }
+.restock-app .form-actions { gap: 12px; align-items: flex-end; margin-top: 24px; }
+.restock-app .panel-body.form-actions { margin-top: 0; }
+.restock-app .button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; line-height: 1.4; text-align: center; }
+.restock-app th { padding: 14px 20px; font-size: 11px; letter-spacing: .5px; }
+.restock-app td { padding: 16px 20px; line-height: 1.55; vertical-align: middle; }
+.restock-app td small { margin-top: 4px; line-height: 1.5; }
+.restock-app td details + .button { margin-top: 8px; }
+.restock-app .status-tag { font-size: 11px; line-height: 1.5; white-space: nowrap; }
+.restock-app .notice { padding: 16px 20px; margin-block: 20px; }
+.restock-app .notice h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.restock-app .notice form { display: grid; justify-items: start; gap: 16px; margin-top: 16px; }
+.restock-app .empty-state { padding: 32px var(--panel-padding); }
+.restock-app .record-details { padding-block: 20px; }
+.restock-app .record-details > summary { line-height: 1.5; cursor: pointer; }
+.restock-app .evidence-display .panel-head { padding-inline: 0; }
+.restock-app .evidence-display.panel > .panel-head { padding-inline: var(--panel-padding); }
+.restock-app .evidence-display :is(ul,ol) { padding-left: 20px; }
+.restock-app .evidence-display li + li { margin-top: 8px; }
+.restock-app .tabs { gap: 24px; }
+.restock-app .tabs button { min-height: 44px; font-size: 14px; }
+@media(max-width:1000px) { .restock-app { --workspace-gutter: 28px; } }
+@media(max-width:700px) {
+  .restock-app { --workspace-gutter: 18px; --panel-padding: 18px; }
+  .restock-app .page-heading { align-items: flex-start; gap: 16px; }
+  .restock-app .panel-head { gap: 8px 16px; }
+  .restock-app .panel-head .quiet { font-size: 12px; }
+  .restock-app .form-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .restock-app .form-actions > .field-label { flex: 1 1 100%; }
+  .restock-app th,.restock-app td { padding-inline: 14px; }
+  .restock-app .workspace-footer { flex-wrap: wrap; gap: 8px 16px; }
+  .restock-app .evidence-list > div { grid-template-columns: minmax(0,1fr); gap: 4px; }
+}

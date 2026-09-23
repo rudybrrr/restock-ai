@@ -82,6 +82,7 @@ class FrozenOrderingOpportunity(BaseModel):
     ordered_at: AwareDatetime
     arrival_at: AwareDatetime
     kind: Literal["NORMAL", "EMERGENCY"]
+    shipment_group_id: str | None = Field(default=None, min_length=1)
     expiry_date: date
     source_revision: str
 

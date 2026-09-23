@@ -44,6 +44,39 @@ procurement_policy_versions = Table(
     UniqueConstraint("policy_id", "version"),
 )
 
+contingency_policy_versions = Table(
+    "contingency_policy_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("policy_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("policy_id", "version"),
+    UniqueConstraint("source_revision"),
+)
+
+contingency_case_inputs = Table(
+    "contingency_case_inputs",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "policy_version_id",
+        ForeignKey("contingency_policy_versions.id"),
+        nullable=False,
+    ),
+    Column("artifact_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("artifact_id", "version"),
+    UniqueConstraint("source_revision"),
+)
+
 procurement_policy_domains = Table(
     "procurement_policy_domains",
     metadata,
@@ -121,6 +154,7 @@ procurement_domain_opportunities = Table(
     Column("ordered_at", DateTime(timezone=True), nullable=False),
     Column("arrival_at", DateTime(timezone=True), nullable=False),
     Column("kind", String, nullable=False),
+    Column("shipment_group_id", String),
     Column("expiry_date", Date, nullable=False),
     Column("source_revision", String, nullable=False),
     UniqueConstraint("domain_version_id", "opportunity_id"),
@@ -427,6 +461,7 @@ deliveries = Table(
     Column("expected_quantity", Numeric(12, 3), nullable=False),
     Column("cancelled_quantity", Numeric(12, 3), nullable=False, server_default="0"),
     Column("expected_at", DateTime(timezone=True), nullable=False),
+    Column("expected_expiry_date", Date),
     Column("ordered_at", DateTime(timezone=True), nullable=False),
     CheckConstraint(
         "source_validation IN ('MANUAL', 'APPROVED_ALLOCATION', 'LEGACY_REFERENCE')",

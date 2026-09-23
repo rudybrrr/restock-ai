@@ -143,6 +143,107 @@ def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
     )
 
 
+def test_explicit_new_shipment_identity_is_preserved_in_frozen_domain(
+    client: TestClient, database_url: str
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(db.procurement_domain_opportunities)
+                .where(
+                    db.procurement_domain_opportunities.c.offer_id
+                    == "market-vegetables"
+                )
+                .values(shipment_group_id="demo-new-shipment")
+            )
+    finally:
+        engine.dispose()
+    sign_in(client)
+    requested = client.post("/api/v1/assessments", json={"as_of": ISSUE_TIME})
+    assert requested.status_code == 202, requested.text
+    run_id = requested.json()["id"]
+    agent(client)
+    assert client.post("/api/v1/runs/claim").status_code == 200
+    frozen = client.get(f"/api/v1/runs/{run_id}/procurement-contract")
+    assert frozen.status_code == 200, frozen.text
+    opportunity = next(
+        row
+        for row in frozen.json()["domain"]["opportunities"]
+        if row["offer_id"] == "market-vegetables"
+    )
+    assert opportunity["shipment_group_id"] == "demo-new-shipment"
+
+
+def test_delayed_partial_delivery_freezes_only_unreceived_remainder_as_supply(
+    client: TestClient,
+) -> None:
+    sign_in(client)
+    created = client.post(
+        "/api/v1/deliveries",
+        json={
+            "supplier_id": "fresh",
+            "ingredient_id": "vegetables",
+            "kind": "NORMAL",
+            "expected_quantity": "10",
+            "ordered_at": "2026-02-15T23:00:00+08:00",
+            "expected_at": "2026-02-16T11:00:00+08:00",
+        },
+    )
+    assert created.status_code == 201, created.text
+    delivery_id = created.json()["id"]
+    received = client.post(
+        f"/api/v1/deliveries/{delivery_id}/receive",
+        json={
+            "request_id": "first-six-kilos",
+            "quantity": "6",
+            "received_at": "2026-02-16T09:00:00+08:00",
+            "expiry_date": "2026-02-20",
+            "remainder": "EXPECTED",
+        },
+    )
+    assert received.status_code == 200, received.text
+    receipt_lot_id = received.json()["receipts"][0]["lot_id"]
+    delayed = client.post(
+        f"/api/v1/deliveries/{delivery_id}/update",
+        json={
+            "expected_quantity": "10",
+            "expected_at": "2026-02-17T09:00:00+08:00",
+            "effective_at": "2026-02-16T09:30:00+08:00",
+        },
+    )
+    assert delayed.status_code == 200, delayed.text
+    assert delayed.json()["outstanding_quantity"] == "4.000"
+    requested = client.post(
+        "/api/v1/assessments", json={"as_of": "2026-02-16T10:00:00+08:00"}
+    )
+    assert requested.status_code == 202, requested.text
+    agent(client)
+    claimed = client.post("/api/v1/runs/claim")
+    assert claimed.status_code == 200, claimed.text
+    contract = client.get(f"/api/v1/runs/{claimed.json()['id']}/procurement-contract")
+    assert contract.status_code == 200, contract.text
+    frozen = contract.json()
+    received_lot = next(
+        lot
+        for lot in frozen["frozen_state"]["inventory"]
+        if lot["id"] == receipt_lot_id
+    )
+    assert received_lot["quantity"] == "6.000"
+    projection = frozen["commitment_projection"]
+    assert projection["complete"] is True
+    assert projection["supply_manifest"] == [delivery_id]
+    assert len(projection["supplies"]) == 1
+    supply = projection["supplies"][0]
+    assert supply["delivery"]["received_quantity"] == "6.000"
+    assert supply["delivery"]["outstanding_quantity"] == "4.000"
+    assert supply["delivery"]["receipts"][0]["lot_id"] == receipt_lot_id
+    assert instant(supply["delivery"]["expected_at"]) == instant(
+        "2026-02-17T09:00:00+08:00"
+    )
+    assert supply["expiry_date"] == "2026-02-21"
+
+
 def test_agent_reads_the_exact_contract_frozen_with_run_context(
     client: TestClient,
 ) -> None:

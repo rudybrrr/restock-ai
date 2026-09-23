@@ -1,4 +1,5 @@
 "use client";
+import { ReassessAction } from "@/components/reassess-action";
 import Link from "next/link";
 import { ProcurementEvidence } from "@/components/procurement-evidence";
 import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
@@ -184,7 +185,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
       setSuccess(
         decision === "APPROVED"
           ? "This version is approved. Record an actual purchase after you arrange it with the supplier."
-          : "This version was rejected.",
+          : "This version was rejected. No replacement was requested automatically. You can request a new assessment below.",
       );
       setDecision(null);
       await cache.invalidateQueries();
@@ -312,6 +313,19 @@ function PlanDetail({ plan }: { plan: Plan }) {
               {success}
             </p>
           )}
+          {plan.status === "REJECTED" && (
+            <ReassessAction
+              key={plan.id}
+              runId={plan.run_id}
+              at={plan.created_at}
+            />
+          )}
+          {["INVALIDATED", "SUPERSEDED"].includes(plan.status) && (
+            <p className="notice">
+              This version is no longer actionable. Select the latest
+              recommendation before making a decision.
+            </p>
+          )}
           {plan.status === "PENDING_APPROVAL" && (
             <div className="form-actions">
               <button
@@ -366,6 +380,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
               </div>
             </section>
           )}
+          <ManagerEvidencePanel runId={plan.run_id} compact />
           <details className="record-details">
             <summary>Calculation references</summary>
             <dl className="evidence-list">
@@ -383,10 +398,11 @@ function PlanDetail({ plan }: { plan: Plan }) {
                 </div>
               ))}
             </dl>
-            <Link href={`/workspace/activity/${encodeURIComponent(plan.run_id)}`}>
+            <Link
+              href={`/workspace/activity/${encodeURIComponent(plan.run_id)}`}
+            >
               View assessment and existing-purchase evidence →
             </Link>
-            <ManagerEvidencePanel runId={plan.run_id} compact />
           </details>
         </div>
       </section>

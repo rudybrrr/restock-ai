@@ -5,6 +5,41 @@ from fastapi.testclient import TestClient
 from test_daily import sign_in
 
 
+def test_expected_remainder_expiry_cannot_precede_arrival(client: TestClient) -> None:
+    sign_in(client)
+    body = {
+        "supplier_id": "fresh",
+        "ingredient_id": "vegetables",
+        "kind": "NORMAL",
+        "expected_quantity": "10",
+        "ordered_at": "2026-02-15T10:00:00+08:00",
+        "expected_at": "2026-02-16T11:00:00+08:00",
+        "expected_expiry_date": "2026-02-15",
+    }
+    rejected = client.post("/api/v1/deliveries", json=body)
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "INVALID_EXPECTED_EXPIRY"
+    created = client.post(
+        "/api/v1/deliveries", json={**body, "expected_expiry_date": "2026-02-19"}
+    )
+    assert created.status_code == 201, created.text
+    path = f"/api/v1/deliveries/{created.json()['id']}"
+    delayed = {
+        "expected_quantity": "10",
+        "expected_at": "2026-02-20T09:00:00+08:00",
+        "effective_at": "2026-02-16T09:00:00+08:00",
+    }
+    rejected = client.post(path + "/update", json=delayed)
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "INVALID_EXPECTED_EXPIRY"
+    assert client.get(path).json()["expected_expiry_date"] == "2026-02-19"
+    amended = client.post(
+        path + "/update", json={**delayed, "expected_expiry_date": "2026-02-23"}
+    )
+    assert amended.status_code == 200, amended.text
+    assert amended.json()["expected_expiry_date"] == "2026-02-23"
+
+
 def test_late_receipt_reconciles_completed_closing_counts(client: TestClient) -> None:
     sign_in(client)
     body = {

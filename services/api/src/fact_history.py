@@ -146,7 +146,7 @@ def commitments_at(session: Session, as_of: datetime, known_at: datetime) -> lis
             events.append((effective, row["timestamp"], row["id"], row))
     for _, _, _, row in sorted(events):
         payload = row["payload"]["delivery"]
-        states[payload["id"]] = payload
+        states[payload["id"]] = (payload, row["id"], row["timestamp"])
     receipts = list(
         session.execute(
             select(db.delivery_receipts)
@@ -158,7 +158,9 @@ def commitments_at(session: Session, as_of: datetime, known_at: datetime) -> lis
         ).mappings()
     )
     result = []
-    for delivery_id, payload in sorted(states.items()):
+    for delivery_id, (payload, terms_event_id, terms_recorded_at) in sorted(
+        states.items()
+    ):
         received_rows = [
             {**row, "closing_counts": {}}
             for row in receipts
@@ -178,20 +180,24 @@ def commitments_at(session: Session, as_of: datetime, known_at: datetime) -> lis
                 "Delivery history is inconsistent at this cutoff",
             )
         result.append(
-            Delivery.model_validate(
-                {
-                    **payload,
-                    "source_validation": payload.get("source_validation")
-                    or (
-                        "LEGACY_REFERENCE"
-                        if payload.get("source_plan_line_id")
-                        else "MANUAL"
-                    ),
-                    "receipts": received_rows,
-                    "received_quantity": received,
-                    "cancelled_quantity": cancelled,
-                    "outstanding_quantity": expected - received - cancelled,
-                }
-            ).model_dump(mode="json")
+            {
+                **Delivery.model_validate(
+                    {
+                        **payload,
+                        "source_validation": payload.get("source_validation")
+                        or (
+                            "LEGACY_REFERENCE"
+                            if payload.get("source_plan_line_id")
+                            else "MANUAL"
+                        ),
+                        "receipts": received_rows,
+                        "received_quantity": received,
+                        "cancelled_quantity": cancelled,
+                        "outstanding_quantity": expected - received - cancelled,
+                    }
+                ).model_dump(mode="json"),
+                "terms_event_id": terms_event_id,
+                "terms_recorded_at": terms_recorded_at.isoformat(),
+            }
         )
     return result

@@ -183,6 +183,7 @@ def _build(
                             "ordered_at",
                             "arrival_at",
                             "kind",
+                            "shipment_group_id",
                             "expiry_date",
                             "source_revision",
                         )
@@ -295,7 +296,9 @@ def bind_frozen_supplier_state(
     deterministic engine without creating a new policy or domain contract.
     """
     if len(offers) != len(offer_version_ids):
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Supplier revision evidence is incomplete")
+        raise ApiError(
+            409, "MISSING_REQUIRED_DATA", "Supplier revision evidence is incomplete"
+        )
     by_id = {str(offer["id"]): offer for offer in offers}
     revision_by_id = {
         str(offer["id"]): version_id
@@ -352,27 +355,43 @@ def freeze_operational_activity(contract: dict, frozen_state: dict) -> dict:
         projected_lot_id = None
         if outstanding:
             projected_lot_id = f"projected-delivery:{delivery_id}"
-            offer = offer_by_key.get((raw["supplier_id"], raw["ingredient_id"]))
-            if offer is None:
-                findings.append(
-                    {"code": "MISSING_APPROVED_OFFER", "source": delivery_id}
-                )
-            elif offer.offer.shelf_life_days_on_arrival is None:
-                findings.append(
-                    {"code": "MISSING_EXPECTED_EXPIRY", "source": delivery_id}
-                )
+            explicit_expiry = raw.get("expected_expiry_date")
+            if explicit_expiry is not None:
+                if not raw.get("terms_event_id") or not raw.get("terms_recorded_at"):
+                    findings.append(
+                        {"code": "MISSING_EXPECTED_EXPIRY", "source": delivery_id}
+                    )
+                else:
+                    expiry_date = explicit_expiry
+                    expiry_evidence = {
+                        "reference": f"delivery:{delivery_id}:expected_expiry_date",
+                        "available_at": raw["terms_recorded_at"],
+                        "captured_revision": raw["terms_event_id"],
+                    }
             else:
-                arrival_day = raw["expected_at"]
-                if isinstance(arrival_day, str):
-                    arrival_day = datetime.fromisoformat(arrival_day)
-                expiry_date = arrival_day.astimezone(
-                    ZoneInfo(selected.policy.payload.timezone)
-                ).date() + timedelta(days=offer.offer.shelf_life_days_on_arrival - 1)
-                expiry_evidence = {
-                    "reference": (f"{offer.offer_id}:shelf_life_days_on_arrival"),
-                    "available_at": selected.domain.recorded_at,
-                    "captured_revision": offer.source_revision,
-                }
+                offer = offer_by_key.get((raw["supplier_id"], raw["ingredient_id"]))
+                if offer is None:
+                    findings.append(
+                        {"code": "MISSING_APPROVED_OFFER", "source": delivery_id}
+                    )
+                elif offer.offer.shelf_life_days_on_arrival is None:
+                    findings.append(
+                        {"code": "MISSING_EXPECTED_EXPIRY", "source": delivery_id}
+                    )
+                else:
+                    arrival_day = raw["expected_at"]
+                    if isinstance(arrival_day, str):
+                        arrival_day = datetime.fromisoformat(arrival_day)
+                    expiry_date = arrival_day.astimezone(
+                        ZoneInfo(selected.policy.payload.timezone)
+                    ).date() + timedelta(
+                        days=offer.offer.shelf_life_days_on_arrival - 1
+                    )
+                    expiry_evidence = {
+                        "reference": (f"{offer.offer_id}:shelf_life_days_on_arrival"),
+                        "available_at": selected.domain.recorded_at,
+                        "captured_revision": offer.source_revision,
+                    }
         supplies.append(
             {
                 "delivery": raw,
@@ -575,6 +594,7 @@ def first_slice_seed_rows(recorded_at: datetime) -> dict[str, list[dict]]:
                     "ordered_at": issue_time,
                     "arrival_at": arrival_at,
                     "kind": "NORMAL",
+                    "shipment_group_id": f"{supplier}:{arrival_at.isoformat()}",
                     "expiry_date": date(2026, 2, 20),
                     "source_revision": f"{source_revision}:opportunity:{offer_id}:normal:1",
                 }

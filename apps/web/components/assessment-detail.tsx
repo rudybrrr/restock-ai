@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, Run } from "@/lib/api";
 import { ErrorNotice, PageHeading, Status } from "./workspace";
 import { RunEvidence } from "./run-evidence";
+import { ReassessAction } from "./reassess-action";
 export function AssessmentDetail({ id }: { id: string }) {
   const query = useQuery({
     queryKey: ["run", id],
@@ -34,6 +35,9 @@ export function AssessmentDetail({ id }: { id: string }) {
             <p>{query.data.outcome ?? "No outcome recorded"}</p>
             <p>{query.data.escalation_reason ?? query.data.failure_reason}</p>
             <RunEvidence run={query.data} />
+            {query.data.status === "FAILED" && (
+              <ReassessAction runId={id} at={query.data.as_of} />
+            )}
             {query.data.plan_version_id && (
               <Link
                 href={`/workspace/recommendations?version=${encodeURIComponent(query.data.plan_version_id)}`}
