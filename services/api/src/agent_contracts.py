@@ -282,6 +282,11 @@ class PlanStatus(StrEnum):
     SUPERSEDED = "SUPERSEDED"
 
 
+class PlanCostScope(StrEnum):
+    LEGACY_FIELDS = "LEGACY_FIELDS"
+    NEW_PURCHASE_CASH_ONLY = "NEW_PURCHASE_CASH_ONLY"
+
+
 ALLOWED_PLAN_TRANSITIONS: dict[PlanStatus, frozenset[PlanStatus]] = {
     PlanStatus.PENDING_APPROVAL: frozenset(
         {
@@ -325,17 +330,40 @@ class PurchasePlanVersion(ContractModel):
     state_revision: StateRevision
     lines: list[PurchasePlanLine] = Field(min_length=1)
     total_purchase_cost: NonNegativeDecimal
-    expected_waste_cost: NonNegativeDecimal
-    expected_stockout_cost: NonNegativeDecimal
+    expected_waste_cost: NonNegativeDecimal | None
+    expected_stockout_cost: NonNegativeDecimal | None
     delivery_cost: NonNegativeDecimal
     emergency_penalty: NonNegativeDecimal
-    total_expected_cost: NonNegativeDecimal
+    total_expected_cost: NonNegativeDecimal | None
     requires_approval: Literal[True] = True
     approval_reason: Identifier
     invalidation_reason: str | None = None
+    cost_scope: PlanCostScope = PlanCostScope.LEGACY_FIELDS
+    new_purchase_cash_cost: NonNegativeDecimal | None = None
 
     @model_validator(mode="after")
     def validate_plan_evidence(self) -> "PurchasePlanVersion":
+        if self.cost_scope is PlanCostScope.NEW_PURCHASE_CASH_ONLY:
+            if (
+                self.expected_waste_cost is not None
+                or self.expected_stockout_cost is not None
+                or self.total_expected_cost is not None
+                or self.new_purchase_cash_cost is None
+                or self.new_purchase_cash_cost
+                != self.total_purchase_cost
+                + self.delivery_cost
+                + self.emergency_penalty
+            ):
+                raise ValueError(
+                    "Cash-only plans need exact new cash and unavailable economic costs"
+                )
+        elif (
+            self.expected_waste_cost is None
+            or self.expected_stockout_cost is None
+            or self.total_expected_cost is None
+            or self.new_purchase_cash_cost is not None
+        ):
+            raise ValueError("Legacy plan costs must retain their existing fields")
         expected_categories = {
             "forecast_ref": EvidenceCategory.FORECAST_RESULT,
             "inventory_snapshot_ref": EvidenceCategory.INVENTORY_SNAPSHOT,

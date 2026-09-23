@@ -148,6 +148,16 @@ Rudy-owned adapter and Backend's `planning_schemas.Candidate` untouched. In part
 its default economic fields must not present unavailable full economic costs as
 calculated zero; persist the cash scope and unavailable diagnostic fields explicitly.
 
+The Backend plan contract now reserves `calculation_mode: CONTINGENCY_ENGINE` and
+`cost_scope: NEW_PURCHASE_CASH_ONLY`. A contingency candidate must carry
+`new_purchase_cash_cost = total_purchase_cost + delivery_cost + emergency_penalty`;
+`expected_waste_cost`, `expected_stockout_cost`, and `total_expected_cost` are
+`null` because the bounded contingency slice did not calculate them. The same
+cost scope is preserved in canonical publication and manager evidence. Existing
+normal-plan records keep their legacy fields. This is a transport contract, not
+activation of a contingency plan or a claim that its extra-only lines are
+already publishable.
+
 ## Search guarantee and support limits
 
 Every 0..max-packs allocation for each opportunity is enumerated using an O(n)

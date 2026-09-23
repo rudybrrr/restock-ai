@@ -1,9 +1,14 @@
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from src.agent_contracts import AgentOutcome, EscalationReason, PlanStatus
+from src.agent_contracts import (
+    AgentOutcome,
+    EscalationReason,
+    PlanCostScope,
+    PlanStatus,
+)
 
 
 class AssessmentRequest(BaseModel):
@@ -48,16 +53,56 @@ class PlanLine(BaseModel):
 
 
 class Candidate(BaseModel):
-    calculation_mode: Literal["DEVELOPMENT_FIXTURE", "ENGINE"] = "DEVELOPMENT_FIXTURE"
+    calculation_mode: Literal["DEVELOPMENT_FIXTURE", "ENGINE", "CONTINGENCY_ENGINE"] = (
+        "DEVELOPMENT_FIXTURE"
+    )
     forecast_id: str
     inventory_snapshot_id: str
     lines: list[PlanLine]
     total_purchase_cost: Decimal
-    expected_waste_cost: Decimal = Decimal(0)
-    expected_stockout_cost: Decimal = Decimal(0)
+    expected_waste_cost: Decimal | None = Decimal(0)
+    expected_stockout_cost: Decimal | None = Decimal(0)
     delivery_cost: Decimal = Decimal(0)
     emergency_penalty: Decimal = Decimal(0)
-    total_expected_cost: Decimal
+    total_expected_cost: Decimal | None
+    cost_scope: PlanCostScope = PlanCostScope.LEGACY_FIELDS
+    new_purchase_cash_cost: Decimal | None = None
+
+    @model_validator(mode="after")
+    def validate_cost_scope(self) -> "Candidate":
+        if self.cost_scope is PlanCostScope.NEW_PURCHASE_CASH_ONLY:
+            if self.calculation_mode != "CONTINGENCY_ENGINE":
+                raise ValueError("Cash-only contingency costs need the contingency engine")
+            if (
+                self.expected_waste_cost is not None
+                or self.expected_stockout_cost is not None
+                or self.total_expected_cost is not None
+                or self.new_purchase_cash_cost is None
+                or any(
+                    value < 0
+                    for value in (
+                        self.total_purchase_cost,
+                        self.delivery_cost,
+                        self.emergency_penalty,
+                    )
+                )
+                or self.new_purchase_cash_cost < 0
+                or self.new_purchase_cash_cost
+                != self.total_purchase_cost
+                + self.delivery_cost
+                + self.emergency_penalty
+            ):
+                raise ValueError(
+                    "Cash-only candidates need exact new cash and unavailable economic costs"
+                )
+        elif (
+            self.expected_waste_cost is None
+            or self.expected_stockout_cost is None
+            or self.total_expected_cost is None
+            or self.new_purchase_cash_cost is not None
+        ):
+            raise ValueError("Legacy candidates must retain their existing cost fields")
+        return self
 
 
 class StoredPlanLine(PlanLine):
