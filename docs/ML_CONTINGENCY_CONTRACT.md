@@ -212,6 +212,22 @@ one delivery/emergency charge, tested independently.
 
 ## Acceptance and activation boundary
 
+Backend's `test_contingency_first_case_backend.py` now exercises the first case through
+the manager and Agent HTTP APIs: the closing count and explicit zero-sales intervals
+produce the declared 6 kg vegetable opening, while a 10 kg recorded delivery has
+6 kg received once and 4 kg outstanding after a supplier delay. The frozen run
+retains that commitment and the current `NORMAL_ONLY` policy. This is an input
+checkpoint, not an activated contingency recommendation.
+
+Three exact-source checks remain before activating this numerical fixture: the
+outstanding delivery's frozen expiry currently derives as **21 February** from the
+approved first-slice offer, while the numerical fixture supplies **20 February**;
+the emergency market offer in this case is staged synthetic evidence rather than
+the run's live approved offer; and the case artifact lists catalogue IDs but not a
+versioned complete recipe manifest. Resolve these with authoritative frozen sources
+or an explicitly agreed new fixture version. Do not silently substitute either
+expiry date or offer terms in the Agent adapter.
+
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and
 shared offer capacity; supplier proof versus budget/storage/safety; missing refs/
