@@ -268,6 +268,15 @@ already recorded). The first case therefore shows a 4 kg market addition while
 retaining the original delayed delivery; S$8 acquisition + S$3 delivery + S$4
 emergency equals S$15 new cash, with no old-order fee charged again.
 
+After claim, an Agent caller can `PUT /api/v1/runs/{run_id}/staged-contingency-artifact`
+to persist the full search result, independent validation, no-purchase projection,
+exclusions and typed preview in that run's frozen snapshot. The endpoint is
+idempotent for the same captured revision; its content-addressed ID binds the
+frozen staged input and result, and `GET` on the same path reads it back. A
+changed operational revision blocks a new calculation. This artifact remains
+`STAGED_DIAGNOSTIC`, `actionable: false`, and never writes a candidate plan or
+an order. Agent routing and active-policy publication remain open.
+
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and
 shared offer capacity; supplier proof versus budget/storage/safety; missing refs/

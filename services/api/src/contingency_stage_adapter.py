@@ -4,7 +4,7 @@ This intentionally cannot publish a plan or authorize the synthetic emergency
 offer. It proves that the frozen Backend facts map into the numerical contract.
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, cast
@@ -14,6 +14,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 from src.contingency import (
     EVIDENCE,
     ContingencyInputs,
+    ContingencyResult,
+    ContingencyValidation,
     MultiDayInputs,
     search_contingency,
     validate_contingency,
@@ -78,6 +80,13 @@ class StagedContingencyDiagnostic(BaseModel):
     cash_delivery_sgd: Decimal | None
     cash_emergency_sgd: Decimal | None
     cash_total_sgd: Decimal | None
+
+
+@dataclass(frozen=True)
+class StagedContingencyComputation:
+    diagnostic: StagedContingencyDiagnostic
+    result: ContingencyResult
+    independent_validation: ContingencyValidation | None
 
 
 def _approved_kind(value: str) -> Literal["NORMAL", "EMERGENCY"]:
@@ -314,7 +323,7 @@ def _inputs(run: PlanningRun, staged: StagedContingencyCase) -> ContingencyInput
     )
 
 
-def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
+def calculate_staged_case(run: PlanningRun) -> StagedContingencyComputation:
     """Calculate from the frozen run only; the output cannot become a plan."""
     raw = run.snapshot.get("staged_contingency_case")
     if raw is None:
@@ -339,7 +348,7 @@ def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
         if validation is not None and validation.complete and validation.feasible
         else ()
     )
-    return StagedContingencyDiagnostic(
+    diagnostic = StagedContingencyDiagnostic(
         run_id=run.id,
         captured_state_revision=str(run.input_revision),
         policy_version_id=staged.policy.id,
@@ -389,3 +398,9 @@ def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
         if validation and validation.cash
         else None,
     )
+    return StagedContingencyComputation(diagnostic, result, validation)
+
+
+def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
+    """Return the read-only preview of one frozen numerical calculation."""
+    return calculate_staged_case(run).diagnostic
