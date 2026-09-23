@@ -8,6 +8,7 @@ from src import database as db
 
 CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/1"
 CASE_V2 = CASE.replace("/versions/1", "/versions/2")
+CASE_V3 = CASE.replace("/versions/1", "/versions/3")
 
 
 def test_agent_reads_complete_first_case_domain_and_residual_forecast(
@@ -89,6 +90,28 @@ def test_version_two_binds_complete_catalogue_and_policy(
     assert policy.json()["payload"]["forecast_artifact_id"] == artifact["id"]
 
 
+def test_version_three_approves_exact_synthetic_demo_quote(client: TestClient) -> None:
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    response = client.get(CASE_V3)
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    assert artifact["version"] == 3
+    assert artifact["policy_version_id"] == "policy:BOUNDED_CONTINGENCY_CASH_V1_DEMO:3"
+    payload = artifact["payload"]
+    assert payload["offer_authority"] == "APPROVED_SYNTHETIC_DEMO_QUOTE"
+    assert payload["offer_approval_reference"] == "DEMO_QUOTE_DECISION_2026_09_24"
+    assert len(payload["approved_quote_sha256"]) == 64
+    assert payload["offers"][0]["offer"]["unit_price"] == "2"
+    assert payload["offers"][0]["offer"]["available_quantity"] == "6"
+    assert payload["opportunities"][0]["shipment_group_id"] == "new-rescue-shipment"
+    policy = client.get(
+        "/api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/3"
+    )
+    assert policy.status_code == 200, policy.text
+    assert policy.json()["payload"]["activation_state"] == "STAGED"
+    assert policy.json()["payload"]["forecast_artifact_id"] == artifact["id"]
+
+
 def test_versioned_recipe_change_without_new_digest_fails_closed(
     client: TestClient, database_url: str
 ) -> None:
@@ -97,19 +120,19 @@ def test_versioned_recipe_change_without_new_digest_fails_closed(
         with engine.begin() as connection:
             payload = connection.execute(
                 select(db.contingency_case_inputs.c.payload).where(
-                    db.contingency_case_inputs.c.version == 2
+                    db.contingency_case_inputs.c.version == 3
                 )
             ).scalar_one()
             payload["catalogue_recipes"][0]["quantity"] = "0.999"
             connection.execute(
                 update(db.contingency_case_inputs)
-                .where(db.contingency_case_inputs.c.version == 2)
+                .where(db.contingency_case_inputs.c.version == 3)
                 .values(payload=payload)
             )
     finally:
         engine.dispose()
     client.headers["Authorization"] = "Bearer test-agent-token"
-    response = client.get(CASE_V2)
+    response = client.get(CASE_V3)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
     del client.headers["Authorization"]
@@ -134,9 +157,34 @@ def test_versioned_recipe_change_without_new_digest_fails_closed(
     )
 
 
+def test_approved_quote_change_without_new_digest_fails_closed(
+    client: TestClient, database_url: str
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            payload = connection.execute(
+                select(db.contingency_case_inputs.c.payload).where(
+                    db.contingency_case_inputs.c.version == 3
+                )
+            ).scalar_one()
+            payload["offers"][0]["offer"]["unit_price"] = "3"
+            connection.execute(
+                update(db.contingency_case_inputs)
+                .where(db.contingency_case_inputs.c.version == 3)
+                .values(payload=payload)
+            )
+    finally:
+        engine.dispose()
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    response = client.get(CASE_V3)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
+
+
 def test_unknown_case_input_version_fails_closed(client: TestClient) -> None:
     client.headers["Authorization"] = "Bearer test-agent-token"
-    response = client.get(CASE.replace("/versions/1", "/versions/3"))
+    response = client.get(CASE.replace("/versions/1", "/versions/4"))
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
 

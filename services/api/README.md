@@ -337,3 +337,7 @@ and contingency acceptance still need teammate integration.
 For the staged contingency case only, Agent callers can read
 `GET /api/v1/runs/{run_id}/staged-contingency-diagnostic` after claim. It calculates
 from frozen inputs and is explicitly non-actionable; it does not publish a plan.
+The seeded version-3 contract explicitly approves its synthetic emergency quote
+for this demo and records a digest of the offer and opportunity terms. Rerun
+`python -m src.seed` to add version 3 to an existing demo database; seed does not
+overwrite live supplier offers.

@@ -121,3 +121,15 @@ def first_case_seed_policy_v2(recorded_at: datetime) -> dict:
         "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:2"
     )
     return ContingencyPolicyVersion.model_validate(row).model_dump(mode="json")
+
+
+def first_case_seed_policy_v3(recorded_at: datetime) -> dict:
+    """Point the staged demo policy at the explicitly approved quote version."""
+    row = first_case_seed_policy_v2(recorded_at)
+    row["id"] = f"policy:{DEMO_POLICY_ID}:3"
+    row["version"] = 3
+    row["source_revision"] = "ML_CONTINGENCY_CONTRACT_V3_APPROVED_DEMO_POLICY"
+    row["payload"]["forecast_artifact_id"] = (
+        "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:3"
+    )
+    return ContingencyPolicyVersion.model_validate(row).model_dump(mode="json")

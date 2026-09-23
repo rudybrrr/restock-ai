@@ -13,10 +13,12 @@ from src.config import Settings
 from src.contingency_case_contracts import (
     first_case_seed_input,
     first_case_seed_input_v2,
+    first_case_seed_input_v3,
 )
 from src.contingency_policy_contracts import (
     first_case_seed_policy,
     first_case_seed_policy_v2,
+    first_case_seed_policy_v3,
 )
 from src.database import (
     contingency_case_inputs,
@@ -141,6 +143,7 @@ def seed(database_url: str | None = None) -> None:
                 [
                     first_case_seed_policy(policy_recorded_at),
                     first_case_seed_policy_v2(policy_recorded_at),
+                    first_case_seed_policy_v3(policy_recorded_at),
                 ],
             )
             insert_if_absent(
@@ -148,6 +151,13 @@ def seed(database_url: str | None = None) -> None:
                 [
                     first_case_seed_input(policy_recorded_at),
                     first_case_seed_input_v2(
+                        policy_recorded_at,
+                        menu_items=menu_rows,
+                        ingredients=ingredient_rows,
+                        recipes=recipe_rows,
+                        suppliers=supplier_rows,
+                    ),
+                    first_case_seed_input_v3(
                         policy_recorded_at,
                         menu_items=menu_rows,
                         ingredients=ingredient_rows,

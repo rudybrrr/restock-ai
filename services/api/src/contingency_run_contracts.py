@@ -73,7 +73,7 @@ def freeze_staged_case(
         return None
     known_at = datetime.fromisoformat(snapshot["known_at"])
     try:
-        case = read_case_input(session, FIRST_CASE_ID, 2)
+        case = read_case_input(session, FIRST_CASE_ID, 3)
         policy = read_policy_version_by_id(session, case.policy_version_id)
     except ApiError as error:
         return StagedContingencyCase.model_validate(
@@ -106,6 +106,8 @@ def freeze_staged_case(
         or policy.payload.forecast_artifact_id != case.id
     ):
         findings.add("POLICY_REFERENCE_MISMATCH")
+    if payload.offer_authority != "APPROVED_SYNTHETIC_DEMO_QUOTE":
+        findings.add("OFFER_AUTHORITY_MISSING")
     try:
         menu = [MenuItem.model_validate(row) for row in snapshot["menu_items"]]
         ingredients = [
