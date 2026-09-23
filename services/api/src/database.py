@@ -121,6 +121,7 @@ procurement_domain_opportunities = Table(
     Column("ordered_at", DateTime(timezone=True), nullable=False),
     Column("arrival_at", DateTime(timezone=True), nullable=False),
     Column("kind", String, nullable=False),
+    Column("shipment_group_id", String),
     Column("expiry_date", Date, nullable=False),
     Column("source_revision", String, nullable=False),
     UniqueConstraint("domain_version_id", "opportunity_id"),

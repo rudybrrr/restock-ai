@@ -31,6 +31,8 @@ The first Pass 3E procurement input and the Backend-owned sales-materiality boun
 
 The approved domain contains 24 frozen offer revisions and 24 dated normal-order opportunities: one for each combination of the three approved suppliers and eight seeded ingredients. Every entry carries a source revision. Missing or inconsistent entries fail with `409 MISSING_REQUIRED_DATA`.
 
+An approved opportunity can also carry `shipment_group_id`. Backend stores and freezes that explicit identity; the contingency adapter may use it to group *new* purchase lines for one shipment charge. `null` means no grouping was approved and must not be replaced with an inferred supplier/arrival group. The seeded normal-only domain has `null` for this field. This additive transport field does not activate contingency search or change the normal fee policy.
+
 The forecast input is a separate immutable Backend artifact. It contains the four complete Monday closing-sales observations dated 19 January, 26 January, 2 February, and 9 February 2026, plus the five-item menu manifest, target date, `SEASONAL_BASELINE_V1` method tag, recording time, and source revision. It contains inputs, not a precomputed forecast: the deterministic engine must run `seasonal_baseline` and preserve its output evidence. Missing, late-recorded, or inconsistent forecast input fails closed instead of allowing the adapter to inject fixture data.
 
 ## Agent reads

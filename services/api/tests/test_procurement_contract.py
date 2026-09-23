@@ -143,6 +143,38 @@ def test_first_slice_policy_endpoint_exposes_complete_immutable_domain(
     )
 
 
+def test_explicit_new_shipment_identity_is_preserved_in_frozen_domain(
+    client: TestClient, database_url: str
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(db.procurement_domain_opportunities)
+                .where(
+                    db.procurement_domain_opportunities.c.offer_id
+                    == "market-vegetables"
+                )
+                .values(shipment_group_id="demo-new-shipment")
+            )
+    finally:
+        engine.dispose()
+    sign_in(client)
+    requested = client.post("/api/v1/assessments", json={"as_of": ISSUE_TIME})
+    assert requested.status_code == 202, requested.text
+    run_id = requested.json()["id"]
+    agent(client)
+    assert client.post("/api/v1/runs/claim").status_code == 200
+    frozen = client.get(f"/api/v1/runs/{run_id}/procurement-contract")
+    assert frozen.status_code == 200, frozen.text
+    opportunity = next(
+        row
+        for row in frozen.json()["domain"]["opportunities"]
+        if row["offer_id"] == "market-vegetables"
+    )
+    assert opportunity["shipment_group_id"] == "demo-new-shipment"
+
+
 def test_agent_reads_the_exact_contract_frozen_with_run_context(
     client: TestClient,
 ) -> None:
