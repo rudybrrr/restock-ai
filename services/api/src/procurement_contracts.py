@@ -183,6 +183,7 @@ def _build(
                             "ordered_at",
                             "arrival_at",
                             "kind",
+                            "shipment_group_id",
                             "expiry_date",
                             "source_revision",
                         )
@@ -295,7 +296,9 @@ def bind_frozen_supplier_state(
     deterministic engine without creating a new policy or domain contract.
     """
     if len(offers) != len(offer_version_ids):
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Supplier revision evidence is incomplete")
+        raise ApiError(
+            409, "MISSING_REQUIRED_DATA", "Supplier revision evidence is incomplete"
+        )
     by_id = {str(offer["id"]): offer for offer in offers}
     revision_by_id = {
         str(offer["id"]): version_id
