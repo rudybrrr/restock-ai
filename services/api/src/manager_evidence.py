@@ -39,7 +39,9 @@ class ManagerPlanReference(BaseModel):
     run_id: str
     created_at: AwareDatetime
     line_count: int = Field(ge=0)
-    total_expected_cost: str
+    total_expected_cost: str | None
+    cost_scope: str = "LEGACY_FIELDS"
+    new_purchase_cash_cost: str | None = None
 
 
 class ManagerTimelineEntry(BaseModel):
@@ -173,7 +175,17 @@ def _plan_reference(plan: PurchasePlanVersion) -> ManagerPlanReference:
         run_id=plan.run_id,
         created_at=plan.created_at,
         line_count=len(plan.lines),
-        total_expected_cost=str(plan.total_expected_cost),
+        total_expected_cost=(
+            str(plan.total_expected_cost)
+            if plan.total_expected_cost is not None
+            else None
+        ),
+        cost_scope=plan.cost_scope.value,
+        new_purchase_cash_cost=(
+            str(plan.new_purchase_cash_cost)
+            if plan.new_purchase_cash_cost is not None
+            else None
+        ),
     )
 
 

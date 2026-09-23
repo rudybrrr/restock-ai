@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_UP, Decimal
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -173,6 +174,14 @@ def validate_candidate_reference(
     candidate = Candidate.model_validate(stored)
     _validate_candidate(run.snapshot, candidate)
     return candidate
+
+
+def _same_candidate(raw: object, candidate: Candidate) -> bool:
+    """Compare older stored candidates after applying compatible schema defaults."""
+    try:
+        return Candidate.model_validate(raw) == candidate
+    except ValidationError:
+        return False
 
 
 def validate_human_review_request(
@@ -1014,8 +1023,9 @@ def complete_run(
         engine_candidate = (
             candidate.calculation_mode == "ENGINE"
             and artifacts is not None
-            and artifacts.get("candidate", {}).get("candidate")
-            == candidate.model_dump(mode="json")
+            and _same_candidate(
+                artifacts.get("candidate", {}).get("candidate"), candidate
+            )
             and artifacts.get("validation", {}).get("candidate_id")
             == artifacts.get("candidate", {}).get("id")
             and artifacts.get("validation", {}).get("complete") is True
@@ -1023,7 +1033,7 @@ def complete_run(
         )
         if not engine_candidate:
             _validate_candidate(snapshot, candidate)
-        if snapshot.get("calculated_candidate") != candidate.model_dump(mode="json"):
+        if not _same_candidate(snapshot.get("calculated_candidate"), candidate):
             raise ApiError(
                 409,
                 "PLAN_INVALID",
@@ -1301,6 +1311,8 @@ def _canonical_plan_version(
         delivery_cost=stored.delivery_cost,
         emergency_penalty=stored.emergency_penalty,
         total_expected_cost=stored.total_expected_cost,
+        cost_scope=stored.cost_scope,
+        new_purchase_cash_cost=stored.new_purchase_cash_cost,
         approval_reason="MANAGER_APPROVAL_REQUIRED",
     )
 
