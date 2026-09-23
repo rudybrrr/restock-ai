@@ -594,6 +594,7 @@ def first_slice_seed_rows(recorded_at: datetime) -> dict[str, list[dict]]:
                     "ordered_at": issue_time,
                     "arrival_at": arrival_at,
                     "kind": "NORMAL",
+                    "shipment_group_id": f"{supplier}:{arrival_at.isoformat()}",
                     "expiry_date": date(2026, 2, 20),
                     "source_revision": f"{source_revision}:opportunity:{offer_id}:normal:1",
                 }
