@@ -2,7 +2,9 @@
 
 Aniq, 22 September 2026. Related to [issue #11](https://github.com/rudybrrr/restock-ai/issues/11).
 This freezes **implemented numerical semantics**, not an activated Backend policy.
-Backend `ProcurementPolicyPayload.emergency_mode` remains `NORMAL_ONLY`.
+Backend `ProcurementPolicyPayload.emergency_mode` remains `NORMAL_ONLY` for normal
+runs. The exact synthetic first case now has a separate activated version-4 path;
+see [connected Backend first case](BACKEND_CONTINGENCY_FIRST_CASE.md).
 Budget, safety, storage, horizon, prices, capacity and shipment identities must be
 supplied from authorised versioned inputs; none of this fixture's values are defaults.
 
@@ -251,8 +253,8 @@ delivery and S$4 emergency charge. Case input and staged policy version 3 record
 that decision as `DEMO_QUOTE_DECISION_2026_09_24`; a digest binds the exact offer
 and opportunity terms. A changed quote needs a new approved version. This is demo
 fixture authority, not a claim about the restaurant's live supplier offer or a
-manager-entered quote. The policy remains `STAGED` until the Agent publication path
-uses the approved contract safely.
+manager-entered quote. Version 3 remains `STAGED`; version 4 activates only the
+exact approved first-case fixture.
 
 The Agent-only `GET /api/v1/runs/{run_id}/staged-contingency-diagnostic` now maps
 that exact frozen version-3 case into `search_contingency` and independently calls
@@ -260,8 +262,8 @@ that exact frozen version-3 case into `search_contingency` and independently cal
 stock, catalogue and commitment match. The response is always marked
 `STAGED_DIAGNOSTIC` and `actionable: false`; it does not persist a candidate, publish
 a plan, or change `NORMAL_ONLY`. Mismatched or unavailable cases return 409. This
-proves the Backend-to-numerical mapping while active-policy/Agent publication
-remains open.
+proves the Backend-to-numerical mapping. The separate active version-4 route is
+described in [the Backend first-case handover](BACKEND_CONTINGENCY_FIRST_CASE.md).
 Its validated preview now separates `candidate_lines` (new additions, with their
 supplier, offer, opportunity and new shipment IDs) from `fixed_supply_ids` (orders
 already recorded). The first case therefore shows a 4 kg market addition while
@@ -275,7 +277,7 @@ idempotent for the same captured revision; its content-addressed ID binds the
 frozen staged input and result, and `GET` on the same path reads it back. A
 changed operational revision blocks a new calculation. This artifact remains
 `STAGED_DIAGNOSTIC`, `actionable: false`, and never writes a candidate plan or
-an order. Agent routing and active-policy publication remain open.
+an order. The active version-4 route keeps this staged artifact separate.
 
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and
@@ -286,11 +288,10 @@ ID-order and reliability invariance; candidate tampering; normal-reduction rejec
 elapsed actual exclusion; no-action risk; next-day protection. Additional checks
 cover exact conservation, no mutation, malformed quantities and ambient precision.
 
-The external-purchase story is **numerically verified only**: recommendation4kg;
-approval changes no input; subsequently supplied separate external EMERGENCY
-Delivery4kg prevents duplicate recommendations; it has no receipt yet. The existing
-Backend `POST /deliveries` and `POST /deliveries/{id}/receive` support recording
-facts, but this task does not activate a contingency plan through them.
+The version-4 Backend first case now verifies recommendation, pending-plan
+publication, manager approval and linked external emergency-purchase recording.
+The broader numerical fixtures still lack connected API acceptance and a later
+actual receipt.
 
 **Chun Yang:** map/persist/select the new policy, residual multi-day forecasts and
 per-ingredient windows, full domain, explicit new-shipment grouping, constraints,
@@ -305,10 +306,11 @@ mapping above, persist resolvable evidence, and route normal versus contingency 
 the selected policy. Neither an empty addition nor a diagnostic incumbent permits
 an automatic KEEP/approval. Normal worker/live-provider readiness is separate.
 
-**Still pending for #11:** activated-policy Backend/Agent/API acceptance of on-time
-no duplicate, partial/late/cancelled rescue, typed escalation, fresh pending-plan
-publication/approval, separate external emergency recording, re-assessment and
-later actual receipt. These numerical fixtures do not close issue #11 or #16.
+**Still pending for #11:** connected API acceptance of on-time no duplicate,
+short/cancelled rescue, typed escalation, re-assessment after the external purchase,
+and later actual receipt. The first delayed 4 kg rescue now has pending-plan,
+approval and external-purchase acceptance. Other numerical fixtures do not close
+issue #11 or #16.
 Full economic scoring/continuation/terminal policy and real-world accuracy remain
 outside this increment. No full synthetic training calendar is approved here.
 

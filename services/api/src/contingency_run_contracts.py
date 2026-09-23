@@ -1,4 +1,4 @@
-"""Bind the staged numerical case to one immutable Backend run, without activation."""
+"""Bind the approved synthetic contingency case to one immutable Backend run."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -32,11 +32,11 @@ CASE_ISSUE = datetime.fromisoformat("2026-02-16T10:00:00+08:00")
 
 
 class StagedContingencyCase(BaseModel):
-    """Frozen first-case evidence; never an activated procurement selection."""
+    """Frozen first-case evidence, with explicit staged or active authority."""
 
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["STAGED_MATCH", "STAGED_MISMATCH", "UNAVAILABLE"]
+    status: Literal["STAGED_MATCH", "ACTIVE_MATCH", "STAGED_MISMATCH", "UNAVAILABLE"]
     run_id: str
     as_of: AwareDatetime
     known_at: AwareDatetime
@@ -57,10 +57,14 @@ class StagedContingencyCase(BaseModel):
             self.policy is None or self.case_input is None or self.opening_lots is None
         ):
             raise ValueError("Staged case needs policy, case and opening evidence")
-        if self.status == "STAGED_MATCH" and (
+        if self.status in ("STAGED_MATCH", "ACTIVE_MATCH") and (
             self.findings or self.commitment_projection is None
         ):
             raise ValueError("A matched staged case must carry complete fixed supply")
+        if self.status == "ACTIVE_MATCH" and (
+            self.policy is None or self.policy.payload.activation_state != "ACTIVE"
+        ):
+            raise ValueError("Active match requires an active policy")
         return self
 
 
@@ -214,5 +218,53 @@ def freeze_staged_case(
             "case_input": case.model_dump(mode="json"),
             "opening_lots": [lot.model_dump(mode="json") for lot in lots],
             "commitment_projection": projection,
+        }
+    ).model_dump(mode="json")
+
+
+def freeze_active_case(
+    session: Session, staged_raw: dict | None
+) -> dict | None:
+    """Select v4 only when the exact v3 run facts and approved quote match."""
+    if staged_raw is None:
+        return None
+    staged = StagedContingencyCase.model_validate(staged_raw)
+    if staged.status != "STAGED_MATCH" or staged.case_input is None:
+        return None
+    unavailable = {
+        "status": "UNAVAILABLE",
+        "run_id": staged.run_id,
+        "as_of": staged.as_of,
+        "known_at": staged.known_at,
+        "captured_state_revision": staged.captured_state_revision,
+    }
+    try:
+        case = read_case_input(session, FIRST_CASE_ID, 4)
+        policy = read_policy_version_by_id(session, case.policy_version_id)
+    except ApiError as error:
+        return StagedContingencyCase.model_validate(
+            {**unavailable, "reason": error.detail.code}
+        ).model_dump(mode="json")
+    if case.recorded_at > staged.known_at or policy.recorded_at > staged.known_at:
+        reason = "CASE_NOT_KNOWN_AT_CAPTURE"
+    elif (
+        policy.payload.activation_state != "ACTIVE"
+        or policy.payload.approved_domain_id != case.payload.domain_id
+        or policy.payload.forecast_artifact_id != case.id
+        or case.payload != staged.case_input.payload
+    ):
+        reason = "ACTIVE_POLICY_REFERENCE_MISMATCH"
+    else:
+        reason = None
+    if reason is not None:
+        return StagedContingencyCase.model_validate(
+            {**unavailable, "reason": reason}
+        ).model_dump(mode="json")
+    return StagedContingencyCase.model_validate(
+        {
+            **staged.model_dump(mode="json"),
+            "status": "ACTIVE_MATCH",
+            "policy": policy.model_dump(mode="json"),
+            "case_input": case.model_dump(mode="json"),
         }
     ).model_dump(mode="json")

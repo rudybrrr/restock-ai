@@ -434,6 +434,9 @@ purchase_plan_lines = Table(
     Column("quantity", Numeric(12, 3), nullable=False),
     Column("unit_price", Numeric(12, 2), nullable=False),
     Column("arrival_at", DateTime(timezone=True), nullable=False),
+    Column("ordered_at", DateTime(timezone=True)),
+    Column("expiry_date", Date),
+    Column("kind", String),
     CheckConstraint("quantity > 0 AND unit_price >= 0"),
 )
 audit_entries = Table(

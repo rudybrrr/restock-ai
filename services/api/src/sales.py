@@ -166,6 +166,10 @@ def create_sales_batch(
             "batch": result.model_dump(mode="json"),
             "effective_at": body.period_end.isoformat(),
         },
+        # A zero-activity coverage interval advances the estimate's evidence,
+        # but has no demand change to reassess. A correction removing earlier
+        # sales still needs reassessment.
+        enqueue=bool(body.sales) or bool(replaced and replaced["sales"]),
     )
     session.commit()
     return result

@@ -97,9 +97,11 @@ def _approved_kind(value: str) -> Literal["NORMAL", "EMERGENCY"]:
     raise ApiError(409, "POLICY_VIOLATION", "Unknown new-purchase kind")
 
 
-def _inputs(run: PlanningRun, staged: StagedContingencyCase) -> ContingencyInputs:
-    if staged.status != "STAGED_MATCH":
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Staged case does not match run")
+def inputs_from_frozen_case(
+    run: PlanningRun, staged: StagedContingencyCase
+) -> ContingencyInputs:
+    if staged.status not in ("STAGED_MATCH", "ACTIVE_MATCH"):
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Contingency case does not match run")
     policy_version = staged.policy
     case_version = staged.case_input
     opening_lots = staged.opening_lots
@@ -131,7 +133,8 @@ def _inputs(run: PlanningRun, staged: StagedContingencyCase) -> ContingencyInput
         or suppliers is None
         or recipe_manifest is None
         or case.catalogue_sha256 is None
-        or policy.activation_state != "STAGED"
+        or policy.activation_state
+        != ("ACTIVE" if staged.status == "ACTIVE_MATCH" else "STAGED")
         or case.offer_authority != "APPROVED_SYNTHETIC_DEMO_QUOTE"
         or case.offer_approval_reference is None
     ):
@@ -329,7 +332,7 @@ def calculate_staged_case(run: PlanningRun) -> StagedContingencyComputation:
     if raw is None:
         raise ApiError(409, "MISSING_REQUIRED_DATA", "No staged case for this run")
     staged = StagedContingencyCase.model_validate(raw)
-    inputs = _inputs(run, staged)
+    inputs = inputs_from_frozen_case(run, staged)
     result = search_contingency(inputs)
     validation = (
         validate_contingency(inputs, result.candidate)

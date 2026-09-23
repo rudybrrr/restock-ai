@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -50,6 +51,9 @@ class PlanLine(BaseModel):
     quantity: Annotated[Decimal, Field(gt=0)]
     unit_price: Annotated[Decimal, Field(ge=0)]
     arrival_at: AwareDatetime
+    ordered_at: AwareDatetime | None = None
+    expiry_date: date | None = None
+    kind: Literal["NORMAL", "EMERGENCY"] | None = None
 
 
 class Candidate(BaseModel):

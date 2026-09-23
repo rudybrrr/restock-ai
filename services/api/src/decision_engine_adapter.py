@@ -16,9 +16,13 @@ from src.agent_contracts import (
     EvidenceCategory,
     EvidenceRef,
     EvidenceSource,
+    PlanCostScope,
     ToolRequest,
     ToolResult,
 )
+from src.contingency import search_contingency, validate_contingency
+from src.contingency_run_contracts import StagedContingencyCase
+from src.contingency_stage_adapter import _approved_kind, inputs_from_frozen_case
 from src.demand_tools import BackendDemandTools
 from src.errors import ApiError, ErrorDetail, ErrorResponse
 from src.inventory_projection import SourceEvidence
@@ -235,6 +239,90 @@ def run_first_slice_engine(session: Session, run) -> dict:
     return artifacts
 
 
+def run_active_contingency_engine(session: Session, run) -> dict:
+    """Certify only new purchases against the run's activated, frozen demo case."""
+    raw = run.snapshot.get("active_contingency_case")
+    if raw is None:
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Active contingency case missing")
+    frozen = StagedContingencyCase.model_validate(raw)
+    if frozen.status != "ACTIVE_MATCH" or frozen.case_input is None:
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Active contingency case is incomplete")
+    inputs = inputs_from_frozen_case(run, frozen)
+    result = search_contingency(inputs)
+    if result.status == "INFEASIBLE_IN_DOMAIN":
+        raise ApiError(409, "NO_FEASIBLE_SUPPLIER", "Approved contingency domain is infeasible")
+    if result.status != "OPTIMAL_IN_DOMAIN" or result.candidate is None:
+        raise ApiError(409, "CALCULATION_INCOMPLETE", "Contingency search did not complete")
+    validation = validate_contingency(inputs, result.candidate)
+    if result.validation != validation or not validation.complete or not validation.feasible or validation.cash is None:
+        raise ApiError(409, "POLICY_VIOLATION", "Independent contingency validation failed")
+    if not validation.additions:
+        raise ApiError(409, "PLAN_INVALID", "No additional purchase is needed")
+    if result.no_purchase is None or not result.no_purchase.fixed_supply_ids:
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Fixed commitments are missing")
+    approved = {row.offer_id: row.offer for row in frozen.case_input.payload.offers}
+    candidate = Candidate(
+        calculation_mode="CONTINGENCY_ENGINE",
+        forecast_id=frozen.case_input.id,
+        inventory_snapshot_id=run.snapshot["inventory_snapshot_id"],
+        lines=[
+            PlanLine(
+                ingredient_id=addition.ingredient_id,
+                supplier_id=addition.supplier_id,
+                offer_id=addition.offer_id,
+                opportunity_id=addition.opportunity_id,
+                shipment_group_id=addition.shipment_group_id,
+                quantity=addition.quantity,
+                unit_price=cast(Decimal, approved[addition.offer_id].unit_price),
+                arrival_at=addition.arrival_at,
+                ordered_at=addition.ordered_at,
+                expiry_date=addition.expiry_date,
+                kind=_approved_kind(addition.kind),
+            )
+            for addition in validation.additions
+        ],
+        total_purchase_cost=validation.cash.acquisition,
+        expected_waste_cost=None,
+        expected_stockout_cost=None,
+        delivery_cost=validation.cash.delivery,
+        emergency_penalty=validation.cash.emergency,
+        total_expected_cost=None,
+        cost_scope=PlanCostScope.NEW_PURCHASE_CASH_ONLY,
+        new_purchase_cash_cost=validation.cash.total,
+    )
+    candidate_id = "candidate:" + _identity(candidate.model_dump(mode="json"))
+    independent_result = _json(asdict(validation))
+    validation_id = "validation:" + _identity(
+        {"candidate": candidate_id, "result": independent_result}
+    )
+    artifacts = {
+        "input": {"id": "engine-input:" + _identity(raw), "case": raw},
+        "candidate": {"id": candidate_id, "candidate": candidate.model_dump(mode="json")},
+        "validation": {
+            "id": validation_id,
+            "candidate_id": candidate_id,
+            "complete": True,
+            "feasible": True,
+            "independent_result": independent_result,
+        },
+        "search_result": _json(asdict(result)),
+        "fixed_supply_ids": list(result.no_purchase.fixed_supply_ids),
+    }
+    session.execute(
+        update(db.planning_runs)
+        .where(db.planning_runs.c.id == run.id)
+        .values(
+            snapshot={
+                **run.snapshot,
+                "decision_engine_artifacts": artifacts,
+                "calculated_candidate": candidate.model_dump(mode="json"),
+            }
+        )
+    )
+    session.commit()
+    return artifacts
+
+
 class BackendProcurementTools:
     """Agent-facing references over Backend-owned engine artifacts only."""
 
@@ -264,14 +352,26 @@ class BackendProcurementTools:
             if str(run.input_revision) != request.captured_state_revision:
                 raise ApiError(409, "STATE_REVISION_STALE", "Backend run revision changed")
             if request.tool is AgentToolName.GET_SUPPLIER_OPTIONS:
-                contract = ProcurementContract.model_validate(run.snapshot.get("procurement_contract"))
+                active = run.snapshot.get("active_contingency_case")
+                if active is not None:
+                    frozen = StagedContingencyCase.model_validate(active)
+                    if frozen.status != "ACTIVE_MATCH" or frozen.case_input is None:
+                        raise ApiError(409, "MISSING_REQUIRED_DATA", "Active contingency case is incomplete")
+                    domain_id = frozen.case_input.payload.domain_id
+                else:
+                    contract = ProcurementContract.model_validate(run.snapshot.get("procurement_contract"))
+                    domain_id = contract.domain.id
                 output = self._ref(
                     request, EvidenceCategory.SUPPLIER_STATE, EvidenceSource.BACKEND,
-                    contract.domain.id,
+                    domain_id,
                 )
                 return ToolResult(tool_call_id=request.tool_call_id, run_id=request.run_id, tool=request.tool, output_ref=output)
 
-            artifacts = run_first_slice_engine(self._session, run)
+            artifacts = (
+                run_active_contingency_engine(self._session, run)
+                if run.snapshot.get("active_contingency_case") is not None
+                else run_first_slice_engine(self._session, run)
+            )
             if request.tool in (
                 AgentToolName.CHECK_SUPPLIER_FEASIBILITY,
                 AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS,

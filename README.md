@@ -130,4 +130,5 @@ The current local status is tracked in [docs/AGENTS_TASKS.md](docs/AGENTS_TASKS.
 - [Local demo script](docs/LOCAL_DEMO_SCRIPT.md)
 - [Submission material](docs/SUBMISSION_MATERIALS.md)
 - [Backend setup and API notes](services/api/README.md)
+- [Connected synthetic contingency first case](docs/BACKEND_CONTINGENCY_FIRST_CASE.md)
 - [Frontend development and verification](apps/web/FRONTEND.md)

@@ -4,6 +4,7 @@ This module contains schemas and lifecycle rules only. It intentionally contains
 agent runtime, persistence, or deterministic business calculations.
 """
 
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -315,6 +316,9 @@ class PurchasePlanLine(ContractModel):
     unit: Identifier
     unit_price: NonNegativeDecimal
     delivery_at: AwareDatetime
+    ordered_at: AwareDatetime | None = None
+    expiry_date: date | None = None
+    kind: Literal["NORMAL", "EMERGENCY"] | None = None
 
 
 class PurchasePlanVersion(ContractModel):
