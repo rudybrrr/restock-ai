@@ -32,7 +32,11 @@ from src.agent_contracts import (
 from src.agent_contracts import (
     PurchasePlanVersion as CanonicalPurchasePlanVersion,
 )
-from src.contingency_run_contracts import freeze_staged_case
+from src.contingency_run_contracts import (
+    StagedContingencyCase,
+    freeze_active_case,
+    freeze_staged_case,
+)
 from src.errors import ApiError
 from src.fact_history import (
     commitments_at,
@@ -166,6 +170,8 @@ def validate_candidate_reference(
         ):
             raise ApiError(409, "UNCERTIFIED_OUTCOME", "Engine candidate lacks validation")
         return Candidate.model_validate(artifacts["candidate"]["candidate"])
+    if run.snapshot.get("active_contingency_case") is not None:
+        raise ApiError(409, "UNCERTIFIED_OUTCOME", "Active contingency requires a certified engine candidate")
     if reference_id != f"{run_id}:candidate":
         raise ApiError(409, "PLAN_INVALID", "Candidate reference does not belong to run")
     stored = run.snapshot.get("calculated_candidate")
@@ -365,6 +371,9 @@ def _snapshot(
     staged_case = freeze_staged_case(session, snapshot, run_id, captured_state_revision)
     if staged_case is not None:
         snapshot["staged_contingency_case"] = staged_case
+        active_case = freeze_active_case(session, staged_case)
+        if active_case is not None:
+            snapshot["active_contingency_case"] = active_case
     return snapshot
 
 
@@ -1009,8 +1018,19 @@ def complete_run(
     if body.candidate:
         candidate = body.candidate
         snapshot = run.snapshot
+        active_case = snapshot.get("active_contingency_case")
+        active_frozen = (
+            StagedContingencyCase.model_validate(active_case)
+            if active_case is not None
+            else None
+        )
+        active_forecast_id = (
+            active_frozen.case_input.id
+            if active_frozen is not None and active_frozen.case_input is not None
+            else None
+        )
         if (
-            candidate.forecast_id != snapshot["forecast_id"]
+            candidate.forecast_id != (active_forecast_id or snapshot["forecast_id"])
             or candidate.inventory_snapshot_id != snapshot["inventory_snapshot_id"]
             or not candidate.lines
         ):
@@ -1021,7 +1041,8 @@ def complete_run(
             )
         artifacts = snapshot.get("decision_engine_artifacts")
         engine_candidate = (
-            candidate.calculation_mode == "ENGINE"
+            candidate.calculation_mode
+            == ("CONTINGENCY_ENGINE" if active_case is not None else "ENGINE")
             and artifacts is not None
             and _same_candidate(
                 artifacts.get("candidate", {}).get("candidate"), candidate
@@ -1031,6 +1052,8 @@ def complete_run(
             and artifacts.get("validation", {}).get("complete") is True
             and artifacts.get("validation", {}).get("feasible") is True
         )
+        if active_case is not None and not engine_candidate:
+            raise ApiError(409, "UNCERTIFIED_OUTCOME", "Active contingency requires independent engine validation")
         if not engine_candidate:
             _validate_candidate(snapshot, candidate)
         if not _same_candidate(snapshot.get("calculated_candidate"), candidate):
@@ -1302,6 +1325,9 @@ def _canonical_plan_version(
                 unit=units[line.ingredient_id],
                 unit_price=line.unit_price,
                 delivery_at=line.arrival_at,
+                ordered_at=line.ordered_at,
+                expiry_date=line.expiry_date,
+                kind=line.kind,
             )
             for line in stored.lines
         ],
@@ -1530,7 +1556,12 @@ def read_plan(session: Session, version_id: str) -> PurchasePlanVersion:
         run_id=row["run_id"],
         created_at=row["created_at"],
         lines=[PlanLine.model_validate(line) for line in lines],
-        forecast_id=row["snapshot"]["forecast_id"],
+        forecast_id=(
+            row["snapshot"]["active_contingency_case"]["case_input"]["id"]
+            if row["snapshot"].get("active_contingency_case", {}).get("status")
+            == "ACTIVE_MATCH"
+            else row["snapshot"]["forecast_id"]
+        ),
         inventory_snapshot_id=row["snapshot"]["inventory_snapshot_id"],
         **costs,
     )

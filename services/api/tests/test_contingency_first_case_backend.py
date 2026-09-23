@@ -5,9 +5,16 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from test_daily import sign_in
+from test_decision_engine_adapter import EngineScript
 
+from src.agent_contracts import AgentOutcome
+from src.assessment_worker import _FullPlanningRouteClassifier
+from src.backend_control_plane import run_backend_coordinator
 from src.contingency_artifacts import StagedContingencyArtifact, _verify_artifact
+from src.decision_engine_adapter import BackendProcurementTools
 from src.errors import ApiError
 from src.planning_schemas import PlanningRun
 from src.procurement_contract_schemas import FrozenCommitmentProjection
@@ -18,6 +25,7 @@ ISSUE = "2026-02-16T10:00:00+08:00"
 
 def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     client: TestClient,
+    database_url: str,
 ) -> None:
     sign_in(client)
     delivery = client.post(
@@ -63,16 +71,6 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     )
     assert receipt.status_code == 200, receipt.text
     receipt_lot_id = receipt.json()["receipts"][0]["lot_id"]
-    delayed = client.post(
-        f"/api/v1/deliveries/{delivery_id}/update",
-        json={
-            "expected_quantity": "10",
-            "expected_at": "2026-02-17T09:00:00+08:00",
-            "expected_expiry_date": "2026-02-20",
-            "effective_at": "2026-02-16T09:30:00+08:00",
-        },
-    )
-    assert delayed.status_code == 200, delayed.text
 
     # The simulator explicitly reports no sales since the physical count.
     # Split at the receipt so the new lot has complete post-receipt coverage too.
@@ -91,6 +89,17 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
             },
         )
         assert batch.status_code == 201, batch.text
+
+    delayed = client.post(
+        f"/api/v1/deliveries/{delivery_id}/update",
+        json={
+            "expected_quantity": "10",
+            "expected_at": "2026-02-17T09:00:00+08:00",
+            "expected_expiry_date": "2026-02-20",
+            "effective_at": "2026-02-16T09:30:00+08:00",
+        },
+    )
+    assert delayed.status_code == 200, delayed.text
 
     requested = client.post("/api/v1/assessments", json={"as_of": ISSUE})
     assert requested.status_code == 202, requested.text
@@ -271,3 +280,65 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
         _verify_artifact(PlanningRun.model_validate(unchanged.json()), tampered)
     assert error.value.detail.code == "STATE_REVISION_STALE"
     assert client.get("/api/v1/plan-history").json() == []
+
+    active = snapshot["active_contingency_case"]
+    assert active["status"] == "ACTIVE_MATCH"
+    assert active["case_input"]["id"].endswith(":4")
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            execution = run_backend_coordinator(
+                session,
+                run["id"],
+                EngineScript(),
+                BackendProcurementTools(session),
+                manual_classifier=_FullPlanningRouteClassifier(),
+            )
+            assert execution.completion.outcome is AgentOutcome.REVISE_PLAN
+            assert execution.publication_result is not None
+            plan = execution.publication_result.created_plan_version
+            assert plan is not None
+            assert plan.status.value == "PENDING_APPROVAL"
+            assert plan.cost_scope.value == "NEW_PURCHASE_CASH_ONLY"
+            assert plan.new_purchase_cash_cost == Decimal(15)
+            assert plan.total_expected_cost is None
+            assert len(plan.lines) == 1
+            assert plan.lines[0].kind == "EMERGENCY"
+            assert plan.lines[0].quantity == Decimal(4)
+            plan_id = plan.id
+            version = plan.version
+            logical_plan_id = plan.plan_id
+    finally:
+        engine.dispose()
+
+    client.headers.pop("Authorization", None)
+    approved = client.post(
+        f"/api/v1/plans/{plan_id}/decision",
+        json={"plan_id": logical_plan_id, "plan_version": version, "decision": "APPROVED"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "APPROVED"
+    lines = client.get(f"/api/v1/plans/{plan_id}/lines")
+    assert lines.status_code == 200, lines.text
+    assert len(lines.json()) == 1
+    line = lines.json()[0]
+    assert line["kind"] == "EMERGENCY"
+    assert line["expiry_date"] == "2026-02-17"
+    purchase = client.post(
+        "/api/v1/deliveries",
+        json={
+            "supplier_id": line["supplier_id"],
+            "ingredient_id": line["ingredient_id"],
+            "kind": line["kind"],
+            "expected_quantity": line["quantity"],
+            "ordered_at": line["ordered_at"],
+            "expected_at": line["arrival_at"],
+            "expected_expiry_date": line["expiry_date"],
+            "source_plan_line_id": line["id"],
+        },
+    )
+    assert purchase.status_code == 201, purchase.text
+    assert purchase.json()["source_plan_line_id"] == line["id"]
+    assert client.get(f"/api/v1/plans/{plan_id}/lines").json()[0][
+        "uncommitted_quantity"
+    ] == "0.000"

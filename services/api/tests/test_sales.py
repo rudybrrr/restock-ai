@@ -173,6 +173,8 @@ def test_estimate_marks_a_gap_in_sales_coverage_incomplete(client: TestClient) -
     )
     assert response.status_code == 200
     assert response.json()[0]["coverage_complete"] is False
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    assert client.post("/api/v1/runs/claim").status_code == 409
 
 
 def test_receipt_does_not_restore_pre_receipt_consumption(client: TestClient) -> None:

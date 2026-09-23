@@ -41,7 +41,7 @@ def lock_inventory(session: Session) -> None:
 
 
 def record_event(
-    session: Session, event_type: EventType, actor: str, payload: dict
+    session: Session, event_type: EventType, actor: str, payload: dict, *, enqueue: bool = True
 ) -> str:
     event_id = str(uuid4())
     now = datetime.now(UTC)
@@ -63,7 +63,7 @@ def record_event(
             timestamp=now,
         )
     )
-    if event_type in EXPLICIT_TRIGGERS:
+    if enqueue and event_type in EXPLICIT_TRIGGERS:
         effective_at = datetime.fromisoformat(
             payload.get("effective_at") or payload["cutoff"]
         )

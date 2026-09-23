@@ -280,3 +280,26 @@ def first_case_seed_input_v3(
         ],
     )
     return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")
+
+
+def first_case_seed_input_v4(
+    recorded_at: datetime,
+    *,
+    menu_items: list[dict],
+    ingredients: list[dict],
+    recipes: list[dict],
+    suppliers: list[dict],
+) -> dict:
+    """Bind the unchanged approved quote to the active first-case policy."""
+    row = first_case_seed_input_v3(
+        recorded_at,
+        menu_items=menu_items,
+        ingredients=ingredients,
+        recipes=recipes,
+        suppliers=suppliers,
+    )
+    row["id"] = f"case-input:{FIRST_CASE_ID}:4"
+    row["version"] = 4
+    row["policy_version_id"] = f"policy:{DEMO_POLICY_ID}:4"
+    row["source_revision"] = "ML_CONTINGENCY_CONTRACT_V4_ACTIVE_FIRST_CASE"
+    return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")

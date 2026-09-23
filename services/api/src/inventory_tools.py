@@ -14,9 +14,11 @@ from src.agent_contracts import (
     ToolRequest,
     ToolResult,
 )
+from src.contingency_run_contracts import StagedContingencyCase
 from src.demand_tools import BackendDemandTools
 from src.errors import ApiError, ErrorDetail, ErrorResponse
 from src.inventory_projection import ExpectedSupply, SourceEvidence, project_inventory
+from src.multiday_projection import project_multiday
 from src.operations_schemas import Delivery
 from src.planning import get_run
 from src.procurement_contract_schemas import ProcurementContract
@@ -188,6 +190,41 @@ class BackendInventoryTools:
                     f"estimated:{_identity(rows)}",
                     {"estimated_available": bool(rows), "provenance": "ESTIMATED"},
                 )
+            active_raw = snapshot.get("active_contingency_case")
+            if active_raw is not None:
+                from src.contingency_stage_adapter import inputs_from_frozen_case
+
+                active = StagedContingencyCase.model_validate(active_raw)
+                if active.status != "ACTIVE_MATCH":
+                    raise ApiError(409, "MISSING_REQUIRED_DATA", "Active contingency case is incomplete")
+                inputs = inputs_from_frozen_case(run, active)
+                projection = project_multiday(**inputs.inventory)
+                projection_id = f"contingency-projection:{_identity(active_raw)}"
+                if request.tool is AgentToolName.CALCULATE_INGREDIENT_REQUIREMENTS:
+                    category = EvidenceCategory.INVENTORY_PROJECTION
+                    identifier = f"requirements:{projection_id}"
+                    data = {"requirements_complete": projection.complete, "provenance": "PROJECTED"}
+                elif request.tool is AgentToolName.PROJECT_INVENTORY:
+                    category = EvidenceCategory.INVENTORY_PROJECTION
+                    identifier = projection_id
+                    data = {"projection_complete": projection.complete, "provenance": "PROJECTED"}
+                elif request.tool is AgentToolName.CALCULATE_EXPIRY_RISK:
+                    category = EvidenceCategory.EXPIRY_RISK
+                    identifier = f"expiry:{projection_id}"
+                    data = {"projection_complete": projection.complete, "provenance": "PROJECTED"}
+                elif request.tool is AgentToolName.CALCULATE_STOCKOUT_RISK:
+                    category = EvidenceCategory.STOCKOUT_RISK
+                    identifier = f"stockout:{projection_id}"
+                    data = {
+                        "stockout_exposure": any(
+                            breach.kind in {"SHORTAGE", "SAFETY"}
+                            for breach in projection.breaches
+                        ),
+                        "provenance": "PROJECTED",
+                    }
+                else:
+                    raise ApiError(422, "TOOL_NOT_SUPPORTED", "Unsupported Inventory tool")
+                return self._result(request, category, EvidenceSource.DECISION_ENGINE, identifier, data)
             projection = self._projection(
                 run, snapshot, request.captured_state_revision
             )
