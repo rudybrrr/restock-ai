@@ -235,8 +235,17 @@ evidence fails closed without interrupting the normal policy. Verify the emergen
 offer's authority before activation; do not silently substitute offer terms in the
 Agent adapter.
 
+On 24 September the backend owner approved the **synthetic** `market-vegetables`
+quote for this first demo case: 6 kg available at S$2/kg, 11:00 arrival, S$3
+delivery and S$4 emergency charge. Case input and staged policy version 3 record
+that decision as `DEMO_QUOTE_DECISION_2026_09_24`; a digest binds the exact offer
+and opportunity terms. A changed quote needs a new approved version. This is demo
+fixture authority, not a claim about the restaurant's live supplier offer or a
+manager-entered quote. The policy remains `STAGED` until the Agent publication path
+uses the approved contract safely.
+
 The Agent-only `GET /api/v1/runs/{run_id}/staged-contingency-diagnostic` now maps
-that exact frozen case into `search_contingency` and independently calls
+that exact frozen version-3 case into `search_contingency` and independently calls
 `validate_contingency`. It reports the first-case 4 kg/S$15 rescue when the frozen
 stock, catalogue and commitment match. The response is always marked
 `STAGED_DIAGNOSTIC` and `actionable: false`; it does not persist a candidate, publish

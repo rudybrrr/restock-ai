@@ -58,6 +58,26 @@ def catalogue_sha256(
     ).hexdigest()
 
 
+def approved_quote_sha256(
+    offers: list[FrozenOfferRevision],
+    opportunities: list[FrozenOrderingOpportunity],
+) -> str:
+    """Bind the exact synthetic quote and ordering slots approved for the demo."""
+    document = {
+        "offers": sorted(
+            (row.model_dump(mode="json") for row in offers),
+            key=lambda row: row["offer_id"],
+        ),
+        "opportunities": sorted(
+            (row.model_dump(mode="json") for row in opportunities),
+            key=lambda row: row["opportunity_id"],
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 class ResidualDemandBucket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -146,6 +166,11 @@ class ContingencyCasePayload(BaseModel):
     offers: list[FrozenOfferRevision] = Field(min_length=1)
     opportunity_manifest: list[str] = Field(min_length=1)
     opportunities: list[FrozenOrderingOpportunity] = Field(min_length=1)
+    offer_authority: Literal["STAGED_UNAPPROVED", "APPROVED_SYNTHETIC_DEMO_QUOTE"] = (
+        "STAGED_UNAPPROVED"
+    )
+    offer_approval_reference: str | None = None
+    approved_quote_sha256: str | None = None
 
     @model_validator(mode="after")
     def complete_declared_domain(self) -> "ContingencyCasePayload":
@@ -228,6 +253,18 @@ class ContingencyCasePayload(BaseModel):
                 + timedelta(days=offer.shelf_life_days_on_arrival - 1)
             ):
                 raise ValueError("Opportunity arrival or expiry contradicts offer")
+        if self.offer_authority == "APPROVED_SYNTHETIC_DEMO_QUOTE":
+            if (
+                not self.offer_approval_reference
+                or self.approved_quote_sha256
+                != approved_quote_sha256(self.offers, self.opportunities)
+            ):
+                raise ValueError("Approved demo quote must bind exact offer terms")
+        elif (
+            self.offer_approval_reference is not None
+            or self.approved_quote_sha256 is not None
+        ):
+            raise ValueError("Unapproved quote cannot carry approval evidence")
         catalogue = (
             self.catalogue_ingredients,
             self.catalogue_menu_items,

@@ -7,9 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src import database as db
-from src.contingency_case_schemas import ContingencyCaseInputVersion, catalogue_sha256
+from src.contingency_case_schemas import (
+    ContingencyCaseInputVersion,
+    approved_quote_sha256,
+    catalogue_sha256,
+)
 from src.contingency_policy_contracts import DEMO_POLICY_ID, read_policy_version_by_id
 from src.errors import ApiError
+from src.procurement_contract_schemas import (
+    FrozenOfferRevision,
+    FrozenOrderingOpportunity,
+)
 from src.schemas import Ingredient, MenuItem, RecipeItem, Supplier
 
 FIRST_CASE_ID = "BOUNDED_CONTINGENCY_20260216_CASE_V1"
@@ -237,5 +245,38 @@ def first_case_seed_input_v2(
         catalogue_sha256=catalogue_sha256(
             menu, ingredient_rows, recipe_rows, supplier_rows
         ),
+    )
+    return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")
+
+
+def first_case_seed_input_v3(
+    recorded_at: datetime,
+    *,
+    menu_items: list[dict],
+    ingredients: list[dict],
+    recipes: list[dict],
+    suppliers: list[dict],
+) -> dict:
+    """Version the team's approval of the exact synthetic emergency quote."""
+    row = first_case_seed_input_v2(
+        recorded_at,
+        menu_items=menu_items,
+        ingredients=ingredients,
+        recipes=recipes,
+        suppliers=suppliers,
+    )
+    row["id"] = f"case-input:{FIRST_CASE_ID}:3"
+    row["version"] = 3
+    row["policy_version_id"] = f"policy:{DEMO_POLICY_ID}:3"
+    row["source_revision"] = "ML_CONTINGENCY_CONTRACT_V3_APPROVED_DEMO_QUOTE"
+    payload = row["payload"]
+    payload["offer_authority"] = "APPROVED_SYNTHETIC_DEMO_QUOTE"
+    payload["offer_approval_reference"] = "DEMO_QUOTE_DECISION_2026_09_24"
+    payload["approved_quote_sha256"] = approved_quote_sha256(
+        [FrozenOfferRevision.model_validate(offer) for offer in payload["offers"]],
+        [
+            FrozenOrderingOpportunity.model_validate(opportunity)
+            for opportunity in payload["opportunities"]
+        ],
     )
     return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")

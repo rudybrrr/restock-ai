@@ -8,7 +8,7 @@ from test_daily import sign_in
 
 from src.procurement_contract_schemas import FrozenCommitmentProjection
 
-CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/1"
+CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/3"
 ISSUE = "2026-02-16T10:00:00+08:00"
 
 
@@ -182,9 +182,12 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     staged = snapshot["staged_contingency_case"]
     assert staged["status"] == "STAGED_MATCH", staged["findings"]
     assert staged["findings"] == []
-    assert staged["policy"]["id"] == "policy:BOUNDED_CONTINGENCY_CASH_V1_DEMO:2"
+    assert staged["policy"]["id"] == "policy:BOUNDED_CONTINGENCY_CASH_V1_DEMO:3"
     assert staged["case_input"]["id"] == (
-        "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:2"
+        "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:3"
+    )
+    assert staged["case_input"]["payload"]["offer_authority"] == (
+        "APPROVED_SYNTHETIC_DEMO_QUOTE"
     )
     assert staged["run_id"] == run["id"]
     assert datetime.fromisoformat(staged["known_at"]) == datetime.fromisoformat(
@@ -203,6 +206,8 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     result = diagnostic.json()
     assert result["status"] == "STAGED_DIAGNOSTIC"
     assert result["actionable"] is False
+    assert result["offer_authority"] == "APPROVED_SYNTHETIC_DEMO_QUOTE"
+    assert result["offer_approval_reference"] == "DEMO_QUOTE_DECISION_2026_09_24"
     assert result["run_id"] == run["id"]
     assert result["captured_state_revision"] == str(run["input_revision"])
     assert result["findings"] == []

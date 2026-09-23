@@ -55,6 +55,8 @@ class StagedContingencyDiagnostic(BaseModel):
     captured_state_revision: str
     policy_version_id: str
     case_input_id: str
+    offer_authority: Literal["APPROVED_SYNTHETIC_DEMO_QUOTE"]
+    offer_approval_reference: str
     search_status: str
     search_complete: bool
     reason: str | None
@@ -100,6 +102,8 @@ def _inputs(run: PlanningRun, staged: StagedContingencyCase) -> ContingencyInput
         or recipe_manifest is None
         or case.catalogue_sha256 is None
         or policy.activation_state != "STAGED"
+        or case.offer_authority != "APPROVED_SYNTHETIC_DEMO_QUOTE"
+        or case.offer_approval_reference is None
     ):
         raise ApiError(409, "MISSING_REQUIRED_DATA", "Staged catalogue is incomplete")
 
@@ -311,6 +315,10 @@ def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
         captured_state_revision=str(run.input_revision),
         policy_version_id=staged.policy.id,
         case_input_id=staged.case_input.id,
+        offer_authority="APPROVED_SYNTHETIC_DEMO_QUOTE",
+        offer_approval_reference=cast(
+            str, staged.case_input.payload.offer_approval_reference
+        ),
         search_status=result.status,
         search_complete=result.search_complete,
         reason=result.reason,
