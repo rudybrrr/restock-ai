@@ -249,9 +249,14 @@ that exact frozen version-3 case into `search_contingency` and independently cal
 `validate_contingency`. It reports the first-case 4 kg/S$15 rescue when the frozen
 stock, catalogue and commitment match. The response is always marked
 `STAGED_DIAGNOSTIC` and `actionable: false`; it does not persist a candidate, publish
-a plan, authorize the synthetic market offer, or change `NORMAL_ONLY`. Mismatched or
-unavailable cases return 409. This proves the Backend-to-numerical mapping while
-the offer-authority and active-policy/Agent publication contracts remain open.
+a plan, or change `NORMAL_ONLY`. Mismatched or unavailable cases return 409. This
+proves the Backend-to-numerical mapping while active-policy/Agent publication
+remains open.
+Its validated preview now separates `candidate_lines` (new additions, with their
+supplier, offer, opportunity and new shipment IDs) from `fixed_supply_ids` (orders
+already recorded). The first case therefore shows a 4 kg market addition while
+retaining the original delayed delivery; S$8 acquisition + S$3 delivery + S$4
+emergency equals S$15 new cash, with no old-order fee charged again.
 
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and

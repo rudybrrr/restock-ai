@@ -5,11 +5,11 @@ offer. It proves that the frozen Backend facts map into the numerical contract.
 """
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from src.contingency import (
     EVIDENCE,
@@ -33,8 +33,17 @@ class StagedCandidateLine(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     opportunity_id: str
+    offer_id: str
+    supplier_id: str
+    ingredient_id: str
+    shipment_group_id: str
     quantity: Decimal
     unit: str
+    unit_price: Decimal
+    ordered_at: AwareDatetime
+    arrival_at: AwareDatetime
+    expiry_date: date
+    kind: Literal["NORMAL", "EMERGENCY"]
 
 
 class StagedFinding(BaseModel):
@@ -62,9 +71,21 @@ class StagedContingencyDiagnostic(BaseModel):
     reason: str | None
     findings: list[StagedFinding]
     candidate_lines: list[StagedCandidateLine]
+    fixed_supply_ids: list[str] | None
     validation_complete: bool | None
     validation_feasible: bool | None
+    cash_acquisition_sgd: Decimal | None
+    cash_delivery_sgd: Decimal | None
+    cash_emergency_sgd: Decimal | None
     cash_total_sgd: Decimal | None
+
+
+def _approved_kind(value: str) -> Literal["NORMAL", "EMERGENCY"]:
+    if value == "NORMAL":
+        return "NORMAL"
+    if value == "EMERGENCY":
+        return "EMERGENCY"
+    raise ApiError(409, "POLICY_VIOLATION", "Unknown new-purchase kind")
 
 
 def _inputs(run: PlanningRun, staged: StagedContingencyCase) -> ContingencyInputs:
@@ -310,6 +331,14 @@ def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
         raise ApiError(409, "POLICY_VIOLATION", "Staged validation result disagrees")
     if staged.policy is None or staged.case_input is None:
         raise ApiError(409, "MISSING_REQUIRED_DATA", "Staged authority is missing")
+    approved_offers = {
+        row.offer_id: row.offer for row in staged.case_input.payload.offers
+    }
+    additions = (
+        validation.additions
+        if validation is not None and validation.complete and validation.feasible
+        else ()
+    )
     return StagedContingencyDiagnostic(
         run_id=run.id,
         captured_state_revision=str(run.input_revision),
@@ -327,14 +356,35 @@ def evaluate_staged_case(run: PlanningRun) -> StagedContingencyDiagnostic:
         ],
         candidate_lines=[
             StagedCandidateLine(
-                opportunity_id=line.opportunity_id,
-                quantity=line.quantity,
-                unit=line.unit,
+                opportunity_id=addition.opportunity_id,
+                offer_id=addition.offer_id,
+                supplier_id=addition.supplier_id,
+                ingredient_id=addition.ingredient_id,
+                shipment_group_id=addition.shipment_group_id,
+                quantity=addition.quantity,
+                unit=addition.unit,
+                unit_price=cast(Decimal, approved_offers[addition.offer_id].unit_price),
+                ordered_at=addition.ordered_at,
+                arrival_at=addition.arrival_at,
+                expiry_date=addition.expiry_date,
+                kind=_approved_kind(addition.kind),
             )
-            for line in (result.candidate.purchase.lines if result.candidate else ())
+            for addition in additions
         ],
+        fixed_supply_ids=list(result.no_purchase.fixed_supply_ids)
+        if result.no_purchase is not None
+        else None,
         validation_complete=validation.complete if validation else None,
         validation_feasible=validation.feasible if validation else None,
+        cash_acquisition_sgd=validation.cash.acquisition
+        if validation and validation.cash
+        else None,
+        cash_delivery_sgd=validation.cash.delivery
+        if validation and validation.cash
+        else None,
+        cash_emergency_sgd=validation.cash.emergency
+        if validation and validation.cash
+        else None,
         cash_total_sgd=validation.cash.total
         if validation and validation.cash
         else None,
