@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 
 from src import (
     changes,
+    contingency_policy_contracts,
     cycles,
     deliveries,
     inventory_adjustment_contracts,
@@ -24,6 +25,7 @@ from src.auth import (
     require_browser_origin,
     require_manager,
 )
+from src.contingency_policy_schemas import ContingencyPolicyVersion
 from src.errors import ApiError
 from src.inventory_adjustment_schemas import (
     InventoryAdjustmentAssessment,
@@ -206,21 +208,28 @@ def read_manager_run_evidence(run_id: str, session: SessionDep, manager: Manager
             ).scalar_one_or_none()
             or plan_id
         )
-    plan_rows = session.execute(
-        select(db.plan_versions).where(
-            or_(
-                db.plan_versions.c.run_id == run_id,
-                db.plan_versions.c.plan_id == plan_id,
+    plan_rows = (
+        session.execute(
+            select(db.plan_versions).where(
+                or_(
+                    db.plan_versions.c.run_id == run_id,
+                    db.plan_versions.c.plan_id == plan_id,
+                )
             )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     plans = [planning.read_plan(session, row["id"]) for row in plan_rows]
     trigger_event_ids = [
         str(event_id)
         for event_id in run.snapshot.get("trigger_event_ids", [])
         if event_id
     ]
-    if run.trigger_event_id is not None and run.trigger_event_id not in trigger_event_ids:
+    if (
+        run.trigger_event_id is not None
+        and run.trigger_event_id not in trigger_event_ids
+    ):
         trigger_event_ids.insert(0, run.trigger_event_id)
     trigger_events = (
         session.execute(
@@ -363,6 +372,17 @@ def read_procurement_policy(
 ):
     """Canonical policy/domain source; no current operational state is inferred."""
     return procurement_contracts.read_policy_contract(session, policy_id, version)
+
+
+@router.get(
+    "/contingency-policies/{policy_id}/versions/{version}",
+    response_model=ContingencyPolicyVersion,
+)
+def read_contingency_policy(
+    policy_id: str, version: int, session: SessionDep, agent: Agent
+):
+    """Read explicit policy values; staged versions never activate a run."""
+    return contingency_policy_contracts.read_policy(session, policy_id, version)
 
 
 @router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)

@@ -42,6 +42,7 @@ Both routes require the Agent bearer credential.
 | Purpose | Route |
 | --- | --- |
 | Inspect the policy and complete approved domain | `GET /api/v1/procurement-policies/CASH_SLICE_V1/versions/1` |
+| Inspect the staged first-case contingency policy | `GET /api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/1` |
 | Read the exact input frozen for a claimed run | `GET /api/v1/runs/{run_id}/procurement-contract` |
 | Inspect the approved sales threshold policy | `GET /api/v1/sales-threshold-policies/SALES_MATERIALITY_V1` |
 | Read the policy and references frozen for a claimed run | `GET /api/v1/runs/{run_id}/sales-materiality-context` |
@@ -49,6 +50,8 @@ Both routes require the Agent bearer credential.
 The run contract includes `run_id`, `as_of`, `known_at`, `captured_state_revision`, the policy version, approved domain, versioned `forecast_input`, and frozen inventory, ingredients, menu, recipes, suppliers, commitments, daily history, authoritative daily sales, sales batches, promotions, holidays, order-cycle decisions, and current supplier observations. The forecast input must be effective by `as_of` and recorded by `known_at`; the complete contract is saved in the claimed run snapshot under the captured state revision.
 
 A PostgreSQL/API acceptance test now records a 10 kg vegetables delivery, receives 6 kg, delays the outstanding 4 kg, and claims a later assessment. The frozen contract contains the received lot in opening inventory and only the 4 kg remainder in `commitment_projection`, with the updated arrival and expected expiry. This proves the fixed-commitment input boundary for the supplier-delay demo. It does not supply the residual post-assessment forecast, coverage windows, activated contingency policy, or Agent route needed to recommend additional stock.
+
+The bounded contingency numerical rules and explicit first-case demo values now have a separate persisted policy version, `BOUNDED_CONTINGENCY_CASH_V1_DEMO` version 1, readable by the Agent at `GET /api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/1`. Its payload records the S$30 incremental budget, per-ingredient safety/storage and protected/assessment ends, engine policy tags, and work limit from Aniq's synthetic acceptance case. Its `activation_state` is `STAGED`, and its approved-domain and forecast-artifact references are absent. Backend does not select it into a run until those inputs are versioned, complete, and capture-bound. The existing `NORMAL_ONLY` first-slice policy remains the only selected policy.
 
 The first-slice policy can be selected from its declared issue time through its horizon end. The policy's explicit-empty flags describe the original seeded baseline; they do not prohibit later operational activity in a run snapshot. `activity_semantics` states that the versioned forecast history remains immutable, intraday batches affect inventory and reassessment only, and the latest closing revision is authoritative for daily forecasting. Reconciliation compares the two sources and never adds them.
 
