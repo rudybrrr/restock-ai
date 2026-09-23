@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 
 from src import (
     changes,
+    contingency_artifacts,
     contingency_case_contracts,
     contingency_policy_contracts,
     contingency_stage_adapter,
@@ -27,6 +28,7 @@ from src.auth import (
     require_browser_origin,
     require_manager,
 )
+from src.contingency_artifacts import StagedContingencyArtifact
 from src.contingency_case_schemas import ContingencyCaseInputVersion
 from src.contingency_policy_schemas import ContingencyPolicyVersion
 from src.contingency_run_contracts import StagedContingencyCase
@@ -423,6 +425,25 @@ def read_staged_contingency_diagnostic(run_id: str, session: SessionDep, agent: 
     return contingency_stage_adapter.evaluate_staged_case(
         planning.get_run(session, run_id)
     )
+
+
+@router.put(
+    "/runs/{run_id}/staged-contingency-artifact",
+    response_model=StagedContingencyArtifact,
+)
+def calculate_staged_contingency_artifact(
+    run_id: str, session: SessionDep, agent: Agent
+):
+    """Persist full frozen numerical evidence without authorizing a plan."""
+    return contingency_artifacts.persist_staged_artifact(session, run_id)
+
+
+@router.get(
+    "/runs/{run_id}/staged-contingency-artifact",
+    response_model=StagedContingencyArtifact,
+)
+def read_staged_contingency_artifact(run_id: str, session: SessionDep, agent: Agent):
+    return contingency_artifacts.read_staged_artifact(session, run_id)
 
 
 @router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)

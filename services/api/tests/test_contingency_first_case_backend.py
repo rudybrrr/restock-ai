@@ -3,9 +3,13 @@
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 from test_daily import sign_in
 
+from src.contingency_artifacts import StagedContingencyArtifact, _verify_artifact
+from src.errors import ApiError
+from src.planning_schemas import PlanningRun
 from src.procurement_contract_schemas import FrozenCommitmentProjection
 
 CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/3"
@@ -236,9 +240,34 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     assert Decimal(result["cash_delivery_sgd"]) == Decimal(3)
     assert Decimal(result["cash_emergency_sgd"]) == Decimal(4)
     assert Decimal(result["cash_total_sgd"]) == Decimal(15)
+    artifact_path = f"/api/v1/runs/{run['id']}/staged-contingency-artifact"
+    assert client.get(artifact_path).status_code == 409
+    saved = client.put(artifact_path)
+    assert saved.status_code == 200, saved.text
+    artifact = saved.json()
+    assert artifact["status"] == "STAGED_DIAGNOSTIC"
+    assert artifact["actionable"] is False
+    assert artifact["captured_state_revision"] == str(run["input_revision"])
+    assert artifact["diagnostic"] == result
+    assert artifact["result"]["status"] == "OPTIMAL_IN_DOMAIN"
+    assert artifact["independent_validation"]["complete"] is True
+    assert artifact["independent_validation"]["feasible"] is True
+    assert artifact["independent_validation"]["cash"]["total"] == "15"
+    assert artifact["result"]["no_purchase"]["fixed_supply_ids"] == [delivery_id]
+    repeated = client.put(artifact_path)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json() == artifact
+    assert client.get(artifact_path).json() == artifact
     unchanged = client.get(f"/api/v1/runs/{run['id']}")
     assert unchanged.status_code == 200, unchanged.text
     assert unchanged.json()["status"] == "RUNNING"
     assert unchanged.json()["plan_version_id"] is None
+    assert unchanged.json()["snapshot"]["staged_contingency_artifact"]["id"] == artifact["id"]
     assert "calculated_candidate" not in unchanged.json()["snapshot"]
+    tampered = StagedContingencyArtifact.model_validate(
+        {**artifact, "result": {**artifact["result"], "status": "INCOMPLETE"}}
+    )
+    with pytest.raises(ApiError) as error:
+        _verify_artifact(PlanningRun.model_validate(unchanged.json()), tampered)
+    assert error.value.detail.code == "STATE_REVISION_STALE"
     assert client.get("/api/v1/plan-history").json() == []
