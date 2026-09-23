@@ -10,8 +10,14 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.config import Settings
-from src.contingency_case_contracts import first_case_seed_input
-from src.contingency_policy_contracts import first_case_seed_policy
+from src.contingency_case_contracts import (
+    first_case_seed_input,
+    first_case_seed_input_v2,
+)
+from src.contingency_policy_contracts import (
+    first_case_seed_policy,
+    first_case_seed_policy_v2,
+)
 from src.database import (
     contingency_case_inputs,
     contingency_policy_versions,
@@ -84,6 +90,27 @@ def seed(database_url: str | None = None) -> None:
         ("pantry", "Pantry Supply"),
         ("market", "Market Supply"),
     ]
+    menu_rows = [{"id": key, "name": name} for key, name in dishes]
+    ingredient_rows = [
+        {
+            "id": ingredient.id,
+            "name": ingredient.name,
+            "unit": ingredient.unit,
+            "interval_days": ingredient.interval_days,
+            "starting_date": date(2026, 2, 15),
+        }
+        for ingredient in ingredient_seeds
+    ]
+    recipe_rows = [
+        {
+            "menu_item_id": dish,
+            "ingredient_id": ingredient,
+            "quantity": Decimal(quantity),
+        }
+        for dish, recipe in recipe_data.items()
+        for ingredient, quantity in recipe.items()
+    ]
+    supplier_rows = [{"id": key, "name": name} for key, name in supplier_data]
     # Synthetic demo tradeoffs, not real supplier quotes or food-storage guidance.
     # Fresh is the standard offer, Pantry is cheaper/bulk/slower, Market is urgent.
     terms = {
@@ -103,45 +130,31 @@ def seed(database_url: str | None = None) -> None:
             def insert_if_absent(table, rows):
                 conn.execute(insert(table).values(rows).on_conflict_do_nothing())
 
-            insert_if_absent(
-                menu_items, [{"id": key, "name": name} for key, name in dishes]
-            )
-            insert_if_absent(
-                ingredients,
-                [
-                    {
-                        "id": seed.id,
-                        "name": seed.name,
-                        "unit": seed.unit,
-                        "interval_days": seed.interval_days,
-                        "starting_date": date(2026, 2, 15),
-                    }
-                    for seed in ingredient_seeds
-                ],
-            )
-            insert_if_absent(
-                recipes,
-                [
-                    {
-                        "menu_item_id": dish,
-                        "ingredient_id": ingredient,
-                        "quantity": Decimal(quantity),
-                    }
-                    for dish, recipe in recipe_data.items()
-                    for ingredient, quantity in recipe.items()
-                ],
-            )
-            insert_if_absent(
-                suppliers, [{"id": key, "name": name} for key, name in supplier_data]
-            )
+            insert_if_absent(menu_items, menu_rows)
+            insert_if_absent(ingredients, ingredient_rows)
+            insert_if_absent(recipes, recipe_rows)
+            insert_if_absent(suppliers, supplier_rows)
             first_slice = first_slice_seed_rows(policy_recorded_at)
             insert_if_absent(procurement_policy_versions, first_slice["policies"])
             insert_if_absent(
                 contingency_policy_versions,
-                [first_case_seed_policy(policy_recorded_at)],
+                [
+                    first_case_seed_policy(policy_recorded_at),
+                    first_case_seed_policy_v2(policy_recorded_at),
+                ],
             )
             insert_if_absent(
-                contingency_case_inputs, [first_case_seed_input(policy_recorded_at)]
+                contingency_case_inputs,
+                [
+                    first_case_seed_input(policy_recorded_at),
+                    first_case_seed_input_v2(
+                        policy_recorded_at,
+                        menu_items=menu_rows,
+                        ingredients=ingredient_rows,
+                        recipes=recipe_rows,
+                        suppliers=supplier_rows,
+                    ),
+                ],
             )
             insert_if_absent(procurement_policy_domains, first_slice["domains"])
             insert_if_absent(

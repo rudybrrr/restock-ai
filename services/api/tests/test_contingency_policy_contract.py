@@ -71,6 +71,14 @@ def test_agent_reads_staged_version_without_activating_normal_runs(
     assert claimed.status_code == 200, claimed.text
     snapshot = claimed.json()["snapshot"]
     assert "contingency_contract" not in snapshot
+    staged = snapshot["staged_contingency_case"]
+    assert staged["status"] == "STAGED_MISMATCH"
+    assert "OPENING_MISMATCH" in staged["findings"]
+    read_back = client.get(
+        f"/api/v1/runs/{claimed.json()['id']}/staged-contingency-case"
+    )
+    assert read_back.status_code == 200, read_back.text
+    assert read_back.json() == staged
     assert snapshot["procurement_contract"]["policy"]["payload"]["emergency_mode"] == (
         "NORMAL_ONLY"
     )
@@ -79,7 +87,7 @@ def test_agent_reads_staged_version_without_activating_normal_runs(
 def test_unknown_contingency_policy_is_not_synthesised(client: TestClient) -> None:
     client.headers["Authorization"] = "Bearer test-agent-token"
     response = client.get(
-        "/api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/2"
+        "/api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/3"
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"

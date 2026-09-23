@@ -6,6 +6,8 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from test_daily import sign_in
 
+from src.procurement_contract_schemas import FrozenCommitmentProjection
+
 CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/1"
 ISSUE = "2026-02-16T10:00:00+08:00"
 
@@ -177,3 +179,22 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
         == "NORMAL_ONLY"
     )
     assert "contingency_contract" not in snapshot
+    staged = snapshot["staged_contingency_case"]
+    assert staged["status"] == "STAGED_MATCH", staged["findings"]
+    assert staged["findings"] == []
+    assert staged["policy"]["id"] == "policy:BOUNDED_CONTINGENCY_CASH_V1_DEMO:2"
+    assert staged["case_input"]["id"] == (
+        "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:2"
+    )
+    assert staged["run_id"] == run["id"]
+    assert datetime.fromisoformat(staged["known_at"]) == datetime.fromisoformat(
+        snapshot["known_at"]
+    )
+    assert staged["captured_state_revision"] == str(run["input_revision"])
+    assert staged["opening_lots"] == snapshot["inventory"]
+    assert FrozenCommitmentProjection.model_validate(
+        staged["commitment_projection"]
+    ) == FrozenCommitmentProjection.model_validate(projection)
+    read_back = client.get(f"/api/v1/runs/{run['id']}/staged-contingency-case")
+    assert read_back.status_code == 200, read_back.text
+    assert read_back.json() == staged

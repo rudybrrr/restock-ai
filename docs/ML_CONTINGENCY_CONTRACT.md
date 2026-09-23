@@ -223,10 +223,17 @@ The manager can now record an explicit expected expiry for a delivery's unreceiv
 remainder. The first-case test supplies **20 February** on the delay update, and the
 frozen projection retains that dated fact with the delivery-event revision. When no
 explicit date is supplied, the existing approved-offer shelf-life calculation still
-applies. The emergency market offer remains staged synthetic evidence rather than
-the run's live approved offer, and the case artifact lists catalogue IDs but not a
-versioned complete recipe manifest. Resolve those remaining sources before policy
-activation; do not silently substitute offer terms in the Agent adapter.
+applies. Case input version 2 now records the complete seeded menu, ingredient,
+recipe and supplier catalogue with a digest, and its staged policy version 2 names
+the exact domain and case-input IDs. This version is still a synthetic fixture. The
+emergency market offer remains separate from the run's live supplier offer, and no
+claimed run selects this staged policy yet. At the exact issue time, Backend freezes
+a typed staged match against the claimed run's opening lots, complete catalogue and
+fixed delivery. Agents can read it at `GET /api/v1/runs/{run_id}/staged-contingency-case`;
+`STAGED_MATCH` only certifies those frozen facts, while mismatch or unavailable
+evidence fails closed without interrupting the normal policy. Verify the emergency
+offer's authority before activation; do not silently substitute offer terms in the
+Agent adapter.
 
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and

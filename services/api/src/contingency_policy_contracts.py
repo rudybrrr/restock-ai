@@ -108,3 +108,16 @@ def first_case_seed_policy(recorded_at: datetime) -> dict:
         }
     )
     return policy.model_dump(mode="json")
+
+
+def first_case_seed_policy_v2(recorded_at: datetime) -> dict:
+    """Stage exact catalogue/domain references without selecting live runs yet."""
+    row = first_case_seed_policy(recorded_at)
+    row["id"] = f"policy:{DEMO_POLICY_ID}:2"
+    row["version"] = 2
+    row["source_revision"] = "ML_CONTINGENCY_CONTRACT_V2_DEMO_POLICY"
+    row["payload"]["approved_domain_id"] = "BOUNDED_CONTINGENCY_20260216_DOMAIN_V1"
+    row["payload"]["forecast_artifact_id"] = (
+        "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:2"
+    )
+    return ContingencyPolicyVersion.model_validate(row).model_dump(mode="json")
