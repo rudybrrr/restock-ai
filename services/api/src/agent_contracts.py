@@ -313,6 +313,7 @@ class PurchasePlanLine(ContractModel):
 
 
 class PurchasePlanVersion(ContractModel):
+    id: Identifier
     plan_id: Identifier
     version: PositiveInt
     status: PlanStatus
