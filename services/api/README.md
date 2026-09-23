@@ -12,10 +12,12 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
 After configuring `LLM_GATEWAY_URL`, `LLM_GATEWAY_API_KEY`, and `LLM_MODEL`, run
-`uv run python -m src.assessment_worker` to claim and process **one** queued assessment.
-It prints a JSON outcome. Invoke it again for another queued run; automatic scheduling
-is not wired yet. Do not invoke it with missing gateway configuration: a claimed run
-fails closed if its reasoning provider cannot be constructed.
+`uv run python -m src.assessment_worker --loop` in a second terminal. It polls the
+queue every two seconds while idle and processes queued assessments through the
+existing one-run control plane. Stop it with Ctrl+C. For a single run, omit
+`--loop`; it prints a JSON outcome. The command checks gateway configuration
+before claiming any work, but a later provider failure still fails the claimed
+run closed. Keep the API and worker connected to the same database.
 
 PowerShell uses `Copy-Item .env.example .env`. Python 3.12 and uv are required.
 The PostgreSQL URL must use `postgresql+psycopg://`. Docker's credentials are local development defaults only.

@@ -6,7 +6,8 @@ as described in [README.md](README.md), then open [Swagger UI](http://localhost:
 
 For promotion/supplier changes, sales reconciliation, plan decisions and ordering occasions, see the
 [current backend handover](../../docs/BACKEND_HANDOVER.md). The deterministic ML modules and local Agent
-control plane are merged. Queued application assessments still need the pending worker to invoke that path.
+control plane are merged. Run `python -m src.assessment_worker --loop` alongside the API
+to process queued assessments in the local demo; this requires the configured live gateway.
 The optional development calculator remains a separate, explicitly labelled workflow fixture.
 
 ## Configure test credentials
