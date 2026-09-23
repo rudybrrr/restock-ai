@@ -58,6 +58,25 @@ contingency_policy_versions = Table(
     UniqueConstraint("source_revision"),
 )
 
+contingency_case_inputs = Table(
+    "contingency_case_inputs",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column(
+        "policy_version_id",
+        ForeignKey("contingency_policy_versions.id"),
+        nullable=False,
+    ),
+    Column("artifact_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("artifact_id", "version"),
+    UniqueConstraint("source_revision"),
+)
+
 procurement_policy_domains = Table(
     "procurement_policy_domains",
     metadata,

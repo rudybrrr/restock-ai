@@ -10,8 +10,10 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.config import Settings
+from src.contingency_case_contracts import first_case_seed_input
 from src.contingency_policy_contracts import first_case_seed_policy
 from src.database import (
+    contingency_case_inputs,
     contingency_policy_versions,
     holidays,
     ingredients,
@@ -137,6 +139,9 @@ def seed(database_url: str | None = None) -> None:
             insert_if_absent(
                 contingency_policy_versions,
                 [first_case_seed_policy(policy_recorded_at)],
+            )
+            insert_if_absent(
+                contingency_case_inputs, [first_case_seed_input(policy_recorded_at)]
             )
             insert_if_absent(procurement_policy_domains, first_slice["domains"])
             insert_if_absent(

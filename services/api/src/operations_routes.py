@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 
 from src import (
     changes,
+    contingency_case_contracts,
     contingency_policy_contracts,
     cycles,
     deliveries,
@@ -25,6 +26,7 @@ from src.auth import (
     require_browser_origin,
     require_manager,
 )
+from src.contingency_case_schemas import ContingencyCaseInputVersion
 from src.contingency_policy_schemas import ContingencyPolicyVersion
 from src.errors import ApiError
 from src.inventory_adjustment_schemas import (
@@ -383,6 +385,17 @@ def read_contingency_policy(
 ):
     """Read explicit policy values; staged versions never activate a run."""
     return contingency_policy_contracts.read_policy(session, policy_id, version)
+
+
+@router.get(
+    "/contingency-case-inputs/{artifact_id}/versions/{version}",
+    response_model=ContingencyCaseInputVersion,
+)
+def read_contingency_case_input(
+    artifact_id: str, version: int, session: SessionDep, agent: Agent
+):
+    """Read explicit residual forecast/domain; no live run is inferred."""
+    return contingency_case_contracts.read_case_input(session, artifact_id, version)
 
 
 @router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)
