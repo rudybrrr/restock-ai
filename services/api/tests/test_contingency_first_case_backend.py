@@ -216,8 +216,25 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     assert result["validation_complete"] is True
     assert result["validation_feasible"] is True
     assert result["candidate_lines"] == [
-        {"opportunity_id": "rescue", "quantity": "4", "unit": "kg"}
+        {
+            "opportunity_id": "rescue",
+            "offer_id": "market-vegetables",
+            "supplier_id": "market",
+            "ingredient_id": "vegetables",
+            "shipment_group_id": "new-rescue-shipment",
+            "quantity": "4",
+            "unit": "kg",
+            "unit_price": "2",
+            "ordered_at": ISSUE,
+            "arrival_at": "2026-02-16T11:00:00+08:00",
+            "expiry_date": "2026-02-17",
+            "kind": "EMERGENCY",
+        }
     ]
+    assert result["fixed_supply_ids"] == [delivery_id]
+    assert Decimal(result["cash_acquisition_sgd"]) == Decimal(8)
+    assert Decimal(result["cash_delivery_sgd"]) == Decimal(3)
+    assert Decimal(result["cash_emergency_sgd"]) == Decimal(4)
     assert Decimal(result["cash_total_sgd"]) == Decimal(15)
     unchanged = client.get(f"/api/v1/runs/{run['id']}")
     assert unchanged.status_code == 200, unchanged.text
