@@ -81,20 +81,12 @@ def run_one_queued_assessment(
 
     try:
         reasoning_models = build_organiser_reasoning_models(settings)
-    except Exception:  # noqa: BLE001 - configuration failures must close the claim safely
-        planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
-        return QueuedAssessmentWorkerResult(
-            run_id=claimed.id,
-            outcome=None,
-            publication_status="NOT_PUBLISHED",
-            failure_classification=EscalationReason.TOOL_FAILURE,
-        )
-    try:
+        procurement_tools = BackendProcurementTools(session)
         execution = run_backend_coordinator(
             session,
             claimed.id,
             reasoning_models.procurement,
-            BackendProcurementTools(session),
+            procurement_tools,
             demand_model=reasoning_models.demand,
             inventory_model=reasoning_models.inventory,
             manual_classifier=_FullPlanningRouteClassifier(),
@@ -105,6 +97,14 @@ def run_one_queued_assessment(
             outcome=None,
             publication_status="STALE_REJECTED",
             failure_classification="STATE_REVISION_STALE",
+        )
+    except Exception:  # noqa: BLE001 - all post-claim failures must close safely
+        planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
+        return QueuedAssessmentWorkerResult(
+            run_id=claimed.id,
+            outcome=None,
+            publication_status="NOT_PUBLISHED",
+            failure_classification=EscalationReason.TOOL_FAILURE,
         )
 
     publication = execution.publication_result

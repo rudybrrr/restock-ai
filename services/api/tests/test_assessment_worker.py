@@ -176,6 +176,45 @@ def persist_incomplete_sales_materiality(client: TestClient, run_id: str) -> Non
     assert saved.status_code == 200, saved.text
 
 
+def persist_incomplete_inventory_adjustment_assessment(
+    client: TestClient, run_id: str
+) -> tuple[dict, dict]:
+    client.headers["Authorization"] = "Bearer test-agent-token"
+    context_response = client.get(
+        f"/api/v1/runs/{run_id}/inventory-adjustment-context"
+    )
+    assert context_response.status_code == 200, context_response.text
+    context = context_response.json()
+    assert context["run_id"] == run_id
+    result = {
+        "material_change": None,
+        "complete": False,
+        "inventory_feasible": None,
+        "assessed_lot_ids": context["assessed_lot_ids"],
+        "assessed_ingredient_ids": context["assessed_ingredient_ids"],
+        "findings": [],
+        "evidence_refs": context["required_evidence_refs"],
+        "required_follow_up": [],
+        "run_id": run_id,
+        "snapshot_reference": context["snapshot_reference"],
+        "inventory_snapshot_reference": context["inventory_snapshot_reference"],
+        "captured_state_revision": context["captured_state_revision"],
+        "as_of": context["as_of"],
+        "known_at": context["known_at"],
+        "adjustment_event_ids": [
+            event["id"] for event in context["adjustment_events"]
+        ],
+        "plan_id": context["plan_id"],
+        "plan_version_reference": context["plan_version_reference"],
+    }
+    saved = client.put(
+        f"/api/v1/runs/{run_id}/inventory-adjustment-assessment",
+        json={"result": result},
+    )
+    assert saved.status_code == 200, saved.text
+    return context, saved.json()
+
+
 def prepare_engine_plan(
     client: TestClient,
     database_url: str,
@@ -408,7 +447,12 @@ def test_inventory_adjustment_event_uses_normal_api_path_and_escalates_when_inco
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    prepare_engine_plan(client, database_url, monkeypatch)
+    original_run, _ = prepare_engine_plan(client, database_url, monkeypatch)
+    original_plan = client.get(
+        f"/api/v1/plans/{original_run['plan_version_id']}"
+    ).json()
+    assert original_plan["status"] == "PENDING_APPROVAL"
+    assert original_plan["calculation_mode"] == "ENGINE"
     sign_in(client)
     lots = client.get("/api/v1/inventory").json()
     dishes = client.get("/api/v1/menu-items").json()
@@ -424,19 +468,106 @@ def test_inventory_adjustment_event_uses_normal_api_path_and_escalates_when_inco
     install_models(monkeypatch, first_daily)
     first_run = client.get("/api/v1/runs").json()[0]
     first_result = invoke_worker(database_url)
-    assert first_result.outcome is AgentOutcome.KEEP_CURRENT_PLAN
-    assert first_result.publication_reference is None
-    assert client.get(f"/api/v1/runs/{first_run['id']}").json()["status"] == "SUCCEEDED"
+    assert first_result.outcome is AgentOutcome.REVISE_PLAN
+    assert first_result.publication_reference is not None
+    first_completed = client.get(f"/api/v1/runs/{first_run['id']}").json()
+    assert first_completed["status"] == "SUCCEEDED"
+    assert first_completed["outcome"] == AgentOutcome.REVISE_PLAN.value
+    assert first_completed["plan_version_id"] == first_result.publication_reference
+    current_plan = client.get(
+        f"/api/v1/plans/{first_result.publication_reference}"
+    ).json()
+    assert current_plan["calculation_mode"] == "ENGINE"
+    assert current_plan["plan_id"] == original_plan["plan_id"]
+    assert current_plan["version"] == original_plan["version"] + 1
+    assert current_plan["status"] == "PENDING_APPROVAL"
+    assert (
+        client.get(f"/api/v1/plans/{original_plan['id']}").json()["status"]
+        == "SUPERSEDED"
+    )
+    plan_history_before_correction = [
+        plan["id"] for plan in client.get("/api/v1/plan-history").json()
+    ]
 
     corrected = {**initial, "counts": dict(initial["counts"])}
     corrected["counts"][lots[0]["id"]] = str(float(lots[0]["quantity"]) + 1)
     assert client.post(day + "/draft", json=corrected).status_code == 200
     assert client.post(day + "/submit").status_code == 200
+    correction_run = client.get("/api/v1/runs").json()[0]
+    correction_models = models(
+        demand=LocalDemandReasoning(), inventory=LocalInventoryReasoning()
+    )
+    persisted_assessment: list[tuple[dict, dict]] = []
+
+    def persist_assessment_after_claim(settings):
+        persisted_assessment.append(
+            persist_incomplete_inventory_adjustment_assessment(
+                client, correction_run["id"]
+            )
+        )
+        return correction_models
+
+    monkeypatch.setattr(
+        worker, "build_organiser_reasoning_models", persist_assessment_after_claim
+    )
     second_result = invoke_worker(database_url)
+
+    assert len(persisted_assessment) == 1
+    context, saved_assessment = persisted_assessment[0]
+    assert context["plan_id"] == current_plan["plan_id"]
+    assert context["plan_version_reference"] == current_plan["id"]
+    assessment_result = saved_assessment["result"]
+    assert assessment_result["assessed_lot_ids"] == context["assessed_lot_ids"]
+    assert assessment_result["assessed_ingredient_ids"] == context[
+        "assessed_ingredient_ids"
+    ]
+    assert assessment_result["evidence_refs"] == context["required_evidence_refs"]
+    assert assessment_result["adjustment_event_ids"] == [
+        event["id"] for event in context["adjustment_events"]
+    ]
+    assert assessment_result["run_id"] == correction_run["id"]
+    assert assessment_result["snapshot_reference"] == context["snapshot_reference"]
+    assert assessment_result["inventory_snapshot_reference"] == context[
+        "inventory_snapshot_reference"
+    ]
+    assert assessment_result["captured_state_revision"] == context[
+        "captured_state_revision"
+    ]
+    assert assessment_result["as_of"] == context["as_of"]
+    assert assessment_result["known_at"] == context["known_at"]
+    assert assessment_result["plan_id"] == context["plan_id"]
+    assert assessment_result["plan_version_reference"] == context[
+        "plan_version_reference"
+    ]
+    assert assessment_result["complete"] is False
+    assert assessment_result["material_change"] is None
 
     assert second_result.outcome is AgentOutcome.ESCALATE
     assert second_result.failure_classification is EscalationReason.MISSING_REQUIRED_DATA
     assert second_result.publication_status == "PUBLISHED"
+    assert second_result.publication_reference is None
+    correction_completed = client.get(
+        f"/api/v1/runs/{correction_run['id']}"
+    ).json()
+    assert correction_completed["status"] == "SUCCEEDED"
+    assert correction_completed["outcome"] == AgentOutcome.ESCALATE.value
+    assert (
+        correction_completed["escalation_reason"]
+        == EscalationReason.MISSING_REQUIRED_DATA.value
+    )
+    assert correction_completed["plan_version_id"] is None
+    assessment_readback = client.get(
+        f"/api/v1/runs/{correction_run['id']}/inventory-adjustment-assessment"
+    )
+    assert assessment_readback.status_code == 200, assessment_readback.text
+    assert assessment_readback.json() == saved_assessment
+    assert assessment_readback.json()["result"]["complete"] is False
+    assert assessment_readback.json()["result"]["material_change"] is None
+    assert assessment_readback.json()["result"]["inventory_feasible"] is None
+    client.headers.pop("Authorization", None)
+    assert [plan["id"] for plan in client.get("/api/v1/plan-history").json()] == (
+        plan_history_before_correction
+    )
 
 
 def test_new_input_after_claim_is_rejected_after_backend_stale_publication_guard(
@@ -496,6 +627,41 @@ def test_organiser_configuration_failure_after_claim_fails_run_closed(
     assert failed["plan_version_id"] is None
     assert "secret-must-not-escape" not in str(result.model_dump())
     assert "secret-must-not-escape" not in str(failed)
+    assert client.get("/api/v1/plan-history").json() == []
+
+
+def test_coordinator_unexpected_failure_after_claim_fails_run_closed(
+    client: TestClient,
+    database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested = queue_manager_assessment(client)
+    install_models(monkeypatch, models())
+    coordinator_calls: list[tuple[str, BackendProcurementTools]] = []
+
+    def fail_coordinator(session, run_id, procurement_model, procurement_tools, **kwargs):
+        coordinator_calls.append((run_id, procurement_tools))
+        raise RuntimeError("coordinator-crash-secret-must-not-escape")
+
+    monkeypatch.setattr(worker, "run_backend_coordinator", fail_coordinator)
+    result = invoke_worker(database_url)
+
+    assert len(coordinator_calls) == 1
+    assert coordinator_calls[0][0] == requested["id"]
+    assert isinstance(coordinator_calls[0][1], BackendProcurementTools)
+    assert result.run_id == requested["id"]
+    assert result.outcome is None
+    assert result.publication_status == "NOT_PUBLISHED"
+    assert result.publication_reference is None
+    assert result.failure_classification is EscalationReason.TOOL_FAILURE
+    assert "coordinator-crash-secret-must-not-escape" not in str(result.model_dump())
+
+    failed = client.get(f"/api/v1/runs/{requested['id']}").json()
+    assert failed["status"] == "FAILED"
+    assert failed["failure_reason"] == EscalationReason.TOOL_FAILURE.value
+    assert failed["outcome"] is None
+    assert failed["plan_version_id"] is None
+    assert "coordinator-crash-secret-must-not-escape" not in str(failed)
     assert client.get("/api/v1/plan-history").json() == []
 
 
