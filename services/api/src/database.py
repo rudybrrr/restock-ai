@@ -44,6 +44,20 @@ procurement_policy_versions = Table(
     UniqueConstraint("policy_id", "version"),
 )
 
+contingency_policy_versions = Table(
+    "contingency_policy_versions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("policy_id", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("effective_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("source_revision", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    UniqueConstraint("policy_id", "version"),
+    UniqueConstraint("source_revision"),
+)
+
 procurement_policy_domains = Table(
     "procurement_policy_domains",
     metadata,
