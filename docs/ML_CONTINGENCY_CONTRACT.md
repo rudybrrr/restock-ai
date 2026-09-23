@@ -219,14 +219,14 @@ produce the declared 6 kg vegetable opening, while a 10 kg recorded delivery has
 retains that commitment and the current `NORMAL_ONLY` policy. This is an input
 checkpoint, not an activated contingency recommendation.
 
-Three exact-source checks remain before activating this numerical fixture: the
-outstanding delivery's frozen expiry currently derives as **21 February** from the
-approved first-slice offer, while the numerical fixture supplies **20 February**;
-the emergency market offer in this case is staged synthetic evidence rather than
-the run's live approved offer; and the case artifact lists catalogue IDs but not a
-versioned complete recipe manifest. Resolve these with authoritative frozen sources
-or an explicitly agreed new fixture version. Do not silently substitute either
-expiry date or offer terms in the Agent adapter.
+The manager can now record an explicit expected expiry for a delivery's unreceived
+remainder. The first-case test supplies **20 February** on the delay update, and the
+frozen projection retains that dated fact with the delivery-event revision. When no
+explicit date is supplied, the existing approved-offer shelf-life calculation still
+applies. The emergency market offer remains staged synthetic evidence rather than
+the run's live approved offer, and the case artifact lists catalogue IDs but not a
+versioned complete recipe manifest. Resolve those remaining sources before policy
+activation; do not silently substitute offer terms in the Agent adapter.
 
 `tests/test_contingency.py` checks all 23 requested numerical groups: on-time/partial/
 short/cancelled/delayed and previously recorded commitments; supplier splits and
