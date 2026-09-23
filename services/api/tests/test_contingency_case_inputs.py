@@ -123,6 +123,11 @@ def test_versioned_recipe_change_without_new_digest_fails_closed(
     assert claimed.status_code == 200, claimed.text
     snapshot = claimed.json()["snapshot"]
     assert snapshot["staged_contingency_case"]["status"] == "UNAVAILABLE"
+    diagnostic = client.get(
+        f"/api/v1/runs/{claimed.json()['id']}/staged-contingency-diagnostic"
+    )
+    assert diagnostic.status_code == 409
+    assert diagnostic.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
     assert (
         snapshot["procurement_contract"]["policy"]["payload"]["emergency_mode"]
         == "NORMAL_ONLY"

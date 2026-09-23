@@ -9,6 +9,7 @@ from src import (
     changes,
     contingency_case_contracts,
     contingency_policy_contracts,
+    contingency_stage_adapter,
     cycles,
     deliveries,
     inventory_adjustment_contracts,
@@ -29,6 +30,7 @@ from src.auth import (
 from src.contingency_case_schemas import ContingencyCaseInputVersion
 from src.contingency_policy_schemas import ContingencyPolicyVersion
 from src.contingency_run_contracts import StagedContingencyCase
+from src.contingency_stage_adapter import StagedContingencyDiagnostic
 from src.errors import ApiError
 from src.inventory_adjustment_schemas import (
     InventoryAdjustmentAssessment,
@@ -410,6 +412,17 @@ def read_staged_contingency_case(run_id: str, session: SessionDep, agent: Agent)
     if frozen is None:
         raise ApiError(409, "MISSING_REQUIRED_DATA", "No staged case for this run")
     return StagedContingencyCase.model_validate(frozen)
+
+
+@router.get(
+    "/runs/{run_id}/staged-contingency-diagnostic",
+    response_model=StagedContingencyDiagnostic,
+)
+def read_staged_contingency_diagnostic(run_id: str, session: SessionDep, agent: Agent):
+    """Evaluate frozen synthetic inputs without publishing or approving a plan."""
+    return contingency_stage_adapter.evaluate_staged_case(
+        planning.get_run(session, run_id)
+    )
 
 
 @router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)

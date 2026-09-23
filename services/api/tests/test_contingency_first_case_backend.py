@@ -198,3 +198,25 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     read_back = client.get(f"/api/v1/runs/{run['id']}/staged-contingency-case")
     assert read_back.status_code == 200, read_back.text
     assert read_back.json() == staged
+    diagnostic = client.get(f"/api/v1/runs/{run['id']}/staged-contingency-diagnostic")
+    assert diagnostic.status_code == 200, diagnostic.text
+    result = diagnostic.json()
+    assert result["status"] == "STAGED_DIAGNOSTIC"
+    assert result["actionable"] is False
+    assert result["run_id"] == run["id"]
+    assert result["captured_state_revision"] == str(run["input_revision"])
+    assert result["findings"] == []
+    assert result["search_status"] == "OPTIMAL_IN_DOMAIN", result
+    assert result["search_complete"] is True
+    assert result["validation_complete"] is True
+    assert result["validation_feasible"] is True
+    assert result["candidate_lines"] == [
+        {"opportunity_id": "rescue", "quantity": "4", "unit": "kg"}
+    ]
+    assert Decimal(result["cash_total_sgd"]) == Decimal(15)
+    unchanged = client.get(f"/api/v1/runs/{run['id']}")
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["status"] == "RUNNING"
+    assert unchanged.json()["plan_version_id"] is None
+    assert "calculated_candidate" not in unchanged.json()["snapshot"]
+    assert client.get("/api/v1/plan-history").json() == []
