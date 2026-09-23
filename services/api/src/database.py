@@ -461,6 +461,7 @@ deliveries = Table(
     Column("expected_quantity", Numeric(12, 3), nullable=False),
     Column("cancelled_quantity", Numeric(12, 3), nullable=False, server_default="0"),
     Column("expected_at", DateTime(timezone=True), nullable=False),
+    Column("expected_expiry_date", Date),
     Column("ordered_at", DateTime(timezone=True), nullable=False),
     CheckConstraint(
         "source_validation IN ('MANUAL', 'APPROVED_ALLOCATION', 'LEGACY_REFERENCE')",

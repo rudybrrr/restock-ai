@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -17,6 +18,21 @@ from src.operations_schemas import (
     EventType,
     ReceiptCreate,
 )
+
+
+def _check_expected_expiry(
+    expected_at: datetime, expected_expiry_date: date | None
+) -> None:
+    if (
+        expected_expiry_date is not None
+        and expected_expiry_date
+        < expected_at.astimezone(ZoneInfo("Asia/Singapore")).date()
+    ):
+        raise ApiError(
+            422,
+            "INVALID_EXPECTED_EXPIRY",
+            "Expected expiry cannot precede the expected arrival date",
+        )
 
 
 def read_delivery(session: Session, delivery_id: str) -> Delivery:
@@ -143,6 +159,7 @@ def create_delivery(session: Session, body: DeliveryCreate, actor: str) -> Deliv
         raise ApiError(
             422, "INVALID_ARRIVAL", "Expected arrival cannot precede the purchase"
         )
+    _check_expected_expiry(body.expected_at, body.expected_expiry_date)
     delivery_id = str(uuid4())
     session.execute(
         insert(db.deliveries).values(
@@ -211,6 +228,8 @@ def update_delivery(
             "INVALID_DELIVERY_UPDATE",
             "Expected total cannot erase received or cancelled quantities",
         )
+    expected_expiry_date = body.expected_expiry_date or previous.expected_expiry_date
+    _check_expected_expiry(body.expected_at, expected_expiry_date)
     if (
         previous.source_validation == "APPROVED_ALLOCATION"
         and previous.source_plan_line_id
@@ -235,6 +254,7 @@ def update_delivery(
         .values(
             expected_quantity=body.expected_quantity,
             expected_at=body.expected_at,
+            expected_expiry_date=expected_expiry_date,
             cancelled_quantity=cancelled,
         )
     )

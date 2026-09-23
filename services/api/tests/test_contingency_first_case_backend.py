@@ -62,6 +62,7 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
         json={
             "expected_quantity": "10",
             "expected_at": "2026-02-17T09:00:00+08:00",
+            "expected_expiry_date": "2026-02-20",
             "effective_at": "2026-02-16T09:30:00+08:00",
         },
     )
@@ -160,6 +161,17 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     assert projection["supply_manifest"] == [delivery_id]
     assert len(projection["supplies"]) == 1
     assert projection["supplies"][0]["delivery"]["id"] == delivery_id
+    assert projection["supplies"][0]["expiry_date"] == "2026-02-20"
+    assert projection["supplies"][0]["expiry_evidence"]["reference"] == (
+        f"delivery:{delivery_id}:expected_expiry_date"
+    )
+    assert (
+        projection["supplies"][0]["expiry_evidence"]["captured_revision"]
+        == (fixed["terms_event_id"])
+    )
+    assert datetime.fromisoformat(
+        projection["supplies"][0]["expiry_evidence"]["available_at"]
+    ) <= datetime.fromisoformat(snapshot["known_at"])
     assert (
         snapshot["procurement_contract"]["policy"]["payload"]["emergency_mode"]
         == "NORMAL_ONLY"

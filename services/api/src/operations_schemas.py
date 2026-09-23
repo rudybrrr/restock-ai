@@ -209,6 +209,7 @@ class DeliveryCreate(BaseModel):
     expected_quantity: Annotated[Quantity, Field(gt=0)]
     expected_at: AwareDatetime
     ordered_at: AwareDatetime
+    expected_expiry_date: date | None = None
     source_plan_line_id: str | None = None
     cycle_date: date | None = None
 
@@ -227,6 +228,7 @@ class DeliveryUpdate(BaseModel):
     )
     expected_quantity: Annotated[Quantity, Field(gt=0)]
     expected_at: AwareDatetime
+    expected_expiry_date: date | None = None
     cancel_remainder: bool = False
     effective_at: AwareDatetime
 
