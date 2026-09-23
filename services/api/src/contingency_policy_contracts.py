@@ -13,6 +13,17 @@ from src.errors import ApiError
 DEMO_POLICY_ID = "BOUNDED_CONTINGENCY_CASH_V1_DEMO"
 
 
+def _validated_policy(row) -> ContingencyPolicyVersion:
+    if row is None:
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "Contingency policy not found")
+    try:
+        return ContingencyPolicyVersion.model_validate(dict(row))
+    except ValidationError as error:
+        raise ApiError(
+            409, "MISSING_REQUIRED_DATA", "Contingency policy invalid"
+        ) from error
+
+
 def read_policy(
     session: Session, policy_id: str, version: int
 ) -> ContingencyPolicyVersion:
@@ -26,14 +37,22 @@ def read_policy(
         .mappings()
         .one_or_none()
     )
-    if row is None:
-        raise ApiError(409, "MISSING_REQUIRED_DATA", "Contingency policy not found")
-    try:
-        return ContingencyPolicyVersion.model_validate(dict(row))
-    except ValidationError as error:
-        raise ApiError(
-            409, "MISSING_REQUIRED_DATA", "Contingency policy invalid"
-        ) from error
+    return _validated_policy(row)
+
+
+def read_policy_version_by_id(
+    session: Session, version_id: str
+) -> ContingencyPolicyVersion:
+    row = (
+        session.execute(
+            select(db.contingency_policy_versions).where(
+                db.contingency_policy_versions.c.id == version_id
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    return _validated_policy(row)
 
 
 def first_case_seed_policy(recorded_at: datetime) -> dict:
