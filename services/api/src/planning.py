@@ -31,6 +31,7 @@ from src.agent_contracts import (
 from src.agent_contracts import (
     PurchasePlanVersion as CanonicalPurchasePlanVersion,
 )
+from src.contingency_run_contracts import freeze_staged_case
 from src.errors import ApiError
 from src.fact_history import (
     commitments_at,
@@ -352,6 +353,9 @@ def _snapshot(
         snapshot["procurement_contract"] = freeze_operational_activity(
             contract, frozen_state
         )
+    staged_case = freeze_staged_case(session, snapshot, run_id, captured_state_revision)
+    if staged_case is not None:
+        snapshot["staged_contingency_case"] = staged_case
     return snapshot
 
 

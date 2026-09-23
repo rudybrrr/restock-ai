@@ -28,6 +28,7 @@ from src.auth import (
 )
 from src.contingency_case_schemas import ContingencyCaseInputVersion
 from src.contingency_policy_schemas import ContingencyPolicyVersion
+from src.contingency_run_contracts import StagedContingencyCase
 from src.errors import ApiError
 from src.inventory_adjustment_schemas import (
     InventoryAdjustmentAssessment,
@@ -396,6 +397,19 @@ def read_contingency_case_input(
 ):
     """Read explicit residual forecast/domain; no live run is inferred."""
     return contingency_case_contracts.read_case_input(session, artifact_id, version)
+
+
+@router.get(
+    "/runs/{run_id}/staged-contingency-case",
+    response_model=StagedContingencyCase,
+)
+def read_staged_contingency_case(run_id: str, session: SessionDep, agent: Agent):
+    """Read exactly the staged case bound when this run was claimed."""
+    run = planning.get_run(session, run_id)
+    frozen = run.snapshot.get("staged_contingency_case")
+    if frozen is None:
+        raise ApiError(409, "MISSING_REQUIRED_DATA", "No staged case for this run")
+    return StagedContingencyCase.model_validate(frozen)
 
 
 @router.get("/runs/{run_id}/procurement-contract", response_model=ProcurementContract)

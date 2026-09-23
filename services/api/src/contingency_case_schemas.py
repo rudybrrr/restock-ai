@@ -1,5 +1,7 @@
 """Typed, versioned synthetic input for the first contingency integration case."""
 
+import hashlib
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Literal
@@ -12,6 +14,48 @@ from src.procurement_contract_schemas import (
     FrozenOrderingOpportunity,
     ServicePeriod,
 )
+from src.schemas import Ingredient, MenuItem, RecipeItem, Supplier
+
+
+def _decimal_text(value: Decimal) -> str:
+    rendered = format(value, "f")
+    return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
+
+
+def catalogue_sha256(
+    menu_items: list[MenuItem],
+    ingredients: list[Ingredient],
+    recipes: list[RecipeItem],
+    suppliers: list[Supplier],
+) -> str:
+    """Bind the exact decision catalogue, independent of row insertion order."""
+    document = {
+        "menu_items": sorted(
+            (row.model_dump(mode="json") for row in menu_items),
+            key=lambda row: row["id"],
+        ),
+        "ingredients": sorted(
+            (row.model_dump(mode="json") for row in ingredients),
+            key=lambda row: row["id"],
+        ),
+        "recipes": sorted(
+            (
+                {
+                    **row.model_dump(mode="json"),
+                    "quantity": _decimal_text(row.quantity),
+                }
+                for row in recipes
+            ),
+            key=lambda row: (row["menu_item_id"], row["ingredient_id"]),
+        ),
+        "suppliers": sorted(
+            (row.model_dump(mode="json") for row in suppliers),
+            key=lambda row: row["id"],
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 class ResidualDemandBucket(BaseModel):
@@ -89,6 +133,12 @@ class ContingencyCasePayload(BaseModel):
     forecast_method: Literal["EXPLICIT_RESIDUAL_DEMO_V1"]
     ingredient_ids: list[str] = Field(min_length=1)
     menu_item_ids: list[str] = Field(min_length=1)
+    catalogue_ingredients: list[Ingredient] | None = None
+    catalogue_menu_items: list[MenuItem] | None = None
+    catalogue_recipes: list[RecipeItem] | None = None
+    catalogue_suppliers: list[Supplier] | None = None
+    recipe_manifest: list[tuple[str, str]] | None = None
+    catalogue_sha256: str | None = None
     forecasts: list[ResidualForecastDay] = Field(min_length=1)
     opening_expected: dict[str, Decimal]
     fixed_supply_expected: FixedSupplyExpectation
@@ -178,6 +228,52 @@ class ContingencyCasePayload(BaseModel):
                 + timedelta(days=offer.shelf_life_days_on_arrival - 1)
             ):
                 raise ValueError("Opportunity arrival or expiry contradicts offer")
+        catalogue = (
+            self.catalogue_ingredients,
+            self.catalogue_menu_items,
+            self.catalogue_recipes,
+            self.catalogue_suppliers,
+            self.recipe_manifest,
+            self.catalogue_sha256,
+        )
+        if any(value is not None for value in catalogue):
+            if any(value is None for value in catalogue):
+                raise ValueError("Decision catalogue must be complete")
+            assert self.catalogue_ingredients is not None
+            assert self.catalogue_menu_items is not None
+            assert self.catalogue_recipes is not None
+            assert self.catalogue_suppliers is not None
+            assert self.recipe_manifest is not None
+            assert self.catalogue_sha256 is not None
+            keys = [
+                (row.menu_item_id, row.ingredient_id) for row in self.catalogue_recipes
+            ]
+            supplier_ids = {row.id for row in self.catalogue_suppliers}
+            if (
+                {row.id for row in self.catalogue_ingredients} != ingredients
+                or len(self.catalogue_ingredients) != len(ingredients)
+                or {row.id for row in self.catalogue_menu_items} != menu
+                or len(self.catalogue_menu_items) != len(menu)
+                or len(supplier_ids) != len(self.catalogue_suppliers)
+                or self.fixed_supply_expected.supplier_id not in supplier_ids
+                or any(row.supplier_id not in supplier_ids for row in self.offers)
+                or {row.menu_item_id for row in self.catalogue_recipes} != menu
+                or len(set(keys)) != len(keys)
+                or sorted(keys) != sorted(self.recipe_manifest)
+                or any(
+                    dish not in menu or ingredient not in ingredients
+                    for dish, ingredient in keys
+                )
+                or any(row.quantity <= 0 for row in self.catalogue_recipes)
+                or self.catalogue_sha256
+                != catalogue_sha256(
+                    self.catalogue_menu_items,
+                    self.catalogue_ingredients,
+                    self.catalogue_recipes,
+                    self.catalogue_suppliers,
+                )
+            ):
+                raise ValueError("Decision catalogue disagrees with its manifest")
         return self
 
 
@@ -201,4 +297,6 @@ class ContingencyCaseInputVersion(BaseModel):
             raise ValueError(
                 "Case offer observation must be recorded before the artifact"
             )
+        if self.version >= 2 and self.payload.catalogue_sha256 is None:
+            raise ValueError("Version 2 requires a complete decision catalogue")
         return self
