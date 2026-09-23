@@ -11,6 +11,12 @@ uv run python -m src.seed
 uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
+After configuring `LLM_GATEWAY_URL`, `LLM_GATEWAY_API_KEY`, and `LLM_MODEL`, run
+`uv run python -m src.assessment_worker` to claim and process **one** queued assessment.
+It prints a JSON outcome. Invoke it again for another queued run; automatic scheduling
+is not wired yet. Do not invoke it with missing gateway configuration: a claimed run
+fails closed if its reasoning provider cannot be constructed.
+
 PowerShell uses `Copy-Item .env.example .env`. Python 3.12 and uv are required.
 The PostgreSQL URL must use `postgresql+psycopg://`. Docker's credentials are local development defaults only.
 No credentials are seeded. Empty manager/agent credentials disable their respective access.
@@ -206,11 +212,11 @@ LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
 
 `LLM_GATEWAY_API_KEY` is a secret. Set the real value only in local or runtime
 environment configuration; never commit it or add it to `.env.example`.
-The environment template reflects the canonical gateway configuration. Updating
-the Coordinator provider wiring is intentionally outside the scope of this
-configuration change.
+The application worker uses this gateway through typed specialist models. Live
+provider behavior still needs deployment verification.
 
-The Pass 1A Coordinator uses OpenClaw's isolated, embedded `agent exec` command.
+Separately, the Pass 1A Coordinator smoke test uses OpenClaw's isolated, embedded
+`agent exec` command.
 It has the `minimal` tool profile and does not expose ReStock business tools,
 database writes, plan publication, or approval operations.
 

@@ -18,15 +18,15 @@ The backend owner was the first contributor. The deterministic ML modules and lo
 | 2 | Atomic closing revisions, complete counts/sales, authoritative physical baseline, reconciliation | None for basic daily entry |
 | 3 | Actual external purchases, delay/cancellation, partial receipts, retry protection and count corrections | None for basic delivery entry |
 | 4 | Timestamped sales/corrections, chronological lot estimates, expiry history, missing coverage, deterministic projection/materiality, provenance, and immutable request/result evidence | Optional explicit waste-entry tooling only; discrepancies are never labelled waste |
-| 5 | Durable queue, frozen inputs, real first-slice engine adapter, local Coordinator execution, candidate validation/publication, and manager evidence | Add a bounded worker that claims queued runs and invokes the merged Coordinator |
+| 5 | Durable queue, frozen inputs, real first-slice engine adapter, one-shot queued worker, Coordinator execution, candidate validation/publication, and manager evidence | Configure deployment-level worker invocation and verify the live provider |
 | 6 | Exact plan/version decisions with instructions and actor/time, lifecycle transitions, ordering occasions, actual-purchase source links, and stale approval rejection | None for the supported normal-plan slice |
-| 7 | Daily, promotion, supplier, delivery, sales and inventory-correction triggers; coalescing; deterministic materiality; Coordinator routing; stale-result rejection; supersession/invalidation | Connect normal event traffic to the same bounded worker used by ticket 5 |
+| 7 | Daily, promotion, supplier, delivery, sales and inventory-correction triggers; coalescing; deterministic materiality; Coordinator routing; stale-result rejection; supersession/invalidation; one-shot worker | Configure automatic worker invocation for normal event traffic |
 | 8 | Immutable recommendation history and separate fixed external commitments in run inputs | Residual-horizon contingency calculation, split suppliers, emergency fees and integrated no-double-ordering acceptance |
 
 ## Backend workflow
 
 1. Manager submits physical closing counts and final dish sales. The revision, comparison evidence, event and assessment request commit together. Drafts do not queue a run.
-2. Sales batches retain timestamps and source identities. They update estimates without an LLM call. Closing counts remain unchanged. The local Demand path calls the approved deterministic materiality function through the immutable Backend request/result boundary. Normal application traffic still needs a worker to execute that path.
+2. Sales batches retain timestamps and source identities. They update estimates without an LLM call. Closing counts remain unchanged. The local Demand path calls the approved deterministic materiality function through the immutable Backend request/result boundary. The merged one-shot worker can execute queued runs when invoked; automatic invocation is pending.
 3. Promotion revisions and supplier facts request assessment immediately. Frozen promotions retain strict canonical event envelopes and complete known revision history. Closing-count changes emit `INVENTORY_ADJUSTED` and use an immutable deterministic assessment before a safe correction can keep the plan. Delivery delay, shortfall and cancellation events also request assessment. Ordinary receipts/orders/cycle decisions remain stored facts; their impact checks belong to the pending integration.
 4. One agent attempt can run while one follow-up request waits. New triggers coalesce into the waiting run and retain event links. Claims freeze inputs effective by simulation as_of and recorded by real known_at. Supplier versions, event histories and recorded revisions prevent future facts from entering earlier snapshots. The backend rejects completion based on newer inputs and releases expired/stale attempts.
 5. A new normal assessment may create a new plan identity; pass `revises_plan_id` when changing an existing horizon. Only one actionable version exists across all identities. Publication atomically supersedes the prior actionable version, preserving its status-change audit and actual commitments. Revisions do not inherit approval.
@@ -61,7 +61,7 @@ The OpenClaw package still contains only its smoke-test echo tool. Typed organis
 
 `planning.py` retains a **limited development calculator** for direct Backend workflow tests. It is not the real first-slice engine and must not be used to demonstrate forecasting, projection, supplier-splitting, expiry, fee, or economic-policy claims.
 
-The real local first-slice path is connected: `decision_engine_adapter.run_first_slice_engine` consumes the frozen procurement contract, `BackendProcurementTools` exposes reference-only tools, and `backend_control_plane.run_backend_coordinator` joins the three specialists to Backend publication. The evaluation harness calls this path today. The missing piece is a worker entrypoint that claims queued application runs and invokes it.
+The real local first-slice path is connected: `decision_engine_adapter.run_first_slice_engine` consumes the frozen procurement contract, `BackendProcurementTools` exposes reference-only tools, and `backend_control_plane.run_backend_coordinator` joins the three specialists to Backend publication. `assessment_worker.run_one_queued_assessment` now claims and executes one queued application run through this path. Deployment-level invocation is still needed.
 
 The development calculator is disabled by default and returns `503 DECISION_ENGINE_NOT_CONNECTED` unless a developer explicitly sets `ENABLE_DEVELOPMENT_CALCULATOR=true`. Tests opt in deliberately. Its candidates remain labelled `DEVELOPMENT_FIXTURE`; the merged first-slice adapter publishes `ENGINE` results. Neither path implements the contingency policy.
 
@@ -77,7 +77,7 @@ Integration points:
 - `deliveries.read_delivery`: separates received, cancelled and outstanding quantities. The run contract's `commitment_projection` freezes those quantities after delay, shortfall, receipt, and cancellation history, derives expected expiry from the captured approved offer revision, and assigns stable projected-lot identities. Pass outstanding commitments as fixed dated supply, not as new recommendation lines. Agent tools must never mutate those commitments.
 - `sales.estimated_inventory`: historical replay now follows `FEFO_EXPIRY_RECEIVED_LOT_ID_V1`, ordering usable lots by expiry, receipt time, then lot ID. This matches the merged numerical projector for equal-expiry lots.
 
-Revision checks continue to block approval/publication after newer events. The local adapter scenarios pass; automatic application execution still depends on the pending worker.
+Revision checks continue to block approval/publication after newer events. The one-shot worker is merged, but automatic application execution still needs a deployment trigger.
 
 ## Demo data and time
 
@@ -87,7 +87,7 @@ Apply `alembic upgrade head` before starting the updated API. Existing overlappi
 
 Sales corrections retain source, batch ID and exact period. Cycle decisions should supply effective_at in simulation time; omission means real time. Promotion and delivery-term revisions cannot precede already recorded relevant activity. Late receipt reconciliation remains supported.
 
-The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, forecast input, fee grouping, Agent read boundary, and Backend materiality exchange. The normal engine adapter and plan publication are merged. Automatic worker execution, live-provider proof, and contingency acceptance remain integration work.
+The [shared integration contract](SHARED_INTEGRATION_CONTRACT.md) freezes the first-slice policy, approved supplier domain, forecast input, fee grouping, Agent read boundary, and Backend materiality exchange. The normal engine adapter, plan publication, and one-shot worker are merged. Automatic worker invocation, live-provider proof, and contingency acceptance remain integration work.
 
 One review recommendation is deliberately not adopted: reported `AVAILABLE` status does not prove an offer is calculable. Partial supplier facts may retain unknown fields; the calculator rejects missing required inputs before using them. This follows the approved architecture's distinction between reported status and certified feasibility, rather than replacing unknown values with zero or discarding partial facts.
 

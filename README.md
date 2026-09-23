@@ -36,7 +36,7 @@ flowchart TD
 
 The Coordinator may invoke specialists, but specialists cannot invoke other specialists or mutate Backend state. Each specialist has a narrow domain allowlist. Backend validation, publication, lifecycle, approval, and audit persistence remain outside prompts and specialist reasoning.
 
-The target live provider boundary is OpenClaw plus Claude/Sonnet through the organiser gateway. The local demo uses scripted reasoning over the same typed contracts so it can be repeated without live model access. Live provider verification is still pending.
+The application worker uses typed specialist reasoning through the organiser gateway, configured for Claude/Sonnet. OpenClaw remains an isolated smoke-test path and is not used by the application worker. The local demo can use scripted reasoning over the same contracts; live provider verification is still pending.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/AGENTS_PLAN.md](docs/AGENTS_PLAN.md), and [CONTEXT.md](CONTEXT.md) for detailed contracts and glossary terms.
 
@@ -114,9 +114,9 @@ The local evaluation reports routing, outcome, specialist-call, tool-call, retry
 
 ## Current open items
 
-- Queued assessments still need an external Agent worker or local demo runner to execute the Coordinator.
+- A one-shot worker can claim and process one queued assessment; deployment-level invocation is not yet automatic.
 - Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
-- Live OpenClaw/Sonnet gateway behavior, AWS/Bedrock verification, live token/cost metrics, and live-model evaluation.
+- Live organiser-gateway/Sonnet behavior, AWS/Bedrock verification, live token/cost metrics, and live-model evaluation.
 - Deployment, production reliability, hosted URLs, video, screenshots, and external submission actions.
 - Real-world restaurant and SME outcome metrics.
 
