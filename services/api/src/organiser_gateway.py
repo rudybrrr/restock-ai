@@ -221,12 +221,21 @@ class OrganiserChatModel:
 
     def complete(self, messages: Sequence[Mapping[str, str]]) -> str:
         """Return only the gateway's model text; never retry transport failures."""
+        return self._complete_request(messages)
+
+    def _complete_request(
+        self,
+        messages: Sequence[Mapping[str, str]],
+        response_schema: Mapping[str, Any] | None = None,
+    ) -> str:
         payload = {
             "model": self._settings.model,
             "messages": [dict(message) for message in messages],
             "stream": False,
-            "options": {"num_predict": self._settings.num_predict},
         }
+        if response_schema is not None:
+            payload["format"] = response_schema
+        payload["options"] = {"num_predict": self._settings.num_predict}
         request = Request(
             f"{self._settings.gateway_url.rstrip('/')}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -294,7 +303,7 @@ class OrganiserChatModel:
         response_model: type[ModelT],
     ) -> ModelT:
         """Parse one JSON object and validate it with an existing Pydantic schema."""
-        text = self.complete(messages)
+        text = self._complete_request(messages, response_model.model_json_schema())
         try:
             value = json.loads(text)
         except json.JSONDecodeError as error:

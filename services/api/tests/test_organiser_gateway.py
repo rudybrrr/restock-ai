@@ -9,16 +9,22 @@ from urllib.error import HTTPError, URLError
 import pytest
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
+from src.demand_specialist import DemandModelDecision
+from src.inventory_specialist import InventoryModelDecision
 from src.organiser_gateway import (
     OrganiserAuthenticationError,
     OrganiserChatModel,
+    OrganiserDemandReasoning,
     OrganiserGatewayConfigurationError,
     OrganiserGatewayResponseError,
     OrganiserGatewaySettings,
     OrganiserGatewayUnavailableError,
+    OrganiserInventoryReasoning,
     OrganiserModelOutputMalformedError,
     OrganiserModelOutputValidationError,
+    OrganiserProcurementReasoning,
 )
+from src.procurement_specialist import ProcurementModelDecision
 
 GATEWAY_URL = "https://api.softwaresystems.app"
 API_KEY = "gateway-secret-key"
@@ -109,11 +115,15 @@ def test_gateway_posts_official_chat_request_and_extracts_message_content() -> N
 
 
 def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
+    captured: dict[str, Any] = {}
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse({"message": {"content": '{"outcome":"KEEP_CURRENT_PLAN"}'}})
+
     model = OrganiserChatModel(
         settings(),
-        opener=lambda request, *, timeout: FakeResponse(
-            {"message": {"content": '{"outcome":"KEEP_CURRENT_PLAN"}'}}
-        ),
+        opener=opener,
     )
 
     parsed = model.complete_json(
@@ -121,6 +131,49 @@ def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
     )
 
     assert parsed.outcome == "KEEP_CURRENT_PLAN"
+    assert captured["body"] == {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": "Return JSON."}],
+        "stream": False,
+        "format": ResponseModel.model_json_schema(),
+        "options": {"num_predict": 2048},
+    }
+
+
+class WrapperContext(BaseModel):
+    value: str = "typed wrapper test"
+
+
+@pytest.mark.parametrize(
+    ("wrapper", "response_model"),
+    [
+        (OrganiserDemandReasoning, DemandModelDecision),
+        (OrganiserInventoryReasoning, InventoryModelDecision),
+        (OrganiserProcurementReasoning, ProcurementModelDecision),
+    ],
+)
+def test_typed_reasoning_wrappers_send_their_exact_response_schema(
+    wrapper: type[Any], response_model: type[BaseModel]
+) -> None:
+    captured: dict[str, Any] = {}
+    decision = {
+        "run_id": "RUN-TYPED-GATEWAY-1",
+        "task_id": "TASK-TYPED-GATEWAY-1",
+        "action": "COMPLETE",
+        "interpreted_impact": "No specialist action is justified.",
+        "summary": "Keep the current plan.",
+    }
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse({"message": {"content": json.dumps(decision)}})
+
+    result = wrapper(OrganiserChatModel(settings(), opener=opener)).decide(
+        WrapperContext()
+    )
+
+    assert isinstance(result, response_model)
+    assert captured["body"]["format"] == response_model.model_json_schema()
 
 
 def test_gateway_rejects_malformed_model_json_and_schema_output() -> None:
