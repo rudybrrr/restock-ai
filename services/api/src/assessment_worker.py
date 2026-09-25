@@ -30,6 +30,7 @@ from src.post_purchase_contingency import (
     persist_post_purchase_result,
     select_post_purchase_input,
 )
+from src.sales_materiality_adapter import ensure_claimed_sales_materiality
 
 WorkerPublicationStatus = Literal[
     "NO_WORK", "PUBLISHED", "NOT_PUBLISHED", "STALE_REJECTED"
@@ -89,6 +90,7 @@ def run_one_queued_assessment(
         raise
 
     try:
+        ensure_claimed_sales_materiality(session, claimed.id)
         post_purchase_input = select_post_purchase_input(claimed)
         if post_purchase_input is not None:
             post_purchase_result = persist_post_purchase_result(session, claimed.id)
@@ -120,7 +122,7 @@ def run_one_queued_assessment(
             failure_classification="STATE_REVISION_STALE",
         )
     except ApiError as error:
-        if error.detail.code == "STATE_REVISION_STALE":
+        if error.detail.code in {"STATE_REVISION_STALE", "STALE_RUN_INPUT"}:
             run = planning.get_run(session, claimed.id)
             if run.status == "RUNNING":
                 planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")

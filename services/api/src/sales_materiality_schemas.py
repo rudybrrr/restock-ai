@@ -1,5 +1,8 @@
 """Backend-owned transport for the approved sales-materiality calculation."""
 
+from collections.abc import Mapping
+from dataclasses import fields, is_dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -9,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    field_serializer,
     model_validator,
 )
 
@@ -67,6 +71,42 @@ class SalesMaterialityEngineRequest(StrictModel):
     plan_reference: str | None
     safety_reference: str
     risk: dict[str, JsonValue] | None
+
+    @field_serializer("issued_forecast", when_used="json")
+    def serialize_issued_forecast(self, value: ForecastVersion) -> JsonValue:
+        return _json_safe(value)
+
+
+def _json_safe(value: object) -> JsonValue:
+    """Normalize frozen forecast dataclasses for canonical JSON transport."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _json_safe(getattr(value, field.name))
+            for field in fields(value)
+            if field.init
+        }
+    if isinstance(value, BaseModel):
+        return _json_safe(value.model_dump(mode="python"))
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise TypeError("Forecast mappings must have string keys for JSON transport")
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"Unsupported forecast transport value: {type(value).__name__}")
+
+
+def serialize_engine_request(
+    request: SalesMaterialityEngineRequest,
+) -> dict[str, JsonValue]:
+    """Return the one canonical JSON-safe payload used for persistence and hashing."""
+    return request.model_dump(mode="json")
 
 
 class MaterialityFinding(StrictModel):

@@ -19,6 +19,7 @@ from src.sales_materiality_schemas import (
     SalesMaterialityRequestCreate,
     SalesMaterialityResultWrite,
     SalesThresholdPolicyInput,
+    serialize_engine_request,
 )
 from src.sales_threshold_schemas import (
     FrozenSalesThresholdPolicy,
@@ -335,8 +336,8 @@ def create_request(
         if raw is None:
             raise ApiError(409, "MISSING_REQUIRED_DATA", "Run has no frozen contract")
         request_hash = _canonical_hash(
-            _engine_request(ProcurementContract.model_validate(raw), body).model_dump(
-                mode="json"
+            serialize_engine_request(
+                _engine_request(ProcurementContract.model_validate(raw), body)
             )
         )
         if existing["request_sha256"] != request_hash:
@@ -348,7 +349,7 @@ def create_request(
         return _assessment(existing)
     run, contract = _running_contract(session, run_id)
     context = context_from_contract(contract)
-    payload = _engine_request(contract, body).model_dump(mode="json")
+    payload = serialize_engine_request(_engine_request(contract, body))
     request_hash = _canonical_hash(payload)
     now = datetime.now(UTC)
     row = {
