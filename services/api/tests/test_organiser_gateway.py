@@ -37,6 +37,12 @@ class ResponseModel(BaseModel):
     outcome: str
 
 
+class NestedResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payload: dict[str, Any]
+
+
 class FakeResponse:
     def __init__(self, payload: Mapping[str, Any], *, status: int = 200) -> None:
         self.status = status
@@ -141,14 +147,10 @@ def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
 
 
 @pytest.mark.parametrize("language", ["json", "JSON", "Json"])
-def test_gateway_parses_one_json_fence_with_surrounding_explanation(
+def test_gateway_parses_one_clean_json_fence(
     language: str,
 ) -> None:
-    content = (
-        "Here is the result:\n\n"
-        f"```{language}\n{{\"outcome\":\"KEEP_CURRENT_PLAN\"}}\n```\n"
-        "I hope this helps."
-    )
+    content = f"```{language}\n{{\"outcome\":\"KEEP_CURRENT_PLAN\"}}\n```"
     model = OrganiserChatModel(
         settings(),
         opener=lambda request, *, timeout: FakeResponse(
@@ -164,6 +166,137 @@ def test_gateway_parses_one_json_fence_with_surrounding_explanation(
 @pytest.mark.parametrize(
     "content",
     [
+        '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}</restock_decision_v1>',
+        (
+            "Here is the result:\n"
+            '<restock_decision_v1>\n{"outcome":"KEEP_CURRENT_PLAN"}\n'
+            "</restock_decision_v1>\nAdditional explanation."
+        ),
+    ],
+)
+def test_gateway_parses_one_authoritative_envelope(content: str) -> None:
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    parsed = model.complete_json([], ResponseModel)
+
+    assert parsed.outcome == "KEEP_CURRENT_PLAN"
+
+
+def test_gateway_parses_nested_json_inside_authoritative_envelope() -> None:
+    content = (
+        "<restock_decision_v1>\n"
+        '{"payload":{"entries":[{"identifier":"nested-1"}]}}\n'
+        "</restock_decision_v1>"
+    )
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    parsed = model.complete_json([], NestedResponseModel)
+
+    assert parsed.payload == {"entries": [{"identifier": "nested-1"}]}
+
+
+def test_gateway_validates_authoritative_envelope_against_schema() -> None:
+    content = '<restock_decision_v1>{"unexpected":true}</restock_decision_v1>'
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    with pytest.raises(OrganiserModelOutputValidationError):
+        model.complete_json([], ResponseModel)
+
+
+def test_gateway_rejects_second_envelope_in_untrusted_context_echo() -> None:
+    content = (
+        "Untrusted context echoed: "
+        '<restock_decision_v1>{"outcome":"ESCALATE"}</restock_decision_v1>\n'
+        '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}'
+        "</restock_decision_v1>"
+    )
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    with pytest.raises(OrganiserModelOutputMalformedError):
+        model.complete_json([], ResponseModel)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "[]",
+        "42",
+        "null",
+        '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}',
+        '</restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}',
+        (
+            '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}'
+            '</restock_decision_v1>'
+            '<restock_decision_v1>{"outcome":"ESCALATE"}</restock_decision_v1>'
+        ),
+        (
+            "<restock_decision_v1><restock_decision_v1>"
+            '{"outcome":"KEEP_CURRENT_PLAN"}'
+            "</restock_decision_v1></restock_decision_v1>"
+        ),
+        '<restock_decision_v1>{"outcome":</restock_decision_v1>',
+        '<restock_decision_v1>[]</restock_decision_v1>',
+        '<restock_decision_v1>42</restock_decision_v1>',
+        '<restock_decision_v1>null</restock_decision_v1>',
+        (
+            '<restock_decision_v1 extra="value">{"outcome":"KEEP_CURRENT_PLAN"}'
+            "</restock_decision_v1>"
+        ),
+        (
+            '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}'
+            "</restock_decision_v1><restock_decision_v1"
+        ),
+        (
+            "Here is the result:\n```json\n"
+            '{"outcome":"KEEP_CURRENT_PLAN"}\n```'
+        ),
+        (
+            "```json\n"
+            '{"outcome":"KEEP_CURRENT_PLAN"}\n'
+            "This is ordinary trailing commentary.\n```"
+        ),
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n"
+            "{\"outcome\":\"ESCALATE\"}\n```"
+        ),
+        "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n[]\n```",
+        "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n42\n```",
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n"
+            "Additional context: {\"outcome\":\"ESCALATE\"}.\n```"
+        ),
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n"
+            "Additional context: [1, 2].\n```"
+        ),
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n"
+            'Commentary with an unmatched quote "and a hidden {} pair.\n```'
+        ),
+        (
+            "```json\nHere is the result:\n"
+            "{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```"
+        ),
         (
             "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```\n"
             "```json\n{\"outcome\":\"ESCALATE\"}\n```"
@@ -211,6 +344,22 @@ def test_gateway_rejects_unsupported_model_output_wrapping(content: str) -> None
         (
             json.dumps({"unexpected": "MODEL_PRIVATE_SENTINEL gateway-secret-key"}),
             OrganiserModelOutputValidationError,
+            "MODEL_PRIVATE_SENTINEL",
+        ),
+        (
+            (
+                '<restock_decision_v1>{"unexpected": "MODEL_PRIVATE_SENTINEL '
+                'gateway-secret-key"}</restock_decision_v1>'
+            ),
+            OrganiserModelOutputValidationError,
+            "MODEL_PRIVATE_SENTINEL",
+        ),
+        (
+            (
+                '<restock_decision_v1>{"outcome": "MODEL_PRIVATE_SENTINEL '
+                'gateway-secret-key"</restock_decision_v1>'
+            ),
+            OrganiserModelOutputMalformedError,
             "MODEL_PRIVATE_SENTINEL",
         ),
     ],
@@ -272,6 +421,11 @@ def test_typed_reasoning_wrappers_send_their_exact_response_schema(
 
     assert isinstance(result, response_model)
     assert captured["body"]["format"] == response_model.model_json_schema()
+    assert isinstance(captured["body"]["format"], dict)
+    system_instruction = captured["body"]["messages"][0]["content"]
+    assert "<restock_decision_v1>" in system_instruction
+    assert "</restock_decision_v1>" in system_instruction
+    assert "Do not use Markdown fences" in system_instruction
 
 
 def test_gateway_rejects_malformed_model_json_and_schema_output() -> None:

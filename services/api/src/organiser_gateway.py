@@ -315,22 +315,12 @@ class OrganiserChatModel:
 
 
 def _parse_model_output_object(content: str) -> dict[str, Any]:
-    """Accept a raw JSON object or one explicitly tagged JSON Markdown fence."""
+    """Accept raw JSON, one authoritative envelope, or one clean JSON fence."""
     stripped = content.strip()
     try:
         value = json.loads(stripped)
     except json.JSONDecodeError:
-        blocks, has_unclosed_fence = _extract_fenced_code_blocks(stripped)
-        if has_unclosed_fence or len(blocks) != 1 or blocks[0][0].casefold() != "json":
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output was not valid JSON"
-            ) from None
-        try:
-            value = json.loads(blocks[0][1])
-        except json.JSONDecodeError:
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output was not valid JSON"
-            ) from None
+        value = _parse_wrapped_model_output_object(stripped)
     if not isinstance(value, dict):
         raise OrganiserModelOutputMalformedError(
             "Organiser model output must be one JSON object"
@@ -338,30 +328,41 @@ def _parse_model_output_object(content: str) -> dict[str, Any]:
     return value
 
 
-def _extract_fenced_code_blocks(content: str) -> tuple[list[tuple[str, str]], bool]:
-    blocks: list[tuple[str, str]] = []
-    opening: tuple[str, int, str, int] | None = None
-    lines = content.splitlines()
-
-    for line_number, line in enumerate(lines):
-        if opening is None:
-            match = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
-            if match is not None:
-                marker, info = match.groups()
-                opening = (marker[0], len(marker), info.strip(), line_number)
-            continue
-
-        marker_character, marker_length, language, body_start = opening
-        closing = re.match(r"^ {0,3}(`{3,}|~{3,})[ \t]*$", line)
+def _parse_wrapped_model_output_object(content: str) -> Any:
+    opening = "<restock_decision_v1>"
+    closing = "</restock_decision_v1>"
+    tag_starts = list(
+        re.finditer(r"<\s*/?\s*restock_decision_v1\b", content, re.IGNORECASE)
+    )
+    if tag_starts:
         if (
-            closing is not None
-            and closing.group(1)[0] == marker_character
-            and len(closing.group(1)) >= marker_length
+            len(tag_starts) != 2
+            or not content.startswith(opening, tag_starts[0].start())
+            or not content.startswith(closing, tag_starts[1].start())
         ):
-            blocks.append((language, "\n".join(lines[body_start + 1 : line_number])))
-            opening = None
-
-    return blocks, opening is not None
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output had invalid decision envelope"
+            ) from None
+        inner = content[
+            tag_starts[0].start() + len(opening) : tag_starts[1].start()
+        ]
+    else:
+        clean_fence = re.fullmatch(
+            r" {0,3}(`{3,}|~{3,})[ \t]*json[ \t]*\r?\n(.*?)\r?\n {0,3}\1[ \t]*",
+            content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if clean_fence is None:
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output was not valid JSON"
+            ) from None
+        inner = clean_fence.group(2)
+    try:
+        return json.loads(inner)
+    except json.JSONDecodeError:
+        raise OrganiserModelOutputMalformedError(
+            "Organiser model output was not valid JSON"
+        ) from None
 
 
 def _typed_reasoning_messages[MessageModelT: BaseModel](
@@ -373,8 +374,12 @@ def _typed_reasoning_messages[MessageModelT: BaseModel](
         {
             "role": "system",
             "content": (
-                f"You are the ReStock {specialist} reasoning model. Return exactly "
-                "one JSON object matching response_schema. Choose only typed routing "
+                f"You are the ReStock {specialist} reasoning model. The only "
+                "authoritative output is exactly one <restock_decision_v1> element. "
+                "Its contents must be exactly one JSON object matching "
+                "response_schema. Close with </restock_decision_v1>. Do not use "
+                "Markdown fences or emit another restock_decision_v1 element. "
+                "Choose only typed routing "
                 f"for the bounded {specialist} investigation. Never invent "
                 "authoritative values, perform arithmetic, determine materiality, "
                 "determine supplier feasibility, optimise, validate, approve, "
