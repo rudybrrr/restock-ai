@@ -9,6 +9,7 @@ from src import planning
 from src.agent_contracts import (
     AgentCompletionPublication,
     AgentInvocation,
+    AgentOutcome,
     AuditAction,
     AuditEvent,
     EvidenceCategory,
@@ -109,6 +110,125 @@ class BackendCoordinatorControlPlane:
             captured_state_revision=str(run.input_revision),
             affected_plan_id=active.plan_id if active else None,
             affected_plan_version=active.version if active else None,
+        )
+
+    def get_post_purchase_completion(
+        self, invocation: AgentInvocation, result_id: str
+    ) -> AgentCompletionPublication:
+        """Map the persisted deterministic result to the Coordinator contract."""
+        from src.post_purchase_contingency import read_post_purchase_result
+
+        result = read_post_purchase_result(self._session, invocation.run_id)
+        if (
+            result.id != result_id
+            or result.run_id != invocation.run_id
+            or result.captured_state_revision != invocation.captured_state_revision
+        ):
+            raise ApiError(
+                409,
+                "STATE_REVISION_STALE",
+                "Post-purchase result does not match the claimed run",
+            )
+
+        outcome = AgentOutcome(result.outcome)
+        if outcome is AgentOutcome.ESCALATE:
+            if result.escalation_reason is None:
+                raise ApiError(
+                    409,
+                    "UNCERTIFIED_OUTCOME",
+                    "Post-purchase escalation has no authoritative reason",
+                )
+            if result.candidate is not None or result.candidate_reference is not None:
+                raise ApiError(
+                    409,
+                    "UNCERTIFIED_OUTCOME",
+                    "Escalated post-purchase results cannot expose a candidate",
+                )
+        elif not result.complete or result.escalation_reason is not None:
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Incomplete post-purchase results cannot certify a plan outcome",
+            )
+
+        result_ref = EvidenceRef(
+            category=EvidenceCategory.POST_PURCHASE_RESULT,
+            source=EvidenceSource.BACKEND,
+            reference_id=result.id,
+            state_revision=result.captured_state_revision,
+            run_id=result.run_id,
+        )
+        candidate_ref = None
+        evidence_refs = [result_ref]
+        if outcome is AgentOutcome.KEEP_CURRENT_PLAN:
+            if (
+                result.candidate is None
+                or result.candidate.lines
+                or result.candidate.new_purchase_cash_cost != 0
+            ):
+                raise ApiError(
+                    409,
+                    "UNCERTIFIED_OUTCOME",
+                    "KEEP_CURRENT_PLAN requires an empty zero-cash result",
+                )
+        elif outcome is AgentOutcome.REVISE_PLAN:
+            if (
+                result.candidate is None
+                or not result.candidate.lines
+                or result.candidate_reference is None
+            ):
+                raise ApiError(
+                    409,
+                    "UNCERTIFIED_OUTCOME",
+                    "REVISE_PLAN requires the exact persisted candidate",
+                )
+            resolved_candidate = planning.validate_candidate_reference(
+                self._session,
+                invocation.run_id,
+                result.candidate_reference,
+                invocation.captured_state_revision,
+            )
+            if resolved_candidate != result.candidate:
+                raise ApiError(
+                    409,
+                    "UNCERTIFIED_OUTCOME",
+                    "Candidate reference does not resolve to the persisted result",
+                )
+            candidate_ref = EvidenceRef(
+                category=EvidenceCategory.CANDIDATE_RESULT,
+                source=EvidenceSource.DECISION_ENGINE,
+                reference_id=result.candidate_reference,
+                state_revision=result.captured_state_revision,
+                run_id=result.run_id,
+            )
+            evidence_refs.append(candidate_ref)
+
+        summary = {
+            AgentOutcome.KEEP_CURRENT_PLAN: (
+                "The persisted post-purchase result keeps the current plan."
+            ),
+            AgentOutcome.REVISE_PLAN: (
+                "The persisted post-purchase result provides validated additional purchases."
+            ),
+            AgentOutcome.ESCALATE: (
+                "The persisted post-purchase result requires escalation."
+            ),
+        }[outcome]
+        return AgentCompletionPublication(
+            run_id=invocation.run_id,
+            captured_state_revision=invocation.captured_state_revision,
+            outcome=outcome,
+            escalation_reason=result.escalation_reason,
+            candidate_result_ref=candidate_ref,
+            affected_plan_id=invocation.affected_plan_id,
+            affected_plan_version=invocation.affected_plan_version,
+            reason_codes=(
+                [result.escalation_reason.value]
+                if result.escalation_reason is not None
+                else []
+            ),
+            evidence_refs=evidence_refs,
+            summary=summary,
         )
 
     def get_active_plan(self, invocation: AgentInvocation) -> Sequence[EvidenceRef]:
@@ -311,9 +431,10 @@ class BackendCoordinatorControlPlane:
 def run_backend_coordinator(
     session: Session,
     run_id: str,
-    reasoning_model: ProcurementReasoningModel,
-    procurement_tools: ProcurementToolPort,
+    reasoning_model: ProcurementReasoningModel | None = None,
+    procurement_tools: ProcurementToolPort | None = None,
     *,
+    post_purchase_result_id: str | None = None,
     demand_model: DemandReasoningModel | None = None,
     demand_tools: DemandToolPort | None = None,
     inventory_model: InventoryReasoningModel | None = None,
@@ -322,6 +443,16 @@ def run_backend_coordinator(
 ) -> CoordinatorExecution:
     """Run the local deterministic specialists against Backend-owned services."""
     control_plane = BackendCoordinatorControlPlane(session)
+    invocation = control_plane.get_invocation(run_id)
+    if post_purchase_result_id is not None:
+        completion = control_plane.get_post_purchase_completion(
+            invocation, post_purchase_result_id
+        )
+        coordinator = Coordinator(control_plane, LocalSpecialistRegistry({}))
+        return coordinator.run(invocation, authoritative_completion=completion)
+
+    if reasoning_model is None or procurement_tools is None:
+        raise ValueError("Normal Coordinator execution requires procurement reasoning and tools")
     procurement = ProcurementSpecialist(
         reasoning_model,
         procurement_tools,
@@ -348,4 +479,4 @@ def run_backend_coordinator(
         ),
         manual_classifier=manual_classifier,
     )
-    return coordinator.run(control_plane.get_invocation(run_id))
+    return coordinator.run(invocation)

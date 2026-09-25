@@ -111,13 +111,27 @@ FOLLOW_UP_ROUTE = {
 def _unique_refs(refs: Sequence[EvidenceRef]) -> list[EvidenceRef]:
     unique: dict[tuple[object, ...], EvidenceRef] = {}
     for ref in refs:
-        key = (ref.category, ref.source, ref.reference_id, ref.version, ref.state_revision)
+        key = (
+            ref.category,
+            ref.source,
+            ref.reference_id,
+            ref.version,
+            ref.state_revision,
+            ref.run_id,
+        )
         unique[key] = ref
     return list(unique.values())
 
 
 def _ref_key(ref: EvidenceRef) -> tuple[object, ...]:
-    return (ref.category, ref.source, ref.reference_id, ref.version, ref.state_revision)
+    return (
+        ref.category,
+        ref.source,
+        ref.reference_id,
+        ref.version,
+        ref.state_revision,
+        ref.run_id,
+    )
 
 
 class Coordinator:
@@ -134,7 +148,12 @@ class Coordinator:
         self._manual_classifier = manual_classifier
         self._clock = clock
 
-    def run(self, invocation: AgentInvocation) -> CoordinatorExecution:
+    def run(
+        self,
+        invocation: AgentInvocation,
+        *,
+        authoritative_completion: AgentCompletionPublication | None = None,
+    ) -> CoordinatorExecution:
         trace: list[AuditEvent] = []
         try:
             event_ref = self._retry_control_plane(
@@ -156,6 +175,28 @@ class Coordinator:
             )
 
         evidence_refs = _unique_refs([event_ref, *active_plan_refs])
+        if authoritative_completion is not None:
+            if (
+                authoritative_completion.run_id != invocation.run_id
+                or authoritative_completion.captured_state_revision
+                != invocation.captured_state_revision
+                or authoritative_completion.affected_plan_id
+                != invocation.affected_plan_id
+                or authoritative_completion.affected_plan_version
+                != invocation.affected_plan_version
+            ):
+                raise StateRevisionStaleError(
+                    "Authoritative completion does not match the claimed run"
+                )
+            completion = authoritative_completion.model_copy(
+                update={
+                    "evidence_refs": _unique_refs(
+                        [*evidence_refs, *authoritative_completion.evidence_refs]
+                    )
+                }
+            )
+            return self._record(invocation, completion, trace)
+
         inventory_adjustment_trigger = invocation.trigger_type == "INVENTORY_ADJUSTED"
         materiality = None
         if not inventory_adjustment_trigger:
