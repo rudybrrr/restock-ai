@@ -79,19 +79,25 @@ def _json(value):
 
 
 def _revision(session: Session, known_at: datetime | None = None) -> int:
-    statement = select(func.count()).select_from(db.events).where(
-        db.events.c.type.not_in(
-            (
-                "PLAN_APPROVED",
-                "PLAN_REJECTED",
-                "PLAN_INVALIDATED",
-                "PLAN_SUPERSEDED",
+    statement = (
+        select(func.count())
+        .select_from(db.events)
+        .where(
+            db.events.c.type.not_in(
+                (
+                    "PLAN_APPROVED",
+                    "PLAN_REJECTED",
+                    "PLAN_INVALIDATED",
+                    "PLAN_SUPERSEDED",
+                )
             )
         )
     )
     if known_at is not None:
         statement = statement.where(db.events.c.timestamp <= known_at)
     return session.execute(statement).scalar_one()
+
+
 def state_revision(session: Session, known_at: datetime | None = None) -> int:
     """Compatibility name used by the persisted sales-materiality boundary."""
     return _revision(session, known_at)
@@ -135,7 +141,9 @@ def get_event_context(session: Session, run_id: str, event_id: str) -> dict:
         .one_or_none()
     )
     if event is None:
-        raise ApiError(404, "EVENT_CONTEXT_NOT_FOUND", "Run trigger event does not exist")
+        raise ApiError(
+            404, "EVENT_CONTEXT_NOT_FOUND", "Run trigger event does not exist"
+        )
     return dict(event)
 
 
@@ -161,22 +169,34 @@ def validate_candidate_reference(
         raise ApiError(409, "RUN_NOT_RUNNING", "Only a claimed assessment can validate")
     _require_claimed_agent_revision(run, captured_state_revision)
     artifacts = run.snapshot.get("decision_engine_artifacts")
-    if artifacts is not None and reference_id == artifacts.get("candidate", {}).get("id"):
+    if artifacts is not None and reference_id == artifacts.get("candidate", {}).get(
+        "id"
+    ):
         validation = artifacts.get("validation", {})
         if (
             validation.get("candidate_id") != reference_id
             or validation.get("complete") is not True
             or validation.get("feasible") is not True
         ):
-            raise ApiError(409, "UNCERTIFIED_OUTCOME", "Engine candidate lacks validation")
+            raise ApiError(
+                409, "UNCERTIFIED_OUTCOME", "Engine candidate lacks validation"
+            )
         return Candidate.model_validate(artifacts["candidate"]["candidate"])
     if run.snapshot.get("active_contingency_case") is not None:
-        raise ApiError(409, "UNCERTIFIED_OUTCOME", "Active contingency requires a certified engine candidate")
+        raise ApiError(
+            409,
+            "UNCERTIFIED_OUTCOME",
+            "Active contingency requires a certified engine candidate",
+        )
     if reference_id != f"{run_id}:candidate":
-        raise ApiError(409, "PLAN_INVALID", "Candidate reference does not belong to run")
+        raise ApiError(
+            409, "PLAN_INVALID", "Candidate reference does not belong to run"
+        )
     stored = run.snapshot.get("calculated_candidate")
     if stored is None:
-        raise ApiError(409, "UNCERTIFIED_OUTCOME", "No deterministic candidate is stored")
+        raise ApiError(
+            409, "UNCERTIFIED_OUTCOME", "No deterministic candidate is stored"
+        )
     candidate = Candidate.model_validate(stored)
     _validate_candidate(run.snapshot, candidate)
     return candidate
@@ -197,7 +217,9 @@ def validate_human_review_request(
     if completion.outcome is not AgentOutcome.REQUEST_HUMAN_APPROVAL:
         raise ApiError(422, "INVALID_OUTCOME", "Completion does not request review")
     if completion.affected_plan_id is None or completion.affected_plan_version is None:
-        raise ApiError(409, "NO_CURRENT_PLAN", "Human review requires an exact plan version")
+        raise ApiError(
+            409, "NO_CURRENT_PLAN", "Human review requires an exact plan version"
+        )
     lock_inventory(session)
     run = get_run(session, completion.run_id)
     _require_claimed_agent_revision(run, completion.captured_state_revision)
@@ -207,7 +229,11 @@ def validate_human_review_request(
         or active.version != completion.affected_plan_version
         or active.status is not PlanStatus.PENDING_APPROVAL
     ):
-        raise ApiError(409, "PLAN_NOT_PENDING", "Only the exact pending version can be reviewed")
+        raise ApiError(
+            409, "PLAN_NOT_PENDING", "Only the exact pending version can be reviewed"
+        )
+
+
 def _snapshot(
     session: Session,
     as_of: datetime,
@@ -374,6 +400,21 @@ def _snapshot(
         active_case = freeze_active_case(session, staged_case)
         if active_case is not None:
             snapshot["active_contingency_case"] = active_case
+    from src.post_purchase_contingency import INPUT_KEY, freeze_post_purchase_input
+
+    post_purchase = freeze_post_purchase_input(
+        session, snapshot, run_id, captured_state_revision
+    )
+    if post_purchase is not None:
+        snapshot[INPUT_KEY] = post_purchase
+        snapshot["active_contingency_case"] = post_purchase["case"] or {
+            "status": "UNAVAILABLE",
+            "reason": "POST_PURCHASE_EVIDENCE_INCOMPLETE",
+            "run_id": run_id,
+            "as_of": snapshot["as_of"],
+            "known_at": snapshot["known_at"],
+            "captured_state_revision": str(captured_state_revision),
+        }
     return snapshot
 
 
@@ -779,7 +820,9 @@ def _materiality_from_audit(
     if not assessments:
         return None
     if len(assessments) != 1:
-        raise ApiError(409, "AUDIT_CONTEXT_MISMATCH", "Run has conflicting materiality evidence")
+        raise ApiError(
+            409, "AUDIT_CONTEXT_MISMATCH", "Run has conflicting materiality evidence"
+        )
     return assessments[0]
 
 
@@ -936,6 +979,30 @@ def complete_run(
                 "UNCERTIFIED_OUTCOME",
                 "A complete non-material inventory correction cannot publish a revision",
             )
+    from src.post_purchase_contingency import (
+        result_for_completion as post_purchase_result,
+    )
+
+    post_purchase = post_purchase_result(session, run)
+    post_purchase_keep = False
+    if post_purchase is not None:
+        if (
+            body.outcome != post_purchase.outcome
+            or body.escalation_reason != post_purchase.escalation_reason
+            or (
+                body.outcome == "REVISE_PLAN"
+                and body.candidate != post_purchase.candidate
+            )
+        ):
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Completion must match frozen post-purchase result",
+            )
+        post_purchase_keep = (
+            post_purchase.complete and post_purchase.outcome == "KEEP_CURRENT_PLAN"
+        )
+        materiality_keep = materiality_keep or post_purchase_keep
     transition_events: list[AuditEvent] = []
     version_id = None
     if body.outcome in ("KEEP_CURRENT_PLAN", "REQUEST_HUMAN_APPROVAL"):
@@ -981,6 +1048,19 @@ def complete_run(
                     409,
                     "PLAN_CHANGED",
                     "Current plan version changed after inventory assessment",
+                )
+        if post_purchase_keep and current is not None:
+            from src.post_purchase_contingency import select_post_purchase_input
+
+            frozen_post_purchase = select_post_purchase_input(run)
+            if (
+                frozen_post_purchase is None
+                or current["id"] != frozen_post_purchase.source_plan_version_id
+            ):
+                raise ApiError(
+                    409,
+                    "PLAN_CHANGED",
+                    "Current plan differs from frozen post-purchase source",
                 )
         if current is None:
             calculated_lines = calculated["lines"] if calculated is not None else []
@@ -1053,7 +1133,11 @@ def complete_run(
             and artifacts.get("validation", {}).get("feasible") is True
         )
         if active_case is not None and not engine_candidate:
-            raise ApiError(409, "UNCERTIFIED_OUTCOME", "Active contingency requires independent engine validation")
+            raise ApiError(
+                409,
+                "UNCERTIFIED_OUTCOME",
+                "Active contingency requires independent engine validation",
+            )
         if not engine_candidate:
             _validate_candidate(snapshot, candidate)
         if not _same_candidate(snapshot.get("calculated_candidate"), candidate):
@@ -1203,9 +1287,7 @@ def complete_run(
             completed_at=datetime.now(UTC),
         )
     )
-    _persist_agent_audit(
-        session, run, [*audit_events, *transition_events], version_id
-    )
+    _persist_agent_audit(session, run, [*audit_events, *transition_events], version_id)
     session.commit()
     return get_run(session, run_id)
 
@@ -1242,7 +1324,9 @@ def _persist_agent_audit(
     if not audit_events:
         return
     if run.trigger_event_id is None:
-        raise ApiError(409, "AUDIT_CONTEXT_MISSING", "Run has no persisted trigger event")
+        raise ApiError(
+            409, "AUDIT_CONTEXT_MISSING", "Run has no persisted trigger event"
+        )
     publication = None
     if plan_version_id is not None:
         publication = dict(
@@ -1259,7 +1343,9 @@ def _persist_agent_audit(
         )
     for event in audit_events:
         if event.run_id != run.id:
-            raise ApiError(409, "AUDIT_CONTEXT_MISMATCH", "Audit event belongs to another run")
+            raise ApiError(
+                409, "AUDIT_CONTEXT_MISMATCH", "Audit event belongs to another run"
+            )
         payload = event.model_dump(mode="json")
         if event.action is AuditAction.RUN_COMPLETED:
             payload["backend_publication"] = {
@@ -1377,7 +1463,10 @@ def publish_agent_completion(
             raise StateRevisionStaleError(error.detail.message) from error
         raise
     created = None
-    if published.plan_version_id is not None and completion.outcome is AgentOutcome.REVISE_PLAN:
+    if (
+        published.plan_version_id is not None
+        and completion.outcome is AgentOutcome.REVISE_PLAN
+    ):
         created = _canonical_plan_version(
             read_plan(session, published.plan_version_id), published, completion
         )

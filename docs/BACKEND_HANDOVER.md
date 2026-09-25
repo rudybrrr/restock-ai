@@ -21,7 +21,24 @@ The backend owner was the first contributor. The deterministic ML modules and lo
 | 5 | Durable queue, frozen inputs, real first-slice engine adapter, queued worker with local polling, Coordinator execution, candidate validation/publication, and manager evidence | Verify the live provider and hosted process supervision |
 | 6 | Exact plan/version decisions with instructions and actor/time, lifecycle transitions, ordering occasions, actual-purchase source links, and stale approval rejection | None for the supported normal-plan slice |
 | 7 | Daily, promotion, supplier, delivery, sales and inventory-correction triggers; coalescing; deterministic materiality; Coordinator routing; stale-result rejection; supersession/invalidation; local polling worker | Prove the remaining connected sales/supplier acceptance scenarios |
-| 8 | Immutable recommendation history, fixed external commitments, and one approved synthetic supplier-delay case with emergency cash, exact-version approval, and linked external purchase | Connected post-purchase reassessment/receipt and other disruption cases remain unproved |
+| 8 | Immutable recommendation history, fixed external commitments, and one approved synthetic supplier-delay case with emergency cash, exact-version approval, and linked external purchase | Bounded post-purchase API acceptance is added below; worker/live consumption and other disruption cases remain unproved |
+
+## Post-purchase increment for review — 25 September 2026
+
+Aniq's [bounded post-purchase contract](POST_PURCHASE_CONTINGENCY_CONTRACT.md)
+adds persisted case/policy versions 5/6 and run-bound input/result routes for the
+10:00 commitment and 11:00 receipt checkpoints. It preserves active first-case v4,
+fixed original/emergency deliveries, exact approval and freshness. The calculation
+can certify KEEP, publish only additional requirements through existing completion,
+or return typed incomplete/policy/supplier escalation. It never writes a Delivery.
+Seed remains insert-only; no schema migration is required.
+
+The new HTTP/PostgreSQL acceptance covers external purchase, reassessment,
+no duplicate recommendation, receipt and no duplicate recommendation again,
+plus short, cancelled, late and incomplete variants. This is bounded API evidence;
+Rudy still needs to consume the new persisted result in the worker. See the ML
+handover for exact verification results. API/frontend/shared demo database were
+not started.
 
 ## Backend workflow
 

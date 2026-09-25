@@ -87,7 +87,7 @@ def test_agent_reads_staged_version_without_activating_normal_runs(
 def test_unknown_contingency_policy_is_not_synthesised(client: TestClient) -> None:
     client.headers["Authorization"] = "Bearer test-agent-token"
     response = client.get(
-        "/api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/4"
+        "/api/v1/contingency-policies/BOUNDED_CONTINGENCY_CASH_V1_DEMO/versions/999"
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"

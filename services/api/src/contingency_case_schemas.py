@@ -164,8 +164,8 @@ class ContingencyCasePayload(BaseModel):
     fixed_supply_expected: FixedSupplyExpectation
     approved_offer_manifest: list[tuple[str, str, str]] = Field(min_length=1)
     offers: list[FrozenOfferRevision] = Field(min_length=1)
-    opportunity_manifest: list[str] = Field(min_length=1)
-    opportunities: list[FrozenOrderingOpportunity] = Field(min_length=1)
+    opportunity_manifest: list[str]
+    opportunities: list[FrozenOrderingOpportunity]
     offer_authority: Literal["STAGED_UNAPPROVED", "APPROVED_SYNTHETIC_DEMO_QUOTE"] = (
         "STAGED_UNAPPROVED"
     )
@@ -229,6 +229,11 @@ class ContingencyCasePayload(BaseModel):
                 or offer.emergency_fee_sgd < 0
             ):
                 raise ValueError("Approved offer is missing decision-relevant terms")
+        if (
+            not self.opportunities
+            and self.domain_id != "POST_PURCHASE_20260216_DOMAIN_V6"
+        ):
+            raise ValueError("First-case opportunity domain cannot be empty")
         opportunity_ids = [row.opportunity_id for row in self.opportunities]
         offer_ids = {row.offer_id for row in self.offers}
         if (
