@@ -1,5 +1,6 @@
 """PostgreSQL acceptance tests for the one-shot queued assessment worker."""
 
+from datetime import datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 from typing import cast
@@ -164,7 +165,7 @@ def queue_manager_assessment(client: TestClient) -> dict:
 def post_material_sales_coverage(
     client: TestClient, database_url: str, baseline_run_id: str
 ) -> tuple[str, str, int]:
-    """Record complete zero-activity intervals, then one material API batch."""
+    """Record full post-count coverage and one threshold-reaching sales deviation."""
     prior_run_ids = {run["id"] for run in client.get("/api/v1/runs").json()}
     engine = create_engine(database_url)
     try:
@@ -195,37 +196,57 @@ def post_material_sales_coverage(
     for index, bucket in enumerate(candidates):
         for dish_id, expected in bucket.expected_portions.items():
             cumulative[dish_id] += expected
-        if index + 1 >= policy.minimum_complete_buckets:
+        if (
+            index + 1 >= policy.minimum_complete_buckets
+            and all(value >= policy.minimum_expected_portions for value in cumulative.values())
+        ):
             selected_dish = max(cumulative, key=cumulative.__getitem__)
             selected_expected = cumulative[selected_dish]
-            if selected_expected >= policy.minimum_expected_portions:
-                selected_index = index
-                break
+            selected_index = index
+            break
     assert selected_index is not None and selected_dish is not None
-    material_delta = max(
-        policy.absolute_floor + Decimal(1),
-        selected_expected * policy.relative_threshold + Decimal(1),
+    assert selected_expected >= max(
+        policy.absolute_floor,
+        selected_expected * policy.relative_threshold,
     )
-    observed = int(
-        (selected_expected + material_delta).to_integral_value(
-            rounding=ROUND_CEILING
-        )
-    )
+    observed = 0
 
-    for index, bucket in enumerate(candidates[:selected_index]):
+    final_bucket = candidates[selected_index]
+    coverage_start = min(
+        datetime.fromisoformat(row["counted_at"])
+        for row in (contract.frozen_state or {})["inventory"]
+    )
+    interval = timedelta(minutes=30)
+    expected_by_start = {
+        bucket.start: bucket for bucket in candidates[: selected_index + 1]
+    }
+    current = coverage_start
+    index = 0
+    while current < final_bucket.start:
+        bucket = expected_by_start.get(current)
+        sales = (
+            {
+                dish_id: int(value.to_integral_value(rounding=ROUND_CEILING))
+                for dish_id, value in bucket.expected_portions.items()
+                if dish_id != selected_dish
+            }
+            if bucket is not None
+            else {}
+        )
         response = client.post(
             "/api/v1/sales-batches",
             json={
                 "source": "worker-materiality",
                 "batch_id": f"coverage-{index:02d}",
-                "period_start": bucket.start.isoformat(),
-                "period_end": bucket.end.isoformat(),
-                "sales": {},
+                "period_start": current.isoformat(),
+                "period_end": (current + interval).isoformat(),
+                "sales": sales,
             },
         )
         assert response.status_code == 201, response.text
+        current += interval
+        index += 1
 
-    final_bucket = candidates[selected_index]
     response = client.post(
         "/api/v1/sales-batches",
         json={
@@ -233,7 +254,11 @@ def post_material_sales_coverage(
             "batch_id": "material-final",
             "period_start": final_bucket.start.isoformat(),
             "period_end": final_bucket.end.isoformat(),
-            "sales": {selected_dish: observed},
+            "sales": {
+                dish_id: int(value.to_integral_value(rounding=ROUND_CEILING))
+                for dish_id, value in final_bucket.expected_portions.items()
+                if dish_id != selected_dish
+            },
         },
     )
     assert response.status_code == 201, response.text
@@ -565,6 +590,7 @@ def test_material_event_families_use_normal_api_path_and_fail_closed_or_revise(
             completed.json()["escalation_reason"]
             == EscalationReason.MISSING_REQUIRED_DATA.value
         )
+        client.headers["Authorization"] = "Bearer test-agent-token"
         assessment = client.get(
             f"/api/v1/runs/{queued['id']}/sales-materiality-assessment"
         )
@@ -574,7 +600,8 @@ def test_material_event_families_use_normal_api_path_and_fail_closed_or_revise(
         assert saved["result_reference"]
         assert saved["completed_at"]
         assert saved["result"]["complete"] is False
-        assert saved["result"]["material_change"] is None
+        assert saved["result"]["material_change"] is True
+        assert saved["result"]["findings"]
         return
     assert result.outcome in {AgentOutcome.REVISE_PLAN, AgentOutcome.ESCALATE}
     if result.outcome is AgentOutcome.REVISE_PLAN:
@@ -586,22 +613,85 @@ def test_material_event_families_use_normal_api_path_and_fail_closed_or_revise(
         assert result.failure_classification in set(EscalationReason)
 
 
-def test_material_sales_is_persisted_before_coordination_and_revises_plan(
+def test_sales_materiality_uses_issued_plan_origin_and_complete_observed_coverage(
     client: TestClient,
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     baseline, _ = prepare_engine_plan(client, database_url, monkeypatch)
+    run_id, _, _ = post_material_sales_coverage(client, database_url, baseline["id"])
+
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            claimed = planning.claim_run(session)
+            assert claimed.id == run_id
+            assert claimed.snapshot["issued_forecast_origin"]["run_id"] == baseline["id"]
+            worker.ensure_claimed_sales_materiality(session, run_id)
+            assessment = read_assessment(session, run_id)
+            assert assessment.result is not None
+            assert assessment.result.complete is True
+            assert assessment.result.material_change is True
+            assert assessment.result.findings == []
+            assert assessment.result.missing_intervals == []
+            assert assessment.result.assessed_scope == [
+                "SALES_DEVIATION", "PHYSICAL_SHORTAGE", "SAFETY_STOCK"
+            ]
+            issued = assessment.engine_request.issued_forecast
+            assert issued.reference.startswith(f"{baseline['id']}:")
+            assert (
+                dict(issued.sources)["history"].reference
+                == assessment.engine_request.contract.forecast_input.id
+            )
+            assert assessment.engine_request.risk is not None
+            inventory = assessment.engine_request.risk["inventory"]
+            assert isinstance(inventory, dict)
+            evidence = inventory["evidence"]
+            assert isinstance(evidence, dict)
+            forecast_evidence = evidence["forecast"]
+            assert isinstance(forecast_evidence, dict)
+            assert forecast_evidence["reference"] == issued.reference
+    finally:
+        engine.dispose()
+
+
+def test_material_sales_persists_before_coordination_and_escalates_late_issue(
+    client: TestClient,
+    database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline, _ = prepare_engine_plan(client, database_url, monkeypatch)
+    prior_plan_id = baseline["plan_version_id"]
+    prior_plan = client.get(f"/api/v1/plans/{prior_plan_id}").json()
     event_models = models(
         demand=LocalDemandReasoning(), inventory=LocalInventoryReasoning()
     )
     build_calls: list[str] = []
+    search_results: list[tuple[bool, bool, set[tuple[str, str]]]] = []
 
     def record_model_build(settings):
         build_calls.append("called")
         return event_models
 
     monkeypatch.setattr(worker, "build_organiser_reasoning_models", record_model_build)
+    from src import decision_engine_adapter
+
+    original_search = decision_engine_adapter.search_procurement
+
+    def record_deterministic_search(inputs):
+        search = original_search(inputs)
+        search_results.append(
+            (
+                search.search_complete,
+                search.candidate is None,
+                {(finding.code, finding.source) for finding in search.findings},
+            )
+        )
+        return search
+
+    monkeypatch.setattr(
+        decision_engine_adapter, "search_procurement", record_deterministic_search
+    )
     original_coordinator = worker.run_backend_coordinator
 
     def coordinator_after_persisted_materiality(session, claimed_run_id, *args, **kwargs):
@@ -609,6 +699,14 @@ def test_material_sales_is_persisted_before_coordination_and_revises_plan(
         assert persisted.result is not None
         assert persisted.result.complete is True
         assert persisted.result.material_change is True
+        assert persisted.result.findings == []
+        assert persisted.engine_request.issued_forecast.reference.startswith(
+            f"{baseline['id']}:"
+        )
+        assert (
+            dict(persisted.engine_request.issued_forecast.sources)["history"].reference
+            == persisted.engine_request.issued_input.id
+        )
         return original_coordinator(
             session, claimed_run_id, *args, **kwargs
         )
@@ -624,22 +722,33 @@ def test_material_sales_is_persisted_before_coordination_and_revises_plan(
     result = invoke_worker(database_url)
     assert build_calls == ["called"]
     assert result.run_id == run_id
-    assert result.outcome is AgentOutcome.REVISE_PLAN
-    assert result.publication_status == "PUBLISHED"
-    assert result.publication_reference is not None
+    assert result.outcome is AgentOutcome.ESCALATE
+    assert result.failure_classification is EscalationReason.CALCULATION_INCOMPLETE
+    assert result.publication_status == "PUBLISHED"  # Business escalation was recorded.
+    assert result.publication_reference is None
+    assert search_results == [
+        (False, True, {("UNSUPPORTED_ISSUE_OPENING", "issue_time")})
+    ]
 
     completed = client.get(f"/api/v1/runs/{run_id}").json()
     assert completed["status"] == "SUCCEEDED"
-    assert completed["plan_version_id"] == result.publication_reference
-    plan = client.get(f"/api/v1/plans/{result.publication_reference}")
-    assert plan.status_code == 200, plan.text
-    assert plan.json()["status"] == "PENDING_APPROVAL"
-    assert plan.json()["calculation_mode"] == "ENGINE"
+    assert completed["outcome"] == AgentOutcome.ESCALATE.value
+    assert completed["escalation_reason"] == EscalationReason.CALCULATION_INCOMPLETE.value
+    assert completed["plan_version_id"] is None
+    assert client.get(f"/api/v1/plans/{prior_plan_id}").json() == {
+        **prior_plan,
+        "status": "INVALIDATED",
+    }
+    assert [plan["id"] for plan in client.get("/api/v1/plan-history").json()] == [
+        prior_plan_id
+    ]
 
     engine = create_engine(database_url)
     try:
         with Session(engine) as session:
             run = planning.get_run(session, run_id)
+            assert run.snapshot.get("decision_engine_artifacts") is None
+            assert run.snapshot.get("calculated_candidate") is None
             contract = ProcurementContract.model_validate(
                 run.snapshot["procurement_contract"]
             )

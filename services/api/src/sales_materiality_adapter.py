@@ -74,8 +74,16 @@ def _catalogue(contract: ProcurementContract) -> Catalogue:
 
 def _issued_forecast(run, contract: ProcurementContract):
     """Build the original promotion-aware forecast from frozen state only."""
+    origin = run.snapshot.get("issued_forecast_origin")
+    if origin is not None:
+        contract = ProcurementContract.model_validate(origin["contract"])
+        source_run_id = origin["run_id"]
+        if contract.run_id != source_run_id:
+            raise ApiError(409, "MISSING_REQUIRED_DATA", "Issued forecast origin is inconsistent")
+    else:
+        source_run_id = run.id
     normal = BackendDemandTools(cast(Session, None))._normal_forecast(
-        contract, f"{run.id}:forecast:normal"
+        contract, f"{source_run_id}:forecast:normal"
     )
     frozen = contract.frozen_state or {}
     raw_events = frozen.get("promotions")
@@ -85,7 +93,7 @@ def _issued_forecast(run, contract: ProcurementContract):
         else []
     )
     context = SourceEvidence(
-        f"{run.id}:promotion-context",
+        f"{source_run_id}:promotion-context",
         contract.known_at,
         contract.captured_state_revision,
     )
@@ -97,7 +105,7 @@ def _issued_forecast(run, contract: ProcurementContract):
         context_complete=isinstance(raw_events, list),
         as_of=contract.as_of,
         known_at=contract.known_at,
-        result_reference=f"{run.id}:forecast:promotion",
+        result_reference=f"{source_run_id}:forecast:promotion",
     )
     return application.forecast if application.complete and application.forecast else normal
 
@@ -112,6 +120,22 @@ def _projection_inputs(
     source = SourceEvidence(
         contract.forecast_input.source_revision,
         contract.known_at,
+        contract.captured_state_revision,
+    )
+    issued_sources = dict(issued_forecast.sources)
+    evidence = {
+        key: source
+        for key in ("snapshot", "opening", "supply")
+    }
+    for key in ("catalogue", "recipe", "profile"):
+        evidence[key] = SourceEvidence(
+            issued_sources[key].reference,
+            issued_sources[key].available_at,
+            contract.captured_state_revision,
+        )
+    evidence["forecast"] = SourceEvidence(
+        issued_forecast.reference,
+        issued_forecast.known_at,
         contract.captured_state_revision,
     )
     return {
@@ -133,9 +157,7 @@ def _projection_inputs(
         "supply_manifest": supply_manifest,
         "recipe_manifest": [(item.menu_item_id, item.ingredient_id) for item in catalogue.recipes],
         "service_profile": list(issued_forecast.profile),
-        "evidence": {key: source for key in (
-            "snapshot", "opening", "supply", "catalogue", "recipe", "forecast", "profile"
-        )},
+        "evidence": evidence,
         "fixture_fefo": FEFO_POLICY,
     }
 

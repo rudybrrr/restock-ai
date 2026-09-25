@@ -122,7 +122,15 @@ def run_one_queued_assessment(
             failure_classification="STATE_REVISION_STALE",
         )
     except ApiError as error:
-        if error.detail.code in {"STATE_REVISION_STALE", "STALE_RUN_INPUT"}:
+        if error.detail.code == "STALE_RUN_INPUT":
+            planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")
+            return QueuedAssessmentWorkerResult(
+                run_id=claimed.id,
+                outcome=None,
+                publication_status="STALE_REJECTED",
+                failure_classification="STATE_REVISION_STALE",
+            )
+        if error.detail.code == "STATE_REVISION_STALE":
             run = planning.get_run(session, claimed.id)
             if run.status == "RUNNING":
                 planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")
