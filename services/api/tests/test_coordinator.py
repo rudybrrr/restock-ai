@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from src.agent_contracts import (
+    AgentCompletionPublication,
     AgentInvocation,
     AgentOutcome,
     AgentToolName,
@@ -186,6 +187,37 @@ def test_backend_publication_result_is_returned_with_coordinator_execution() -> 
     ).run(invocation())
 
     assert result.publication_result is expected
+
+
+def test_authoritative_completion_is_recorded_without_specialist_calls() -> None:
+    control_plane = FakeControlPlane()
+    executor = FakeExecutor()
+    result_ref = EvidenceRef(
+        category=EvidenceCategory.POST_PURCHASE_RESULT,
+        source=EvidenceSource.BACKEND,
+        reference_id="post-purchase:abc123",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+    )
+    authoritative = AgentCompletionPublication(
+        run_id="RUN-1",
+        captured_state_revision="STATE-1",
+        outcome=AgentOutcome.KEEP_CURRENT_PLAN,
+        affected_plan_id="PLAN-1",
+        affected_plan_version=1,
+        evidence_refs=[result_ref],
+        summary="Use the persisted deterministic result.",
+    )
+
+    result = Coordinator(control_plane, executor, clock=lambda: NOW).run(
+        invocation(), authoritative_completion=authoritative
+    )
+
+    assert executor.calls == []
+    assert result.completion.outcome is AgentOutcome.KEEP_CURRENT_PLAN
+    assert result_ref in result.completion.evidence_refs
+    assert len(control_plane.recorded) == 1
+    assert control_plane.recorded[0][0] == result.completion
 
 
 @pytest.mark.parametrize(

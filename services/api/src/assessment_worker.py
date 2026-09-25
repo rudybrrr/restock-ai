@@ -26,6 +26,10 @@ from src.organiser_gateway import (
     OrganiserGatewaySettings,
     build_organiser_reasoning_models,
 )
+from src.post_purchase_contingency import (
+    persist_post_purchase_result,
+    select_post_purchase_input,
+)
 
 WorkerPublicationStatus = Literal[
     "NO_WORK", "PUBLISHED", "NOT_PUBLISHED", "STALE_REJECTED"
@@ -85,23 +89,53 @@ def run_one_queued_assessment(
         raise
 
     try:
-        reasoning_models = build_organiser_reasoning_models(settings)
-        procurement_tools = BackendProcurementTools(session)
-        execution = run_backend_coordinator(
-            session,
-            claimed.id,
-            reasoning_models.procurement,
-            procurement_tools,
-            demand_model=reasoning_models.demand,
-            inventory_model=reasoning_models.inventory,
-            manual_classifier=_FullPlanningRouteClassifier(),
-        )
+        post_purchase_input = select_post_purchase_input(claimed)
+        if post_purchase_input is not None:
+            post_purchase_result = persist_post_purchase_result(session, claimed.id)
+            execution = run_backend_coordinator(
+                session,
+                claimed.id,
+                post_purchase_result_id=post_purchase_result.id,
+            )
+        else:
+            reasoning_models = build_organiser_reasoning_models(settings)
+            procurement_tools = BackendProcurementTools(session)
+            execution = run_backend_coordinator(
+                session,
+                claimed.id,
+                reasoning_models.procurement,
+                procurement_tools,
+                demand_model=reasoning_models.demand,
+                inventory_model=reasoning_models.inventory,
+                manual_classifier=_FullPlanningRouteClassifier(),
+            )
     except StateRevisionStaleError:
+        run = planning.get_run(session, claimed.id)
+        if run.status == "RUNNING":
+            planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")
         return QueuedAssessmentWorkerResult(
             run_id=claimed.id,
             outcome=None,
             publication_status="STALE_REJECTED",
             failure_classification="STATE_REVISION_STALE",
+        )
+    except ApiError as error:
+        if error.detail.code == "STATE_REVISION_STALE":
+            run = planning.get_run(session, claimed.id)
+            if run.status == "RUNNING":
+                planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")
+            return QueuedAssessmentWorkerResult(
+                run_id=claimed.id,
+                outcome=None,
+                publication_status="STALE_REJECTED",
+                failure_classification="STATE_REVISION_STALE",
+            )
+        planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
+        return QueuedAssessmentWorkerResult(
+            run_id=claimed.id,
+            outcome=None,
+            publication_status="NOT_PUBLISHED",
+            failure_classification=EscalationReason.TOOL_FAILURE,
         )
     except Exception:  # noqa: BLE001 - all post-claim failures must close safely
         planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
