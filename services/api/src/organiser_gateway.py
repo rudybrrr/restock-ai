@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -304,22 +305,63 @@ class OrganiserChatModel:
     ) -> ModelT:
         """Parse one JSON object and validate it with an existing Pydantic schema."""
         text = self._complete_request(messages, response_model.model_json_schema())
-        try:
-            value = json.loads(text)
-        except json.JSONDecodeError as error:
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output was not valid JSON"
-            ) from error
-        if not isinstance(value, dict):
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output must be one JSON object"
-            )
+        value = _parse_model_output_object(text)
         try:
             return response_model.model_validate(value)
-        except ValidationError as error:
+        except ValidationError:
             raise OrganiserModelOutputValidationError(
                 "Organiser model output failed the existing schema validation"
-            ) from error
+            ) from None
+
+
+def _parse_model_output_object(content: str) -> dict[str, Any]:
+    """Accept a raw JSON object or one explicitly tagged JSON Markdown fence."""
+    stripped = content.strip()
+    try:
+        value = json.loads(stripped)
+    except json.JSONDecodeError:
+        blocks, has_unclosed_fence = _extract_fenced_code_blocks(stripped)
+        if has_unclosed_fence or len(blocks) != 1 or blocks[0][0].casefold() != "json":
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output was not valid JSON"
+            ) from None
+        try:
+            value = json.loads(blocks[0][1])
+        except json.JSONDecodeError:
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output was not valid JSON"
+            ) from None
+    if not isinstance(value, dict):
+        raise OrganiserModelOutputMalformedError(
+            "Organiser model output must be one JSON object"
+        ) from None
+    return value
+
+
+def _extract_fenced_code_blocks(content: str) -> tuple[list[tuple[str, str]], bool]:
+    blocks: list[tuple[str, str]] = []
+    opening: tuple[str, int, str, int] | None = None
+    lines = content.splitlines()
+
+    for line_number, line in enumerate(lines):
+        if opening is None:
+            match = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+            if match is not None:
+                marker, info = match.groups()
+                opening = (marker[0], len(marker), info.strip(), line_number)
+            continue
+
+        marker_character, marker_length, language, body_start = opening
+        closing = re.match(r"^ {0,3}(`{3,}|~{3,})[ \t]*$", line)
+        if (
+            closing is not None
+            and closing.group(1)[0] == marker_character
+            and len(closing.group(1)) >= marker_length
+        ):
+            blocks.append((language, "\n".join(lines[body_start + 1 : line_number])))
+            opening = None
+
+    return blocks, opening is not None
 
 
 def _typed_reasoning_messages[MessageModelT: BaseModel](

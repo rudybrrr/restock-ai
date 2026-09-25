@@ -140,6 +140,104 @@ def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
     }
 
 
+@pytest.mark.parametrize("language", ["json", "JSON", "Json"])
+def test_gateway_parses_one_json_fence_with_surrounding_explanation(
+    language: str,
+) -> None:
+    content = (
+        "Here is the result:\n\n"
+        f"```{language}\n{{\"outcome\":\"KEEP_CURRENT_PLAN\"}}\n```\n"
+        "I hope this helps."
+    )
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    parsed = model.complete_json([], ResponseModel)
+
+    assert parsed.outcome == "KEEP_CURRENT_PLAN"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```\n"
+            "```json\n{\"outcome\":\"ESCALATE\"}\n```"
+        ),
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```\n"
+            "```text\nmore text\n```"
+        ),
+        "```\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```",
+        "```python\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```",
+        "The result is {\"outcome\":\"KEEP_CURRENT_PLAN\"}.",
+        "```json\n{\"outcome\":\n```",
+        "```json\n[]\n```",
+        "```json\n42\n```",
+        "```json\nnull\n```",
+        (
+            "```json\n{\"outcome\":\"KEEP_CURRENT_PLAN\"}\n```\n"
+            "```json"
+        ),
+    ],
+)
+def test_gateway_rejects_unsupported_model_output_wrapping(content: str) -> None:
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    with pytest.raises(OrganiserModelOutputMalformedError):
+        model.complete_json([], ResponseModel)
+
+
+@pytest.mark.parametrize(
+    ("content", "error_type", "sensitive_content"),
+    [
+        (
+            (
+                "MODEL_PRIVATE_SENTINEL gateway-secret-key\n"
+                "```json\n{\"outcome\":\n```"
+            ),
+            OrganiserModelOutputMalformedError,
+            "MODEL_PRIVATE_SENTINEL",
+        ),
+        (
+            json.dumps({"unexpected": "MODEL_PRIVATE_SENTINEL gateway-secret-key"}),
+            OrganiserModelOutputValidationError,
+            "MODEL_PRIVATE_SENTINEL",
+        ),
+    ],
+)
+def test_model_output_errors_and_logs_hide_credentials_and_response_content(
+    content: str,
+    error_type: type[Exception],
+    sensitive_content: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = OrganiserChatModel(
+        settings(),
+        opener=lambda request, *, timeout: FakeResponse(
+            {"message": {"content": content}}
+        ),
+    )
+
+    with caplog.at_level(logging.DEBUG), pytest.raises(error_type) as caught:
+        model.complete_json([], ResponseModel)
+
+    assert API_KEY not in str(caught.value)
+    assert sensitive_content not in str(caught.value)
+    assert API_KEY not in caplog.text
+    assert sensitive_content not in caplog.text
+    assert caught.value.__cause__ is None
+
+
 class WrapperContext(BaseModel):
     value: str = "typed wrapper test"
 
