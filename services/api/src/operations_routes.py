@@ -16,6 +16,7 @@ from src import (
     inventory_adjustment_contracts,
     operations,
     planning,
+    post_purchase_contingency,
     procurement_contracts,
     sales,
     sales_materiality_contracts,
@@ -64,6 +65,7 @@ from src.planning_schemas import (
     PurchasePlanVersion,
     StoredPlanLine,
 )
+from src.post_purchase_contingency import PostPurchaseInput, PostPurchaseResult
 from src.procurement_contract_schemas import (
     ProcurementContract,
     ProcurementDisplay,
@@ -717,3 +719,27 @@ def receive_delivery(
     delivery_id: str, body: ReceiptCreate, session: SessionDep, manager: Manager
 ):
     return deliveries.receive_delivery(session, delivery_id, body, manager.username)
+
+
+@router.get(
+    "/runs/{run_id}/post-purchase-contingency-input",
+    response_model=PostPurchaseInput | None,
+)
+def read_post_purchase_input(run_id: str, session: SessionDep, agent: Agent):
+    return post_purchase_contingency.select_post_purchase_input(
+        planning.get_run(session, run_id)
+    )
+
+
+@router.put(
+    "/runs/{run_id}/post-purchase-contingency-result", response_model=PostPurchaseResult
+)
+def calculate_post_purchase_result(run_id: str, session: SessionDep, agent: Agent):
+    return post_purchase_contingency.persist_post_purchase_result(session, run_id)
+
+
+@router.get(
+    "/runs/{run_id}/post-purchase-contingency-result", response_model=PostPurchaseResult
+)
+def read_post_purchase_result(run_id: str, session: SessionDep, agent: Agent):
+    return post_purchase_contingency.read_post_purchase_result(session, run_id)

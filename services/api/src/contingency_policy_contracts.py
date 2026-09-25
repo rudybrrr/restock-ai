@@ -146,3 +146,19 @@ def first_case_seed_policy_v4(recorded_at: datetime) -> dict:
         "case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:4"
     )
     return ContingencyPolicyVersion.model_validate(row).model_dump(mode="json")
+
+
+def post_purchase_seed_policy(recorded_at: datetime, *, version: int) -> dict:
+    if version not in (5, 6):
+        raise ValueError("Unsupported post-purchase version")
+    row = first_case_seed_policy_v4(recorded_at)
+    row["id"] = f"policy:{DEMO_POLICY_ID}:{version}"
+    row["version"] = version
+    row["source_revision"] = f"POST_PURCHASE_FIXED_SUPPLY_V1:{version}"
+    if version == 6:
+        row["effective_at"] = row["payload"]["issue_time"] = "2026-02-16T11:00:00+08:00"
+    row["payload"]["approved_domain_id"] = f"POST_PURCHASE_20260216_DOMAIN_V{version}"
+    row["payload"]["forecast_artifact_id"] = (
+        f"case-input:BOUNDED_CONTINGENCY_20260216_CASE_V1:{version}"
+    )
+    return ContingencyPolicyVersion.model_validate(row).model_dump(mode="json")

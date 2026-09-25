@@ -1,6 +1,72 @@
 # ReStock ML and Decision Engine Handover
 
-## Current handover — v1.17, 22 September 2026
+## Current handover — v1.18, 25 September 2026
+
+Aniq's post-purchase Backend slice is on
+[feat/ml-post-purchase-contingency](https://github.com/rudybrrr/restock-ai/tree/feat/ml-post-purchase-contingency),
+based on main `1463fcdbea381a51e78d30cc3fc12e7f14ae9d01`.
+Read **[POST_PURCHASE_CONTINGENCY_CONTRACT.md](POST_PURCHASE_CONTINGENCY_CONTRACT.md)**
+for Rudy's exact persisted types, selector/readers, HTTP routes, evidence and routing.
+The PR records review/publication status; no merge or live-worker claim is made here.
+
+Implemented `POST_PURCHASE_FIXED_SUPPLY_V1`: versioned synthetic case/policy 5 at
+16 February 10:00 SGT and version 6 at 11:00, with original delayed order and linked
+emergency purchase frozen as fixed supply. Version 4 first purchase is preserved.
+Existing tables store authority; the claimed run snapshot stores immutable input
+and a hash-bound result. Search and independent validation are reused, with
+stale inputs and contradictory completion rejected. No Delivery is created or
+changed by the calculation. Normal procurement, Agent code and UI are unchanged.
+
+Connected examples: recorded 4 kg rescue gives KEEP/SGD0; only 2 kg expected gives new 2 kg/
+SGD11; cancelled 4 kg gives new 4 kg/SGD15; received 4 kg gives opening 10, emergency outstanding 0,
+KEEP/SGD0. At 11:00 the quote's placement window has elapsed: late supply produces
+typed NO_FEASIBLE_SUPPLIER within the declared empty new-order domain. Missing
+coverage/search exhaustion is incomplete; budget failure is POLICY_VIOLATION.
+New candidates have pending exact-version approval, new-purchase cash and null
+full economic costs. Actual purchase recording remains a separate manager action.
+
+For #10, the explicit split fixture changes fresh/market NEW capacity to 2 kg
+each: fresh 2 + market 2, cash 8 + 6 + 8 = **SGD22**, all 9 allocations enumerated,
+independent validation complete/feasible. This is numerical evidence, not a claim
+that the supplier-event worker path is integrated.
+
+Verification on 25 September: Windows new acceptance **14 passed** (109.97s);
+Linux final focused API/PostgreSQL + split/case/policy acceptance **24 passed**
+(135.33s). Full locked Linux Python3.12/PostgreSQL18 regression before test-only
+corrections: **1,110 passed, 2 failed** (751.01s). Both failures were obsolete
+unknown-version assertions reproduced on unchanged main1463fcd (2 failed,8.49s):
+version4 already exists. They now request absent version999; all9 case/policy
+tests pass on Windows (60.24s), and both are included in the final24 Linux passes.
+No observed failure is left unresolved or waived. The full suite was not repeated
+after those test-only corrections and two added partial-receipt assertions; all
+production source/configuration hashes match the completed full gate. Whole-API
+Ruff/Pyright and all12 changed-Python format checks pass on Windows and Linux;
+diff checks pass. Two dependency deprecation warnings remain. No live gateway,
+worker integration, browser, deployment or operational database acceptance claimed.
+
+The bounded contract requires two known checkpoints, one original delivery and
+one emergency delivery linked to v4, exact catalogue and complete observed
+coverage. Other clocks, additional commitments, promotions and newer actionable
+plans fail explicitly. Synthetic quote assumptions are versioned demo values,
+not live supplier evidence or general business policy. Production calendar,
+full economic costing and broader post-purchase states remain separate.
+
+**Rudy:** consume `PostPurchaseInput` / `PostPurchaseResult` through
+`select_post_purchase_input`, `persist_post_purchase_result` and
+`read_post_purchase_result`; carry result/candidate references and keep incomplete,
+supplier-infeasible and policy-infeasible outcomes distinct. Wire this before
+Coordinator completion; do not recalculate or modify recorded orders. Worker/model
+changes and a real typed gateway run remain yours. **Chun Yang:** review the
+bounded persistence/completion changes and deploy the approved seed increment
+through the existing workflow. **Ethan:** UI remains outside this PR.
+Continue live provenance/freshness decisions in
+[issue #16](https://github.com/rudybrrr/restock-ai/issues/16).
+
+Revision 1.18 adds the connected post-purchase slice and split fixture. Entries
+below describe historical checkpoints; v1.17's NORMAL_ONLY statement predates
+the approved first-case activation in PR57.
+
+## Historical numerical-only checkpoint — v1.17, 22 September 2026
 
 Aniq's bounded contingency numerical policy is implemented on
 [feat/ml-contingency-procurement](https://github.com/rudybrrr/restock-ai/tree/feat/ml-contingency-procurement),
