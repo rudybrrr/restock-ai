@@ -142,8 +142,135 @@ def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
         "messages": [{"role": "user", "content": "Return JSON."}],
         "stream": False,
         "format": ResponseModel.model_json_schema(),
-        "options": {"num_predict": 2048},
+        "options": {"num_predict": 768},
     }
+
+
+def test_typed_budget_respects_a_lower_configured_prediction_limit() -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse({"message": {"content": '{"outcome":"KEEP_CURRENT_PLAN"}'}})
+
+    model = OrganiserChatModel(settings(num_predict=512), opener=opener)
+
+    assert model.complete_json([], ResponseModel).outcome == "KEEP_CURRENT_PLAN"
+    assert model.complete([]) == '{"outcome":"KEEP_CURRENT_PLAN"}'
+    assert bodies[0]["options"] == {"num_predict": 512}
+    assert bodies[0]["format"] == ResponseModel.model_json_schema()
+    assert bodies[1]["options"] == {"num_predict": 512}
+    assert "format" not in bodies[1]
+
+
+def test_duplicate_first_output_is_repaired_without_echoing_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first = (
+        '<restock_decision_v1>{"outcome":"FIRST_VALID_SENTINEL"}'
+        '</restock_decision_v1>'
+        '<restock_decision_v1>{"outcome":"SECOND_VALID_SENTINEL"}'
+        '</restock_decision_v1>'
+    )
+    second = '<restock_decision_v1>{"outcome":"KEEP_CURRENT_PLAN"}</restock_decision_v1>'
+    responses = iter((first, second))
+    bodies: list[dict[str, Any]] = []
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse({"message": {"content": next(responses)}})
+
+    model = OrganiserChatModel(settings(), opener=opener)
+    original_messages = [{"role": "user", "content": "Return JSON."}]
+
+    with caplog.at_level(logging.DEBUG):
+        result = model.complete_json(original_messages, ResponseModel)
+
+    assert result.outcome == "KEEP_CURRENT_PLAN"
+    assert len(bodies) == 2
+    assert bodies[0]["messages"] == original_messages
+    assert bodies[1]["messages"][:1] == original_messages
+    assert len(bodies[1]["messages"]) == 2
+    assert bodies[1]["messages"][1]["role"] == "user"
+    assert "Stop immediately after </restock_decision_v1>" in bodies[1]["messages"][1]["content"]
+    assert bodies[0]["format"] == bodies[1]["format"] == ResponseModel.model_json_schema()
+    assert bodies[0]["options"] == bodies[1]["options"] == {"num_predict": 768}
+    assert "FIRST_VALID_SENTINEL" not in json.dumps(bodies[1])
+    assert "SECOND_VALID_SENTINEL" not in json.dumps(bodies[1])
+    assert "FIRST_VALID_SENTINEL" not in caplog.text
+    assert "SECOND_VALID_SENTINEL" not in caplog.text
+
+
+def test_two_duplicate_outputs_still_fail_closed_without_first_valid_wins() -> None:
+    duplicated = (
+        '<restock_decision_v1>{"outcome":"FIRST"}</restock_decision_v1>'
+        '<restock_decision_v1>{"outcome":"SECOND"}</restock_decision_v1>'
+    )
+    calls = 0
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        nonlocal calls
+        calls += 1
+        return FakeResponse({"message": {"content": duplicated}})
+
+    model = OrganiserChatModel(settings(), opener=opener)
+
+    with pytest.raises(OrganiserModelOutputMalformedError):
+        model.complete_json([], ResponseModel)
+
+    assert calls == 2
+
+
+def test_schema_invalid_first_output_is_repaired_once() -> None:
+    responses = iter(('{"unexpected":true}', '{"outcome":"KEEP_CURRENT_PLAN"}'))
+    calls = 0
+
+    def opener(request: Any, *, timeout: int) -> FakeResponse:
+        nonlocal calls
+        calls += 1
+        return FakeResponse({"message": {"content": next(responses)}})
+
+    model = OrganiserChatModel(settings(), opener=opener)
+
+    assert model.complete_json([], ResponseModel).outcome == "KEEP_CURRENT_PLAN"
+    assert calls == 2
+
+
+@pytest.mark.parametrize(
+    ("failure", "classification"),
+    [
+        ("network", "NETWORK_ERROR"),
+        ("timeout", "TRANSPORT_TIMEOUT"),
+        ("auth", "AUTH_ERROR"),
+        ("rate_limit", "RATE_LIMITED"),
+        ("server", "SERVER_ERROR"),
+    ],
+)
+def test_typed_transport_and_http_failures_never_retry(
+    failure: str, classification: str
+) -> None:
+    calls = 0
+
+    def opener(request: Any, *, timeout: int) -> Any:
+        nonlocal calls
+        calls += 1
+        if failure == "network":
+            raise URLError("network unavailable")
+        if failure == "timeout":
+            raise TimeoutError("gateway timeout")
+        if failure == "auth":
+            raise HTTPError(request.full_url, 401, "unauthorized", HTTPMessage(), BytesIO())
+        if failure == "rate_limit":
+            return FakeResponse({}, status=429)
+        return FakeResponse({}, status=500)
+
+    model = OrganiserChatModel(settings(), opener=opener)
+
+    with pytest.raises(OrganiserGatewayUnavailableError) as caught:
+        model.complete_json([], ResponseModel)
+
+    assert caught.value.classification == classification
+    assert calls == 1
 
 
 @pytest.mark.parametrize("language", ["json", "JSON", "Json"])
@@ -422,10 +549,19 @@ def test_typed_reasoning_wrappers_send_their_exact_response_schema(
     assert isinstance(result, response_model)
     assert captured["body"]["format"] == response_model.model_json_schema()
     assert isinstance(captured["body"]["format"], dict)
+    assert captured["body"]["options"] == {"num_predict": 768}
+    assert json.loads(captured["body"]["messages"][1]["content"]) == {
+        "context": WrapperContext().model_dump(mode="json")
+    }
     system_instruction = captured["body"]["messages"][0]["content"]
     assert "<restock_decision_v1>" in system_instruction
     assert "</restock_decision_v1>" in system_instruction
-    assert "Do not use Markdown fences" in system_instruction
+    assert "Do not repeat the decision" in system_instruction
+    assert "Stop after the closing tag" in system_instruction
+    assert ", ".join(response_model.model_fields) in system_instruction
+    assert "Copy run_id and task_id exactly from context.delegation" in system_instruction
+    assert "missing_information must be an array of strings" in system_instruction
+    assert "action must be exactly CALL_TOOL or COMPLETE" in system_instruction
 
 
 def test_gateway_rejects_malformed_model_json_and_schema_output() -> None:

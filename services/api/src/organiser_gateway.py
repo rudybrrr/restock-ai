@@ -25,10 +25,20 @@ from pydantic import (
     model_validator,
 )
 
+from src.agent_contracts import RecommendedNextStep
 from src.config import Settings
-from src.demand_specialist import DemandModelDecision, DemandReasoningContext
-from src.inventory_specialist import InventoryModelDecision, InventoryReasoningContext
+from src.demand_specialist import (
+    DEMAND_TOOL_ALLOWLIST,
+    DemandModelDecision,
+    DemandReasoningContext,
+)
+from src.inventory_specialist import (
+    INVENTORY_TOOL_ALLOWLIST,
+    InventoryModelDecision,
+    InventoryReasoningContext,
+)
 from src.procurement_specialist import (
+    PROCUREMENT_TOOL_ALLOWLIST,
     ProcurementModelDecision,
     ProcurementReasoningContext,
 )
@@ -37,6 +47,15 @@ DEFAULT_TIMEOUT_SECONDS = 30
 MAX_TIMEOUT_SECONDS = 120
 DEFAULT_NUM_PREDICT = 2048
 MAX_NUM_PREDICT = 4096
+TYPED_DECISION_NUM_PREDICT = 768
+TYPED_REPAIR_INSTRUCTION = (
+    "Your previous response violated the output contract. Return exactly one "
+    "decision envelope containing exactly one JSON object. Use the exact required "
+    "top-level field names stated in the system message and the HTTP response "
+    "schema. Copy run_id and task_id from context.delegation. Do not nest the "
+    "decision in a routing or delegation object, invent aliases, repeat, explain, "
+    "or emit alternatives. Stop immediately after </restock_decision_v1>."
+)
 ModelT = TypeVar("ModelT", bound=BaseModel)
 Opener = Callable[..., Any]
 FailureClassification = Literal[
@@ -236,7 +255,13 @@ class OrganiserChatModel:
         }
         if response_schema is not None:
             payload["format"] = response_schema
-        payload["options"] = {"num_predict": self._settings.num_predict}
+        payload["options"] = {
+            "num_predict": (
+                min(self._settings.num_predict, TYPED_DECISION_NUM_PREDICT)
+                if response_schema is not None
+                else self._settings.num_predict
+            )
+        }
         request = Request(
             f"{self._settings.gateway_url.rstrip('/')}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -303,15 +328,30 @@ class OrganiserChatModel:
         messages: Sequence[Mapping[str, str]],
         response_model: type[ModelT],
     ) -> ModelT:
-        """Parse one JSON object and validate it with an existing Pydantic schema."""
-        text = self._complete_request(messages, response_model.model_json_schema())
-        value = _parse_model_output_object(text)
-        try:
-            return response_model.model_validate(value)
-        except ValidationError:
-            raise OrganiserModelOutputValidationError(
-                "Organiser model output failed the existing schema validation"
-            ) from None
+        """Validate one typed decision, repairing malformed model output once."""
+        schema = response_model.model_json_schema()
+        for attempt in range(2):
+            attempt_messages = (
+                messages
+                if attempt == 0
+                else [*messages, {"role": "user", "content": TYPED_REPAIR_INSTRUCTION}]
+            )
+            try:
+                text = self._complete_request(attempt_messages, schema)
+                value = _parse_model_output_object(text)
+                try:
+                    return response_model.model_validate(value)
+                except ValidationError:
+                    raise OrganiserModelOutputValidationError(
+                        "Organiser model output failed the existing schema validation"
+                    ) from None
+            except (
+                OrganiserModelOutputMalformedError,
+                OrganiserModelOutputValidationError,
+            ):
+                if attempt == 1:
+                    raise
+        raise AssertionError("unreachable")
 
 
 def _parse_model_output_object(content: str) -> dict[str, Any]:
@@ -365,20 +405,35 @@ def _parse_wrapped_model_output_object(content: str) -> Any:
         ) from None
 
 
-def _typed_reasoning_messages[MessageModelT: BaseModel](
-    context: BaseModel,
-    response_model: type[MessageModelT],
-    specialist: str,
+def _typed_reasoning_messages(
+    context: BaseModel, response_model: type[BaseModel], specialist: str
 ) -> list[dict[str, str]]:
+    field_names = ", ".join(response_model.model_fields)
+    tool_allowlists = {
+        "demand": DEMAND_TOOL_ALLOWLIST,
+        "inventory": INVENTORY_TOOL_ALLOWLIST,
+        "procurement": PROCUREMENT_TOOL_ALLOWLIST,
+    }
+    tool_names = ", ".join(sorted(tool.value for tool in tool_allowlists[specialist]))
+    next_steps = ", ".join(step.value for step in RecommendedNextStep)
     return [
         {
             "role": "system",
             "content": (
-                f"You are the ReStock {specialist} reasoning model. The only "
-                "authoritative output is exactly one <restock_decision_v1> element. "
-                "Its contents must be exactly one JSON object matching "
-                "response_schema. Close with </restock_decision_v1>. Do not use "
-                "Markdown fences or emit another restock_decision_v1 element. "
+                f"You are the ReStock {specialist} reasoning model. Return exactly "
+                "one authoritative decision: one <restock_decision_v1> element "
+                "containing one JSON object matching the required response schema. "
+                "Close with </restock_decision_v1>. Do not repeat the decision, "
+                "explain it, emit alternatives, or use Markdown. Stop after the "
+                "closing tag. The JSON object's exact top-level field names are: "
+                f"{field_names}. Copy run_id and task_id exactly from "
+                "context.delegation. Do not nest the decision or invent aliases. "
+                "action must be exactly CALL_TOOL or COMPLETE. For CALL_TOOL, "
+                "tool must be one of the exact lowercase tool values: "
+                f"{tool_names}; input_refs must be an array of existing evidence "
+                "reference objects. For COMPLETE, tool must be null. "
+                "missing_information must be an array of strings, even when empty. "
+                f"recommended_next_step must be one of: {next_steps}. "
                 "Choose only typed routing "
                 f"for the bounded {specialist} investigation. Never invent "
                 "authoritative values, perform arithmetic, determine materiality, "
@@ -391,11 +446,7 @@ def _typed_reasoning_messages[MessageModelT: BaseModel](
         {
             "role": "user",
             "content": json.dumps(
-                {
-                    "context": context.model_dump(mode="json"),
-                    "response_schema": response_model.model_json_schema(),
-                },
-                separators=(",", ":"),
+                {"context": context.model_dump(mode="json")}, separators=(",", ":")
             ),
         },
     ]
