@@ -184,7 +184,8 @@ def test_approved_quote_change_without_new_digest_fails_closed(
 
 def test_unknown_case_input_version_fails_closed(client: TestClient) -> None:
     client.headers["Authorization"] = "Bearer test-agent-token"
-    response = client.get(CASE.replace("/versions/1", "/versions/4"))
+    # Versions 4-6 are persisted demo authority; 999 is deliberately absent.
+    response = client.get(CASE.replace("/versions/1", "/versions/999"))
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MISSING_REQUIRED_DATA"
 

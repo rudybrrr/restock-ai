@@ -1,0 +1,44 @@
+{
+  "fixture_kind": "EXPLICIT_SYNTHETIC_NUMERICAL_FIXTURE_NOT_LIVE_SUPPLIER_FACTS",
+  "base_fixture": "contingency_v1.json",
+  "description": "Original 10 kg vegetables has 6 received and 4 delayed; demand is 10 kg. Change NEW offer capacities to 2 kg each. No subtraction of the old commitment from NEW capacity.",
+  "changed_offers": [
+    {
+      "offer_id": "fresh-vegetables",
+      "supplier_id": "fresh",
+      "available_quantity": "2",
+      "unit_price": "2",
+      "moq": "1",
+      "pack_size": "1",
+      "delivery_fee_sgd": "3",
+      "emergency_fee_sgd": "4",
+      "opportunity_id": "fresh-rescue",
+      "shipment_group_id": "fresh-new-shipment"
+    },
+    {
+      "offer_id": "market-vegetables",
+      "supplier_id": "market",
+      "available_quantity": "2",
+      "unit_price": "2",
+      "moq": "1",
+      "pack_size": "1",
+      "delivery_fee_sgd": "3",
+      "emergency_fee_sgd": "4",
+      "opportunity_id": "market-rescue",
+      "shipment_group_id": "market-new-shipment"
+    }
+  ],
+  "expected": {
+    "allocations": {
+      "fresh": "2",
+      "market": "2"
+    },
+    "acquisition_sgd": "8",
+    "delivery_sgd": "6",
+    "emergency_sgd": "8",
+    "new_cash_sgd": "22",
+    "domain_size": 9,
+    "validation_complete": true,
+    "validation_feasible": true
+  }
+}

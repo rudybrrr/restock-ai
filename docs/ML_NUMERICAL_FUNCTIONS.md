@@ -1,5 +1,55 @@
 # ReStock numerical functions and development datasets
 
+## Post-purchase implementation boundary — 25 September 2026
+
+Implementation note before code edits; base `1463fcdbea381a51e78d30cc3fc12e7f14ae9d01`.
+The user adopts Chun Yang's 24 September assignment, including this bounded
+Backend integration; Rudy retains worker/model ownership and Ethan retains UI.
+Add versioned post-purchase cases at 16 February 10:00 and 11:00 SGT, reusing
+existing persisted policy/case tables and frozen numerical input types. These
+explicit synthetic checkpoints retain the original delayed delivery plus one
+linked emergency purchase (including partial/cancelled/received revisions).
+Other clocks or extra commitments fail closed instead of borrowing first-case
+authority. Keep v4 first-purchase selection intact. A run-bound stored result
+must distinguish KEEP, additional-only revision, and typed escalation, with
+freshness/hash checks at Backend completion. Reuse search/projection/validation;
+no new policy framework, Agent implementation, model calls or UI changes.
+
+Implemented `src.post_purchase_contingency`: existing tables persist case/policy
+versions 5/6, claim freezes `PostPurchaseInput`, and calculation stores
+`PostPurchaseResult` with independent validation, identity hashes and exact
+completion checks. See [POST_PURCHASE_CONTINGENCY_CONTRACT.md](POST_PURCHASE_CONTINGENCY_CONTRACT.md)
+for signatures, HTTP routes, explicit synthetic authority and reproduction commands.
+No additional optional field was added to the old case payload, preserving the
+serialized shape used to hash older persisted evidence. Empty opportunity domains
+are accepted only for the named receipt-checkpoint domain; earlier cases still
+require opportunities.
+
+Examples: on-time recorded rescue 4 kg and later receipt both KEEP with SGD0 new
+cash; short2kg gives additional2kg/SGD11; cancellation gives4kg/SGD15. Late supply
+at the exhausted 11:00 quote window escalates. Missing coverage is incomplete,
+not zero demand. The separate supplier split fixture proves fresh 2+market 2 with
+SGD22 and 9 enumerated allocations, using existing kernels without new arithmetic.
+
+Verification on 25 September: Windows new acceptance **14 passed** (109.97s);
+Linux final focused API/PostgreSQL + split/case/policy acceptance **24 passed**
+(135.33s). Full locked Linux Python3.12/PostgreSQL18 regression before test-only
+corrections: **1,110 passed, 2 failed** (751.01s). Both failures were obsolete
+unknown-version assertions reproduced on unchanged main1463fcd (2 failed,8.49s):
+version4 already exists. They now request absent version999; all9 case/policy
+tests pass on Windows (60.24s), and both are included in the final24 Linux passes.
+No observed failure is left unresolved or waived. The full suite was not repeated
+after those test-only corrections and two added partial-receipt assertions; all
+production source/configuration hashes match the completed full gate. Whole-API
+Ruff/Pyright and all12 changed-Python format checks pass on Windows and Linux;
+diff checks pass. Two dependency deprecation warnings remain. No live gateway,
+worker integration, browser, deployment or operational database acceptance claimed.
+
+Only Backend numerical/persistence integration is implemented here; Rudy's worker
+consumption, live provider, UI and deployment remain separate. No production
+historical calendar or economic policy has been inferred. Earlier checks below
+remain historical.
+
 ## Contingency implementation boundary — 22 September 2026
 
 Implementation note recorded before source changes. Base: main `843efe59b8217d7ba23c15ff02fd5ad978a7720a`.

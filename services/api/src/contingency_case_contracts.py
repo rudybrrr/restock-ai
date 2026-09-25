@@ -303,3 +303,30 @@ def first_case_seed_input_v4(
     row["policy_version_id"] = f"policy:{DEMO_POLICY_ID}:4"
     row["source_revision"] = "ML_CONTINGENCY_CONTRACT_V4_ACTIVE_FIRST_CASE"
     return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")
+
+
+def post_purchase_seed_input(
+    recorded_at: datetime, *, version: int, **catalogue
+) -> dict:
+    """Two explicitly bounded checkpoints; v4 authority is never broadened."""
+    if version not in (5, 6):
+        raise ValueError("Unsupported post-purchase version")
+    row = first_case_seed_input_v4(recorded_at, **catalogue)
+    row["id"] = f"case-input:{FIRST_CASE_ID}:{version}"
+    row["version"] = version
+    row["policy_version_id"] = f"policy:{DEMO_POLICY_ID}:{version}"
+    row["source_revision"] = f"POST_PURCHASE_FIXED_SUPPLY_V1:{version}"
+    payload = row["payload"]
+    payload["domain_id"] = f"POST_PURCHASE_20260216_DOMAIN_V{version}"
+    payload["offer_approval_reference"] = "ANIQ_POST_PURCHASE_BOUNDED_DEMO_2026_09_25"
+    if version == 6:
+        row["effective_at"] = payload["as_of"] = "2026-02-16T11:00:00+08:00"
+        # Explicit exhausted domain: the only quote arrived at 11:00 with a
+        # 60-minute lead. No NEW order remains available at this checkpoint.
+        payload["opportunity_manifest"] = []
+        payload["opportunities"] = []
+    payload["approved_quote_sha256"] = approved_quote_sha256(
+        [FrozenOfferRevision.model_validate(x) for x in payload["offers"]],
+        [FrozenOrderingOpportunity.model_validate(x) for x in payload["opportunities"]],
+    )
+    return ContingencyCaseInputVersion.model_validate(row).model_dump(mode="json")

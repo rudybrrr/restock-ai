@@ -18,6 +18,7 @@ from src.decision_engine_adapter import BackendProcurementTools
 from src.errors import ApiError
 from src.planning_schemas import PlanningRun
 from src.procurement_contract_schemas import FrozenCommitmentProjection
+from src.schemas import EstimatedInventoryLot
 
 CASE = "/api/v1/contingency-case-inputs/BOUNDED_CONTINGENCY_20260216_CASE_V1/versions/3"
 ISSUE = "2026-02-16T10:00:00+08:00"
@@ -207,7 +208,9 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
         snapshot["known_at"]
     )
     assert staged["captured_state_revision"] == str(run["input_revision"])
-    assert staged["opening_lots"] == snapshot["inventory"]
+    assert [
+        EstimatedInventoryLot.model_validate(row) for row in staged["opening_lots"]
+    ] == [EstimatedInventoryLot.model_validate(row) for row in snapshot["inventory"]]
     assert FrozenCommitmentProjection.model_validate(
         staged["commitment_projection"]
     ) == FrozenCommitmentProjection.model_validate(projection)
@@ -271,7 +274,10 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     assert unchanged.status_code == 200, unchanged.text
     assert unchanged.json()["status"] == "RUNNING"
     assert unchanged.json()["plan_version_id"] is None
-    assert unchanged.json()["snapshot"]["staged_contingency_artifact"]["id"] == artifact["id"]
+    assert (
+        unchanged.json()["snapshot"]["staged_contingency_artifact"]["id"]
+        == artifact["id"]
+    )
     assert "calculated_candidate" not in unchanged.json()["snapshot"]
     tampered = StagedContingencyArtifact.model_validate(
         {**artifact, "result": {**artifact["result"], "status": "INCOMPLETE"}}
@@ -314,7 +320,11 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     client.headers.pop("Authorization", None)
     approved = client.post(
         f"/api/v1/plans/{plan_id}/decision",
-        json={"plan_id": logical_plan_id, "plan_version": version, "decision": "APPROVED"},
+        json={
+            "plan_id": logical_plan_id,
+            "plan_version": version,
+            "decision": "APPROVED",
+        },
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["status"] == "APPROVED"
@@ -339,6 +349,7 @@ def test_first_case_stock_and_delayed_commitment_are_frozen_once(
     )
     assert purchase.status_code == 201, purchase.text
     assert purchase.json()["source_plan_line_id"] == line["id"]
-    assert client.get(f"/api/v1/plans/{plan_id}/lines").json()[0][
-        "uncommitted_quantity"
-    ] == "0.000"
+    assert (
+        client.get(f"/api/v1/plans/{plan_id}/lines").json()[0]["uncommitted_quantity"]
+        == "0.000"
+    )
