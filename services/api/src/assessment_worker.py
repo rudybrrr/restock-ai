@@ -26,6 +26,7 @@ from src.organiser_gateway import (
     OrganiserGatewaySettings,
     build_organiser_reasoning_models,
 )
+from src.sales_materiality_adapter import ensure_claimed_sales_materiality
 
 WorkerPublicationStatus = Literal[
     "NO_WORK", "PUBLISHED", "NOT_PUBLISHED", "STALE_REJECTED"
@@ -85,6 +86,7 @@ def run_one_queued_assessment(
         raise
 
     try:
+        ensure_claimed_sales_materiality(session, claimed.id)
         reasoning_models = build_organiser_reasoning_models(settings)
         procurement_tools = BackendProcurementTools(session)
         execution = run_backend_coordinator(
@@ -102,6 +104,22 @@ def run_one_queued_assessment(
             outcome=None,
             publication_status="STALE_REJECTED",
             failure_classification="STATE_REVISION_STALE",
+        )
+    except ApiError as error:
+        if error.detail.code in {"STATE_REVISION_STALE", "STALE_RUN_INPUT"}:
+            planning.fail_run(session, claimed.id, "STATE_REVISION_STALE")
+            return QueuedAssessmentWorkerResult(
+                run_id=claimed.id,
+                outcome=None,
+                publication_status="STALE_REJECTED",
+                failure_classification="STATE_REVISION_STALE",
+            )
+        planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
+        return QueuedAssessmentWorkerResult(
+            run_id=claimed.id,
+            outcome=None,
+            publication_status="NOT_PUBLISHED",
+            failure_classification=EscalationReason.TOOL_FAILURE,
         )
     except Exception:  # noqa: BLE001 - all post-claim failures must close safely
         planning.fail_run(session, claimed.id, EscalationReason.TOOL_FAILURE.value)
