@@ -1,6 +1,7 @@
 """Backend adapter for production SALES_UPDATED materiality assessment."""
 
-from dataclasses import asdict, is_dataclass
+from collections.abc import Mapping
+from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -41,15 +42,18 @@ from src.schemas import EstimatedInventoryLot, Ingredient, MenuItem, RecipeItem
 
 
 def _json(value: Any) -> Any:
-    if is_dataclass(value):
-        return _json(asdict(cast(Any, value)))
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _json(getattr(value, field.name))
+            for field in fields(value)
+        }
     if isinstance(value, BaseModel):
         return _json(value.model_dump(mode="json"))
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, (date, datetime)):
         return value.isoformat()
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {str(key): _json(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json(item) for item in value]
