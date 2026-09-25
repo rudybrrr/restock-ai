@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -221,12 +222,21 @@ class OrganiserChatModel:
 
     def complete(self, messages: Sequence[Mapping[str, str]]) -> str:
         """Return only the gateway's model text; never retry transport failures."""
+        return self._complete_request(messages)
+
+    def _complete_request(
+        self,
+        messages: Sequence[Mapping[str, str]],
+        response_schema: Mapping[str, Any] | None = None,
+    ) -> str:
         payload = {
             "model": self._settings.model,
             "messages": [dict(message) for message in messages],
             "stream": False,
-            "options": {"num_predict": self._settings.num_predict},
         }
+        if response_schema is not None:
+            payload["format"] = response_schema
+        payload["options"] = {"num_predict": self._settings.num_predict}
         request = Request(
             f"{self._settings.gateway_url.rstrip('/')}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -294,23 +304,65 @@ class OrganiserChatModel:
         response_model: type[ModelT],
     ) -> ModelT:
         """Parse one JSON object and validate it with an existing Pydantic schema."""
-        text = self.complete(messages)
-        try:
-            value = json.loads(text)
-        except json.JSONDecodeError as error:
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output was not valid JSON"
-            ) from error
-        if not isinstance(value, dict):
-            raise OrganiserModelOutputMalformedError(
-                "Organiser model output must be one JSON object"
-            )
+        text = self._complete_request(messages, response_model.model_json_schema())
+        value = _parse_model_output_object(text)
         try:
             return response_model.model_validate(value)
-        except ValidationError as error:
+        except ValidationError:
             raise OrganiserModelOutputValidationError(
                 "Organiser model output failed the existing schema validation"
-            ) from error
+            ) from None
+
+
+def _parse_model_output_object(content: str) -> dict[str, Any]:
+    """Accept raw JSON, one authoritative envelope, or one clean JSON fence."""
+    stripped = content.strip()
+    try:
+        value = json.loads(stripped)
+    except json.JSONDecodeError:
+        value = _parse_wrapped_model_output_object(stripped)
+    if not isinstance(value, dict):
+        raise OrganiserModelOutputMalformedError(
+            "Organiser model output must be one JSON object"
+        ) from None
+    return value
+
+
+def _parse_wrapped_model_output_object(content: str) -> Any:
+    opening = "<restock_decision_v1>"
+    closing = "</restock_decision_v1>"
+    tag_starts = list(
+        re.finditer(r"<\s*/?\s*restock_decision_v1\b", content, re.IGNORECASE)
+    )
+    if tag_starts:
+        if (
+            len(tag_starts) != 2
+            or not content.startswith(opening, tag_starts[0].start())
+            or not content.startswith(closing, tag_starts[1].start())
+        ):
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output had invalid decision envelope"
+            ) from None
+        inner = content[
+            tag_starts[0].start() + len(opening) : tag_starts[1].start()
+        ]
+    else:
+        clean_fence = re.fullmatch(
+            r" {0,3}(`{3,}|~{3,})[ \t]*json[ \t]*\r?\n(.*?)\r?\n {0,3}\1[ \t]*",
+            content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if clean_fence is None:
+            raise OrganiserModelOutputMalformedError(
+                "Organiser model output was not valid JSON"
+            ) from None
+        inner = clean_fence.group(2)
+    try:
+        return json.loads(inner)
+    except json.JSONDecodeError:
+        raise OrganiserModelOutputMalformedError(
+            "Organiser model output was not valid JSON"
+        ) from None
 
 
 def _typed_reasoning_messages[MessageModelT: BaseModel](
@@ -322,8 +374,12 @@ def _typed_reasoning_messages[MessageModelT: BaseModel](
         {
             "role": "system",
             "content": (
-                f"You are the ReStock {specialist} reasoning model. Return exactly "
-                "one JSON object matching response_schema. Choose only typed routing "
+                f"You are the ReStock {specialist} reasoning model. The only "
+                "authoritative output is exactly one <restock_decision_v1> element. "
+                "Its contents must be exactly one JSON object matching "
+                "response_schema. Close with </restock_decision_v1>. Do not use "
+                "Markdown fences or emit another restock_decision_v1 element. "
+                "Choose only typed routing "
                 f"for the bounded {specialist} investigation. Never invent "
                 "authoritative values, perform arithmetic, determine materiality, "
                 "determine supplier feasibility, optimise, validate, approve, "
