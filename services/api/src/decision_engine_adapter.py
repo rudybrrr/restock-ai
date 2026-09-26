@@ -204,6 +204,16 @@ def run_first_slice_engine(session: Session, run) -> dict:
     if result.status == "INFEASIBLE_IN_DOMAIN":
         raise ApiError(409, "NO_FEASIBLE_SUPPLIER", "Approved procurement domain is infeasible")
     if not result.search_complete or result.candidate is None:
+        if any(
+            finding.code == "UNSUPPORTED_ISSUE_OPENING" and finding.source == "issue_time"
+            for finding in result.findings
+        ):
+            raise ApiError(
+                409,
+                "CALCULATION_INCOMPLETE",
+                "UNSUPPORTED_ISSUE_OPENING: the approved normal purchase issue time "
+                "cannot be reopened; no new normal plan was created",
+            )
         raise ApiError(
             409, "CALCULATION_INCOMPLETE", "Decision Engine search did not complete"
         )

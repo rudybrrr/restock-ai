@@ -735,6 +735,8 @@ def test_material_sales_persists_before_coordination_and_escalates_late_issue(
     assert completed["outcome"] == AgentOutcome.ESCALATE.value
     assert completed["escalation_reason"] == EscalationReason.CALCULATION_INCOMPLETE.value
     assert completed["plan_version_id"] is None
+    manager_evidence = client.get(f"/api/v1/manager/runs/{run_id}/evidence").json()
+    assert "UNSUPPORTED_ISSUE_OPENING" in manager_evidence["decision"]["summary"]
     assert client.get(f"/api/v1/plans/{prior_plan_id}").json() == {
         **prior_plan,
         "status": "INVALIDATED",

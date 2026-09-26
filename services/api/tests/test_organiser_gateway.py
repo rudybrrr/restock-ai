@@ -142,7 +142,8 @@ def test_gateway_validates_returned_json_with_existing_pydantic_model() -> None:
         "messages": [{"role": "user", "content": "Return JSON."}],
         "stream": False,
         "format": ResponseModel.model_json_schema(),
-        "options": {"num_predict": 768},
+        "think": False,
+        "options": {"num_predict": 1024, "temperature": 0},
     }
 
 
@@ -157,10 +158,12 @@ def test_typed_budget_respects_a_lower_configured_prediction_limit() -> None:
 
     assert model.complete_json([], ResponseModel).outcome == "KEEP_CURRENT_PLAN"
     assert model.complete([]) == '{"outcome":"KEEP_CURRENT_PLAN"}'
-    assert bodies[0]["options"] == {"num_predict": 512}
+    assert bodies[0]["options"] == {"num_predict": 512, "temperature": 0}
     assert bodies[0]["format"] == ResponseModel.model_json_schema()
+    assert bodies[0]["think"] is False
     assert bodies[1]["options"] == {"num_predict": 512}
     assert "format" not in bodies[1]
+    assert "think" not in bodies[1]
 
 
 def test_duplicate_first_output_is_repaired_without_echoing_it(
@@ -192,9 +195,10 @@ def test_duplicate_first_output_is_repaired_without_echoing_it(
     assert bodies[1]["messages"][:1] == original_messages
     assert len(bodies[1]["messages"]) == 2
     assert bodies[1]["messages"][1]["role"] == "user"
-    assert "Stop immediately after </restock_decision_v1>" in bodies[1]["messages"][1]["content"]
+    assert "Stop immediately after the closing brace" in bodies[1]["messages"][1]["content"]
     assert bodies[0]["format"] == bodies[1]["format"] == ResponseModel.model_json_schema()
-    assert bodies[0]["options"] == bodies[1]["options"] == {"num_predict": 768}
+    assert bodies[0]["think"] is bodies[1]["think"] is False
+    assert bodies[0]["options"] == bodies[1]["options"] == {"num_predict": 1024, "temperature": 0}
     assert "FIRST_VALID_SENTINEL" not in json.dumps(bodies[1])
     assert "SECOND_VALID_SENTINEL" not in json.dumps(bodies[1])
     assert "FIRST_VALID_SENTINEL" not in caplog.text
@@ -548,20 +552,27 @@ def test_typed_reasoning_wrappers_send_their_exact_response_schema(
 
     assert isinstance(result, response_model)
     assert captured["body"]["format"] == response_model.model_json_schema()
+    assert captured["body"]["think"] is False
     assert isinstance(captured["body"]["format"], dict)
-    assert captured["body"]["options"] == {"num_predict": 768}
+    assert captured["body"]["options"] == {"num_predict": 1024, "temperature": 0}
     assert json.loads(captured["body"]["messages"][1]["content"]) == {
         "context": WrapperContext().model_dump(mode="json")
     }
     system_instruction = captured["body"]["messages"][0]["content"]
-    assert "<restock_decision_v1>" in system_instruction
-    assert "</restock_decision_v1>" in system_instruction
+    assert "one bare JSON object matching the HTTP response schema" in system_instruction
+    assert "Do not wrap it in decision envelope tags" in system_instruction
     assert "Do not repeat the decision" in system_instruction
-    assert "Stop after the closing tag" in system_instruction
+    assert "Stop after the closing brace" in system_instruction
     assert ", ".join(response_model.model_fields) in system_instruction
     assert "Copy run_id and task_id exactly from context.delegation" in system_instruction
     assert "missing_information must be an array of strings" in system_instruction
     assert "action must be exactly CALL_TOOL or COMPLETE" in system_instruction
+    assert "recommended_next_step to NONE" in system_instruction
+    assert "Keep interpreted_impact and summary" in system_instruction
+    assert "first character must be { and the last character must be }" in system_instruction
+    assert "The exact response JSON schema is:" in system_instruction
+    if response_model is ProcurementModelDecision:
+        assert "REQUEST_HUMAN_APPROVAL does not submit a candidate" in system_instruction
 
 
 def test_gateway_rejects_malformed_model_json_and_schema_output() -> None:
