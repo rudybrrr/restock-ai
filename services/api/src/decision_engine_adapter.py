@@ -25,8 +25,15 @@ from src.contingency_run_contracts import StagedContingencyCase
 from src.contingency_stage_adapter import _approved_kind, inputs_from_frozen_case
 from src.demand_tools import BackendDemandTools
 from src.errors import ApiError, ErrorDetail, ErrorResponse
-from src.inventory_projection import SourceEvidence
+from src.forecasting import seasonal_baseline
+from src.inventory_projection import SourceEvidence, project_inventory
 from src.inventory_tools import _commitment_supplies
+from src.manager_calculations import (
+    SNAPSHOT_KEY,
+    CalculationOutputs,
+    ForecastDish,
+    freeze_outputs,
+)
 from src.planning_schemas import Candidate, PlanLine
 from src.procurement import (
     EVIDENCE,
@@ -89,6 +96,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
     recipes = [RecipeItem.model_validate(row) for row in frozen["recipes"]]
     forecast_adapter = BackendDemandTools(session)
     normal = forecast_adapter._normal_forecast(contract, f"{run.id}:forecast:normal")
+    selected_forecast = normal
     if run.trigger in {"PROMOTION_CREATED", "PROMOTION_CHANGED"}:
         application = apply_promotions(
             normal,
@@ -112,6 +120,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
             )
         buckets = list(application.forecast.buckets)
         profile = list(application.forecast.profile)
+        selected_forecast = application.forecast
     else:
         buckets = list(normal.buckets)
         profile = list(normal.profile)
@@ -233,6 +242,34 @@ def run_first_slice_engine(session: Session, run) -> dict:
     )
     candidate_id = "candidate:" + _identity(candidate.model_dump(mode="json"))
     validation_id = "validation:" + _identity({"candidate": candidate_id, "cash": asdict(validation.cash)})
+    if validation.projection is None:
+        raise ApiError(409, "CALCULATION_INCOMPLETE", "Validated projection is missing")
+    baseline = seasonal_baseline(
+        forecast_adapter._history(contract), menu,
+        issue_time=policy.issue_time, target_date=policy.target_date,
+    )
+    display = freeze_outputs(CalculationOutputs(
+        run_id=run.id, as_of=contract.as_of, known_at=contract.known_at,
+        captured_state_revision=contract.captured_state_revision,
+        policy_id=contract.policy.id, policy_version=contract.policy.version,
+        forecast_input_id=contract.forecast_input.id,
+        forecast_input_version=contract.forecast_input.version,
+        candidate_id=candidate_id,
+        censored_history_present=any(row.censored for row in contract.forecast_input.payload.history),
+        dishes=[ForecastDish(id=item.id, name=item.name, baseline=baseline[item.id]) for item in menu],
+        forecast=selected_forecast,
+        existing_commitments_projection=project_inventory(**inventory),
+        with_recommendation_projection=validation.projection,
+        proposed_supply_ids=list(validation.proposed_supply_ids),
+        limitations=[
+            "Bounded first-slice forecast; no next-cycle guarantee.",
+            "Projected expiry quantities are not staff-measured waste.",
+            "Recommendation supplies are hypothetical and are not external purchases.",
+        ],
+    ))
+    existing_display = run.snapshot.get(SNAPSHOT_KEY)
+    if existing_display is not None and existing_display != display.model_dump(mode="json"):
+        raise ApiError(409, "CALCULATION_ARTIFACT_CONFLICT", "Run already has different stored outputs")
     artifacts = {"input": {"id": input_id, "contract": contract.model_dump(mode="json")}, "candidate": {"id": candidate_id, "candidate": candidate.model_dump(mode="json"), "engine_lines": [asdict(line) for line in result.candidate.lines]}, "validation": {"id": validation_id, "candidate_id": candidate_id, "complete": True, "feasible": True, "cash": asdict(validation.cash)}}
     session.execute(
         update(db.planning_runs)
@@ -241,6 +278,7 @@ def run_first_slice_engine(session: Session, run) -> dict:
             snapshot={
                 **run.snapshot,
                 "decision_engine_artifacts": _json(artifacts),
+                SNAPSHOT_KEY: display.model_dump(mode="json"),
                 "calculated_candidate": candidate.model_dump(mode="json"),
             }
         )

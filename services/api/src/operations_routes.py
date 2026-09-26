@@ -40,6 +40,7 @@ from src.inventory_adjustment_schemas import (
     InventoryAdjustmentContext,
     InventoryAdjustmentResultWrite,
 )
+from src.manager_calculations import ManagerCalculationDisplay, read_outputs
 from src.manager_evidence import ManagerRunEvidence, build_manager_run_evidence
 from src.operations_schemas import (
     AuditEntry,
@@ -337,6 +338,14 @@ def read_manager_run_procurement_evidence(
         ),
         commitment_projection=contract.commitment_projection,
     )
+
+
+@router.get(
+    "/manager/runs/{run_id}/calculation-results",
+    response_model=ManagerCalculationDisplay,
+)
+def read_manager_calculation_results(run_id: str, session: SessionDep, manager: Manager):
+    return read_outputs(session, run_id)
 
 
 @router.get(
