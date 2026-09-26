@@ -150,3 +150,9 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
+# Local final-validation diagnostics and generated pytest directories
+services/api/.tmp/
+.pytest-managed/
+.pytest-*/
+services/api/.pytest-managed/
+services/api/.pytest-*/

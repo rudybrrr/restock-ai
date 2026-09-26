@@ -2,6 +2,8 @@
 
 This maps the workspace-root `FRONTEND_USER_FEATURE_INVENTORY.md` to the implementation. “Connected” means a frontend request uses the inspected backend route, not a claim that the complete ML/agent workflow has passed live acceptance.
 
+**26 September update:** The current [validation record](FINAL_VALIDATION_2026-09-26.md) supersedes older pending statements for the live organiser gateway, deterministic sales materiality, and bounded post-purchase contingency. The manager UI now labels `CONTINGENCY_ENGINE` and `NEW_PURCHASE_CASH_ONLY` costs explicitly. This table remains the 17 September feature inventory, not the final evidence ledger.
+
 Local 17 September additions and their completed browser/PostgreSQL verification are documented in [FRONTEND_EVIDENCE_ADDITIONS.md](FRONTEND_EVIDENCE_ADDITIONS.md).
 
 | Inventory group | Frontend destination | Treatment |

@@ -1869,6 +1869,8 @@ A judge can see:
 
 # 37. Hero Demo Agent Story
 
+**Current validation note (26 September 2026):** The Thursday promotion sequence below is a historical proposed demo, not the proven live sales result. The approved `CASH_SLICE_V1` domain cannot reopen a normal purchase after its issue time. The live material-sales run therefore completed `ESCALATE` / `CALCULATION_INCOMPLETE` with deterministic `UNSUPPORTED_ISSUE_OPENING` and no new plan. Use [the current demo runbook](LOCAL_DEMO_SCRIPT.md) and [validation record](FINAL_VALIDATION_2026-09-26.md) for submission claims.
+
 The final demo should be one continuous restaurant story.
 
 ## Monday — Normal PLAN-v1
