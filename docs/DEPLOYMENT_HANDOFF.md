@@ -26,6 +26,21 @@ Populate Backend/worker secrets through the host's secret store or an untracked 
 
 If this machine's configured HTTP proxy is inherited by the worker, add the gateway **hostname only** to the process's `NO_PROXY` and `no_proxy` before launch. This bypass was needed for live validation on this machine. It is an environment procedure, not a source-code default; verify the hosted network independently.
 
+For a local PowerShell worker session, first load the same Backend configuration as the API and export `LLM_GATEWAY_URL` into that session from the local secret source. Then preserve existing proxy bypass entries and add only the gateway host:
+
+```powershell
+$gatewayHost = ([uri]$env:LLM_GATEWAY_URL).Host
+if (-not $gatewayHost) { throw 'Set LLM_GATEWAY_URL before starting the worker' }
+$bypassEntries = @($env:NO_PROXY, $env:no_proxy) -join ','
+$bypassEntries = @($bypassEntries -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$bypassEntries += $gatewayHost
+$env:NO_PROXY = ($bypassEntries | Select-Object -Unique) -join ','
+$env:no_proxy = $env:NO_PROXY
+uv run python -m src.assessment_worker --loop
+```
+
+Run this from `services/api`. Keep the gateway key in the Backend environment or untracked `.env`; the command prints neither the URL nor the key. On a host without this proxy, use the normal worker command below.
+
 ## Install and start
 
 From `services/api` after setting configuration:
