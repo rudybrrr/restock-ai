@@ -41,6 +41,7 @@ from src.inventory_adjustment_schemas import (
     InventoryAdjustmentResultWrite,
 )
 from src.manager_calculations import ManagerCalculationDisplay, read_outputs
+from src.manager_contingency import ManagerContingencyProjection, read_projection
 from src.manager_evidence import ManagerRunEvidence, build_manager_run_evidence
 from src.operations_schemas import (
     AuditEntry,
@@ -347,6 +348,14 @@ def read_manager_run_procurement_evidence(
 )
 def read_manager_calculation_results(run_id: str, session: SessionDep, manager: Manager):
     return read_outputs(session, run_id)
+
+
+@router.get(
+    "/manager/runs/{run_id}/contingency-projection",
+    response_model=ManagerContingencyProjection | None,
+)
+def read_manager_contingency_projection(run_id: str, session: SessionDep, manager: Manager):
+    return read_projection(session, run_id)
 
 
 @router.get(

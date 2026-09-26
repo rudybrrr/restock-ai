@@ -8,6 +8,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, field_serializer
 from sqlalchemy.orm import Session
 
 from src import planning
+from src.agent_contracts import AgentOutcome, EscalationReason
 from src.errors import ApiError
 from src.forecasting import DishForecast
 from src.inventory_projection import InventoryProjection
@@ -65,6 +66,9 @@ class CalculationArtifact(BaseModel):
 class ManagerCalculationDisplay(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_id: str
+    run_status: Literal["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"]
+    outcome: AgentOutcome | None
+    escalation_reason: EscalationReason | None
     status: Literal["AVAILABLE", "NOT_RECORDED"]
     current_state_revision: str
     stale: bool | None
@@ -88,8 +92,18 @@ def read_outputs(session: Session, run_id: str) -> ManagerCalculationDisplay:
     run = planning.get_run(session, run_id)
     revision = planning.current_state_revision(session)
     raw = run.snapshot.get(SNAPSHOT_KEY)
+    state = {
+        "run_status": run.status,
+        "outcome": run.outcome,
+        "escalation_reason": (
+            EscalationReason(run.escalation_reason)
+            if run.escalation_reason in set(EscalationReason)
+            else None
+        ),
+    }
     if raw is None:
         return ManagerCalculationDisplay(
+            **state,
             run_id=run.id, status="NOT_RECORDED", current_state_revision=revision,
             stale=None, plan_version_id=run.plan_version_id, artifact=None,
         )
@@ -101,6 +115,7 @@ def read_outputs(session: Session, run_id: str) -> ManagerCalculationDisplay:
     ):
         raise ApiError(409, "CALCULATION_ARTIFACT_MISMATCH", "Stored outputs do not match their run")
     return ManagerCalculationDisplay(
+        **state,
         run_id=run.id, status="AVAILABLE", current_state_revision=revision,
         stale=revision != artifact.outputs.captured_state_revision,
         plan_version_id=run.plan_version_id, artifact=artifact,

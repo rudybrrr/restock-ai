@@ -89,6 +89,8 @@ def test_unrecorded_is_distinct_from_empty_and_manager_auth_required(client):
     response = client.get(path)
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "NOT_RECORDED"
+    assert response.json()["run_status"] == "QUEUED"
+    assert response.json()["outcome"] is None
     assert response.json()["artifact"] is None
     client.cookies.clear()
     assert client.get(path).status_code == 401
