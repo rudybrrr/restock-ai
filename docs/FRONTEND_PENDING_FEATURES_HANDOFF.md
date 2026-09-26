@@ -2,6 +2,8 @@
 
 26 September 2026 · local `feat/frontend-final-design` · for CY, Aniq and Rudy.
 
+Update: bounded first-slice forecast/projection results are now connected. See [the current calculation-results handback](FRONTEND_CALCULATION_RESULTS_HANDOFF.md). The disconnected forecast/projection descriptions below are the historical preparation request, not current availability. Waste and full-economic integration remain pending; optional-scope wording below requires reconciliation with Aniq's later handoff.
+
 ## What has been prepared
 
 Frontend preparation is now available for forecast results, general stock projections, waste entry and economic results. **These are not newly completed integrations or working demo features.** No backend/Agent/ML contracts were changed and no new endpoint was invented. Delivery branch: `feat/frontend-final-design`; do not merge to main before team review.

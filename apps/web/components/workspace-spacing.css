@@ -194,6 +194,14 @@
 .restock-app .field-label { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; }
 .restock-app .workspace-content > .field-label { margin: 0 0 24px; }
 .restock-app .field-label > :is(input,select,textarea) { width: 100%; }
+.restock-app .calculation-display .field-label { max-width: 560px; margin-block: 20px; }
+.restock-app .calculation-display h2 { margin-block: 24px 12px; }
+.restock-app .calculation-display p { margin-block: 12px; overflow-wrap: anywhere; }
+.restock-app .calculation-display .table-scroll { margin-block: 20px; }
+.restock-app .calculation-display details { margin-block: 20px; }
+.restock-app .calculation-display dd,
+.restock-app .calculation-display li { overflow-wrap: anywhere; }
+.restock-app .calculation-display hr { border: 0; border-top: 1px solid var(--line); margin-block: 32px; }
 .restock-app .workspace-content > .field-label > :is(input,select) { width: min(100%, 360px); }
 .restock-app .form-grid { gap: 20px 24px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .restock-app .form-grid > label { min-width: 0; gap: 8px; }

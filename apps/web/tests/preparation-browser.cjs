@@ -23,7 +23,8 @@ const fs = require("node:fs");
         await page.getByLabel("Observed waste quantity", { exact: true }).fill("2.000");
         await page.getByRole("button", { name: "Clear draft", exact: true }).click();
         assert.equal(await page.getByLabel("Observed waste quantity", { exact: true }).inputValue(), "");
-      } else await page.getByRole("heading", { name: "Waiting for an agreed manager data source.", exact: true }).waitFor();
+      } else if (tab === "Economic results") await page.getByRole("heading", { name: "Waiting for an agreed manager data source.", exact: true }).waitFor();
+      else await page.getByRole("link", { name: "Forecast & projections →", exact: true }).waitFor();
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -31,6 +32,6 @@ const fs = require("node:fs");
       }
     }
     assert.deepEqual(errors, []);
-    console.log("PASS: four disconnected preparation views, disabled waste submission, draft reset, no guessed API or writes, desktop/mobile.");
+    console.log("PASS: links to connected bounded calculations, disconnected economics, disabled waste submission, draft reset, no guessed API or writes, desktop/mobile.");
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

@@ -3,6 +3,7 @@ export const areas = [
   { id: "stock", label: "Stock & sales", href: "/workspace/inventory", description: "Check stock, report sales during service and submit counts at closing.", pages: [
     { label: "Inventory", href: "/workspace/inventory" },
     { label: "Sales", href: "/workspace/sales" },
+    { label: "Forecast & projections", href: "/workspace/calculations" },
     { label: "Closing update", href: "/workspace/daily" },
   ] },
   { id: "purchasing", label: "Purchasing", href: "/workspace/recommendations", description: "Review a recommendation, approve its version, then record purchases and receipts.", pages: [
@@ -19,7 +20,7 @@ export const areas = [
 
 export function workspaceArea(path: string, view: string | null) {
   if (path === "/workspace/suppliers" || (path === "/workspace/inventory" && ["menu", "schedules"].includes(view ?? ""))) return areas[4];
-  if (["/workspace/inventory", "/workspace/sales", "/workspace/daily"].includes(path)) return areas[1];
+  if (["/workspace/inventory", "/workspace/sales", "/workspace/daily", "/workspace/calculations"].includes(path)) return areas[1];
   if (["/workspace/recommendations", "/workspace/deliveries"].includes(path)) return areas[2];
   if (path.startsWith("/workspace/activity")) return areas[3];
   return areas[0];
@@ -32,6 +33,7 @@ export const areaGuides: Record<string, { title: string; description: string }[]
     { title: "Explore details", description: "Open the linked work area to make a change. Today is a summary, not a replacement for the underlying records." },
   ],
   stock: [
+    { title: "Look ahead · Forecast & projections", description: "Choose an assessment to inspect its frozen demand and stock outputs. Compare existing commitments with hypothetical recommendation additions; check freshness and coverage." },
     { title: "Check what you have · Inventory", description: "Physical counts show staff observations. Estimates account for known activity through a selected time; check their coverage warnings." },
     { title: "Report during service · Sales", description: "Inspect reported sales and ingredient usage, then open sales entry to record or correct a complete time interval." },
     { title: "Finish the day · Closing update", description: "Enter final dish sales and counted quantities for each batch. Save a draft first, then submit when service has finished." },
