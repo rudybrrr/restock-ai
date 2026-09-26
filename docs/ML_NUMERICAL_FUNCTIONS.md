@@ -1,5 +1,53 @@
 # ReStock numerical functions and development datasets
 
+Merge verification on main base8be6496: **864 numerical tests passed in75.21s**,
+with two existing dependency deprecation warnings. This fresh run includes all146
+new-component cases plus forecasting, requirements, service buckets, one-day and
+multi-day projection, synthetic history, procurement, contingency, materiality,
+promotion forecasts and physical simulator/scenario regressions. Whole-API Ruff
+passed, Pyright reported0errors/0warnings, and all12 new Python files passed Ruff
+format checking. No production runtime/persistence code changed, so PostgreSQL,
+frontend/browser, live gateway and deployment gates were not run or claimed.
+
+## Frontend handoff numerical scope verified — 26 September 2026
+
+User-specified precedence is now **v5 > v3 > v2**, with higher-numbered plans
+overriding conflicting lower-numbered requirements. Waste workflow and full
+economics are mandatory product scope; teammate ownership remains unchanged.
+Read [ML_FRONTEND_HANDOFF.md](ML_FRONTEND_HANDOFF.md) for the current field/read
+mapping, source conflicts, proposed policies, worked arithmetic and commands.
+
+Main-based `feat/ml-economics-main` at base8be6496 adds pure `waste_accounting`
+selection/event-time deduction helpers, `economic_ledger.score_ledger`, and
+`economic_rollout.rollout_economics` for chronological 21-date dish fulfilment.
+Waste revisions are proposed fixture semantics, not a Backend lifecycle. The
+ledger checks conserved stock/component accounting under explicitly supplied
+policies. The rollout derives the ledger from recipes, dated forecasts and fixed
+plus explicit hypothetical supply. New `economic_supply.validate_economic_supply`
+resolves frozen offers and explicit capacity windows; `economic_continuation.continue_routine`
+implements the common bounded future policy; `economic_search.search_economics`
+and `validate_economic_candidate` add finite current-action economic search and
+independent validation. Actual protection is checked from raw ingredient demand
+before continuation; an unserved dish does not falsely label all its ingredients
+short. Host/work/score limits fail closed, and continuation lines are not orders.
+Final numerical requirement audit is complete. Production policies remain pending. No manager
+waste persistence or connected economic demonstration is claimed.
+
+Combined numerical run: **861 passed** (204.65s), including the synthetic-history
+service-profile correction. Two subsequent adversarial guards reject non-SGD
+offers and prevent a zero-capacity future window from shortening protection;
+all62 supply/continuation/search tests subsequently passed (165.89s).
+Final new-module verification: **146 passed** in145.42s, including run-context
+evidence and the explicitly demonstrated future-split heuristic limitation.
+Earlier861/62/799/83 counts are historical checkpoints, not newly repeated runs.
+External RESTOCK_TEST_TMP preserves
+synthetic-data isolation. Whole-API Ruff/Pyright pass. No shared Backend runtime was
+changed, and no database, live model, browser or deployment check was performed.
+Publication is authorised through the normal PR workflow. See the handback's
+main-based publication record for current verification; earlier counts here are
+development checkpoints. None of the new modules is called by a Backend/Agent
+adapter, and no production policy is activated by this publication.
+
 ## Post-purchase implementation boundary — 25 September 2026
 
 Implementation note before code edits; base `1463fcdbea381a51e78d30cc3fc12e7f14ae9d01`.

@@ -1,5 +1,47 @@
 # ReStock ML and Decision Engine Handover
 
+Merge verification on main base8be6496: **864 numerical tests passed in75.21s**,
+with two existing dependency deprecation warnings. This fresh run includes all146
+new-component cases plus forecasting, requirements, service buckets, one-day and
+multi-day projection, synthetic history, procurement, contingency, materiality,
+promotion forecasts and physical simulator/scenario regressions. Whole-API Ruff
+passed, Pyright reported0errors/0warnings, and all12 new Python files passed Ruff
+format checking. No production runtime/persistence code changed, so PostgreSQL,
+frontend/browser, live gateway and deployment gates were not run or claimed.
+
+## Numerical handback publication — 26 September 2026
+
+Completed independent numerical scope: Ethan's forecast/projection/waste/economics
+handoff. Selected publication branch:
+[feat/ml-economics-main](https://github.com/rudybrrr/restock-ai/tree/feat/ml-economics-main),
+based directly on main8be6496514fc3e82dae831c35e4f64ec18eb408a. The earlier
+integration-based development checkout is preserved; unrelated Agent/UI changes
+are excluded from this publication.
+The user's latest authority order is **v5 > v3 > v2**. Waste workflow and full
+economics are mandatory, but this does not transfer general Backend/Agent/UI
+ownership to Aniq or freeze unspecified business policies.
+
+[ML_FRONTEND_HANDOFF.md](ML_FRONTEND_HANDOFF.md) records actual callable types,
+the existing manager sales-materiality read's omission of forecast payloads,
+proposed waste semantics and exact cost examples. Numerical work now includes
+waste helpers, the21-date ledger/rollout, explicit supply-window validation, bounded
+greedy routine continuation, finite economic search and independent candidate
+validation. Earlier combined numerical regression passed861 tests; final new-module
+verification passed146 tests in145.42s. The requirement audit is complete and
+recorded in the handback. Production policies and connected acceptance remain open.
+Fixture search selectsSGD63.75 lean supply overSGD64.50 cheap bulk; the separate
+split-supplier example isSGD62.25. These are synthetic policy-explicit examples,
+not approved production policies or measured savings. Manager persistence/reads,
+Agent consumption and connected acceptance remain separate owner dependencies.
+
+Whole-API Ruff/Pyright pass; relevant numerical regressions and the corrected
+external-temp synthetic-history rerun are detailed in the handback. Publication is
+now authorised; the PR/commit history establishes its status. No Backend persistence
+change, live-model run or operational database change is part of this slice.
+The shared issue16 obligations below remain in force. The numerical modules remain
+policy-explicit and disconnected from production publication. Prior implementation
+records below are historical and do not establish today's Agent/UI status.
+
 ## Current handover — v1.18, 25 September 2026
 
 Aniq's post-purchase Backend slice is on

@@ -1,0 +1,23 @@
+{
+  "fixture_id": "synthetic-21-calendar-day-chicken-economics-v1",
+  "synthetic": true,
+  "catalogue_fixture": "seasonal_baseline_v3.json",
+  "issue_time": "2026-02-16T00:00:00+08:00",
+  "horizon_end": "2026-03-09T00:00:00+08:00",
+  "assumptions": "Explicit numerical fixture, not an approved production calendar or quote. Daily half-hour service at 11:00 with 10 chicken-rice portions and explicit zero for all other dishes. Current canonical recipes. Non-chicken book costs and all shipment fees are zero only to isolate the chicken comparison; quantities remain conserved. All prices and future forecasts are frozen at issue. Protected window days below are supplied fixture assumptions, not newly persisted ordering schedules.",
+  "daily_portions": {"chicken-rice": "10", "fried-rice": "0", "chicken-noodles": "0", "tofu-bowl": "0", "vegetable-noodles": "0"},
+  "opening": {"chicken": "3", "rice": "100", "noodles": "0", "eggs": "0", "tofu": "0", "vegetables": "0", "oil": "0", "soy-sauce": "100"},
+  "protected_days": {"chicken": 1, "rice": 14, "noodles": 3, "eggs": 3, "tofu": 2, "vegetables": 1, "oil": 7, "soy-sauce": 7},
+  "chicken_expiry": "2026-02-16",
+  "other_expiry": "2026-03-10",
+  "chicken_unit_cost": "2",
+  "chicken_incremental_disposal_rate": "1",
+  "effective_net_price": "10",
+  "noningredient_variable_cost": "2",
+  "policy_status": "PROPOSED_NUMERICAL_FIXTURE_ONLY",
+  "independent_oracles": {
+    "no_new_supply": {"required_chicken_rice": "210", "served": "10", "unmet": "200", "chicken_used": "1.5", "chicken_expired": "1.5", "opening_value": "6", "disposal": "1.5", "unmet_contribution": "1600", "zero_terminal_total": "1607.50"},
+    "new_supply_30_kg_day2_10am": {"served": "210", "acquisition": "60", "zero_terminal_total": "67.50"},
+    "new_supply_30_kg_day2_1130am_expiry_after_horizon": {"served": "200", "unmet": "10", "chicken_terminal": "1.5", "zero_terminal_total": "147.50", "book_terminal_total": "144.50"}
+  }
+}
