@@ -79,10 +79,27 @@ content fails with 409 `CALCULATION_ARTIFACT_CONFLICT`. Read-side validation che
 the hash and the run/revision binding. Existing run-snapshot lifecycle protections
 continue to apply.
 
-Current availability is successful normal first-slice calculations (including
-supported promotion calculations). Contingency, incomplete/no-candidate results,
-and standalone sales-materiality forecast views need additional explicit mapping;
-do not display this as an all-scenario result catalogue yet.
+Current availability of `calculation-results` is successful normal first-slice
+calculations (including supported promotion calculations). Contingency and
+incomplete/no-candidate normal results need additional explicit mapping; do not
+display this as an all-scenario result catalogue yet.
+
+## Sales assessment forecast
+
+The existing `GET /api/v1/manager/runs/{run_id}/sales-materiality` additionally
+returns `issued_forecast` (`IssuedForecastDisplay`, version
+`ISSUED_FORECAST_DISPLAY_V1`). This allowlists the exact persisted forecast,
+frozen dish names, input identity/version, plan reference, assessment clocks,
+revision and canonical request SHA-256. It does not expose the engine request.
+The route still returns null when no sales assessment exists.
+
+This forecast is the issued comparison basis, not a new demand adjustment. Its
+own clocks can precede the assessment clocks. Per-dish method/eligible-history
+metadata is unavailable in this exchange and is explicitly identified as such;
+it is not reconstructed on read. The existing `result.projection`, findings,
+limitations and completeness retain the canonical calculated stock-risk output.
+An incomplete materiality result does not imply its comparison forecast is zero
+or that no stock risk exists. Select this response by the exact sales run ID.
 
 Waste entry remains disabled pending its approved persistence, inventory-effect,
 correction and eligibility contract. Full-economic policy activation and result

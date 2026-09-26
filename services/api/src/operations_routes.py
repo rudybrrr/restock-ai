@@ -73,6 +73,7 @@ from src.procurement_contract_schemas import (
     ProcurementPolicyVersion,
 )
 from src.sales_materiality_schemas import (
+    IssuedForecastDisplay,
     SalesMaterialityAssessment,
     SalesMaterialityContext,
     SalesMaterialityDisplay,
@@ -360,8 +361,26 @@ def read_manager_sales_materiality(run_id: str, session: SessionDep, manager: Ma
         if error.detail.code == "MATERIALITY_ASSESSMENT_NOT_FOUND":
             return None
         raise
-    return SalesMaterialityDisplay.model_validate(
-        assessment.model_dump(include=set(SalesMaterialityDisplay.model_fields))
+    values = assessment.model_dump(include=set(SalesMaterialityDisplay.model_fields))
+    request = assessment.engine_request
+    return SalesMaterialityDisplay(
+        **values,
+        issued_forecast=IssuedForecastDisplay(
+            request_sha256=assessment.request_sha256,
+            captured_state_revision=assessment.captured_state_revision,
+            assessment_as_of=assessment.as_of,
+            assessment_known_at=assessment.known_at,
+            forecast_input_id=request.issued_input.id,
+            forecast_input_version=request.issued_input.version,
+            plan_reference=request.plan_reference,
+            forecast=request.issued_forecast,
+            dish_names={item.id: item.name for item in request.issued_catalogue.menu_items},
+            limitations=[
+                "Issued forecast retained for comparison; not a newly adjusted forecast.",
+                "Per-dish baseline method and eligibility metadata were not retained in this exchange.",
+                "Projection completeness is recorded separately in the materiality result.",
+            ],
+        ),
     )
 
 
