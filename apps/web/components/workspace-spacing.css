@@ -1,4 +1,179 @@
 /* Shared workspace rhythm. Landing-page composition remains independent. */
+.restock-app .area-intro { margin-bottom: 28px; }
+.restock-app .area-intro > p { font-size: 13px; color: #5c695c; margin: 0 0 14px; max-width: 84ch; }
+.restock-app .area-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.restock-app .area-tabs a { padding: 10px 0 14px; font-size: 14px; white-space: nowrap; color: #657360; border-bottom: 2px solid transparent; }
+.restock-app .area-tabs a[aria-current=page] { color: var(--forest); font-weight: 600; border-color: var(--forest); }
+.restock-app .tab-description { font-size: 13px; color: #5c695c; margin: -8px 0 24px; max-width: 86ch; }
+.restock-app :is(.area-guide,.view-guide) { font-size: 13px; color: #5c695c; }
+.restock-app :is(.area-guide,.view-guide) summary { cursor: pointer; padding-block: 10px; color: var(--forest); width: fit-content; }
+.restock-app .area-guide { margin-top: 8px; }
+.restock-app :is(.area-guide,.view-guide) dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; margin: 8px 0 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.restock-app :is(.area-guide,.view-guide) dt { font-weight: 600; color: var(--ink,#202823); margin-bottom: 8px; }
+.restock-app :is(.area-guide,.view-guide) dd { margin: 0; line-height: 1.65; }
+.restock-app .view-guidance { margin-bottom: 24px; }
+.restock-app .view-guidance .tab-description { margin-bottom: 4px; }
+.restock-app .view-guide dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.restock-app .quick-start { margin-bottom: 28px; padding: 20px 0; border-block: 1px solid var(--line); }
+.restock-app .quick-start header { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+.restock-app .quick-start h2 { font-size: 18px; margin: 0 0 6px; }
+.restock-app .quick-start header p { color: #657360; font-size: 13px; margin: 0; }
+.restock-app .quick-start ol { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 28px; list-style: none; padding: 0; margin: 20px 0 16px; }
+.restock-app .quick-start li { font-size: 14px; }
+.restock-app .quick-start li p { font-size: 13px; color: #657360; margin: 8px 0; }
+.restock-app .quick-start a { color: var(--forest); text-decoration: underline; text-underline-offset: 4px; }
+.restock-app .guide-toggle { background: transparent; border: 0; padding: 8px 0; margin-bottom: 18px; color: var(--forest); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.restock-app .quick-start-prompt { display: flex; align-items: center; gap: 20px; padding: 18px 22px; background: #eef1e9; margin-bottom: 32px; }
+.restock-app .quick-start-prompt > div { flex: 1; }
+.restock-app .quick-start-prompt h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.restock-app .quick-start-prompt p { margin: 0; font-size: 13px; color: #5c695c; }
+.restock-app .quick-start-dialog .quick-start { border: 0; margin: 0; }
+.restock-app .quick-start-dialog .quick-start ol { grid-template-columns: minmax(0,1fr); gap: 0; }
+.restock-app .quick-start-dialog li { padding: 24px 0; border-bottom: 1px solid var(--line); }
+.restock-app .quick-start-dialog li strong { font-size: 18px; font-weight: 600; }
+.restock-app .quick-start-dialog li p { font-size: 14px; margin: 12px 0; }
+.restock-app .purchasing-steps { margin: 20px 0 28px; }
+.restock-app .purchasing-steps ol { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 20px; }
+.restock-app .purchasing-steps li { display: flex; gap: 10px; border-top: 2px solid var(--line); padding-top: 12px; font-size: 14px; }
+.restock-app .purchasing-steps li[aria-current=step] { border-color: var(--forest); }
+.restock-app .purchasing-steps a { color: var(--forest); font-weight: 600; }
+.restock-app .purchasing-steps p { margin: 6px 0 0; font-size: 12px; color: #657360; }
+.restock-app .step-number { color: #657360; font-size: 11px; padding-top: 3px; }
+@media(max-width:700px) {
+  .restock-app :is(.area-guide,.view-guide) dl { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .restock-app .quick-start ol { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .restock-app .purchasing-steps ol { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+  .restock-app .area-tabs { gap: 20px; }
+}
+.restock-app .terms-link { border: 0; background: transparent; color: var(--forest); font: inherit; cursor: pointer; padding: 10px 0; display: block; text-decoration: underline; text-underline-offset: 4px; }
+.restock-app .supplier-terms-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px,100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; border-left: 1px solid var(--line); color: var(--ink,#202823); background: #f8f9f4; overflow: auto; box-shadow: -12px 0 40px #20282315; }
+.restock-app .supplier-terms-dialog::backdrop { background: #172b2350; }
+.restock-app .terms-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 26px; border-bottom: 1px solid var(--line); }
+.restock-app .terms-header h2 { font-size: 24px; line-height: 1.3; margin: 8px 0 0; }
+.restock-app .terms-header .eyebrow { font-size: 10px; margin: 0; }
+.restock-app .terms-body { padding: 24px 26px; }
+.restock-app .terms-body h3 { font-size: 18px; margin: 28px 0 8px; }
+.restock-app .terms-body > .quiet { font-size: 13px; margin: 0 0 16px; }
+.restock-app .terms-facts { margin: 0; }
+.restock-app .terms-facts > div { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-block: 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.restock-app .terms-facts dt { color: #657360; }
+.restock-app .terms-facts dd { margin: 0; }
+.restock-app .arrival-schedule { max-height: 40dvh; overflow-y: auto; overscroll-behavior: contain; border-block: 1px solid var(--line); padding-right: 10px; }
+.restock-app .arrival-day { padding-block: 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.restock-app .arrival-day:last-child { border-bottom: 0; }
+.restock-app .arrival-day > div { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; color: #596b57; }
+/* Open sections replace the repeated card stack inside the app. */
+.restock-app .workspace-content .panel { background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0; overflow: visible; margin-bottom: 32px; }
+.restock-app .workspace-content .panel-head { padding: 18px 0 14px; border-bottom: 0; }
+.restock-app .workspace-content .panel-body { padding: 0 0 18px; }
+.restock-app .workspace-content .panel-body > h3:first-child { margin-top: 0; }
+.restock-app .workspace-content .panel-body.form-grid { padding-top: 18px; }
+.restock-app .workspace-content .panel-body.decision-brief { padding: 20px 24px; margin-bottom: 20px; }
+.restock-app .workspace-content .table-scroll { border-radius: 0; }
+.restock-app .workspace-content th { background: #edf0e8; }
+.restock-app .workspace-content td { background: #ffffff60; }
+.restock-app .workspace-content .two-columns { align-items: start; gap: 36px; }
+.restock-app .workspace-content .two-columns > .panel { background: #fff; border: 1px solid #dde2d8; margin-bottom: 36px; }
+.restock-app .workspace-content .two-columns > .panel > .panel-head { background: #f0f2ec; padding: 20px 24px; border-bottom: 1px solid #dde2d8; }
+.restock-app .workspace-content .two-columns > .panel > :is(.panel-body,.empty-state) { padding: 24px; }
+.restock-app .workspace-content .two-columns > .panel h2 { font-size: 18px; font-weight: 600; }
+.restock-app .overview-summary .stat-strip { background: transparent; border: 0; display: flex; flex-wrap: wrap; gap: 20px 40px; margin-bottom: 36px; }
+.restock-app .overview-summary .stat-strip > div { border: 0; padding: 0; display: flex; align-items: baseline; gap: 12px; }
+.restock-app .overview-summary .stat-strip strong { font-size: 26px; }
+.restock-app .overview-summary .stat-strip span { font-size: 13px; }
+.restock-app .overview-summary .assessment-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 20px; }
+.restock-app .overview-summary .assessment-row .status-tag { grid-column: 2; grid-row: 1; }
+.restock-app .overview-summary .assessment-row p { margin: 0; }
+.restock-app .overview-summary .assessment-row :is(small,.quiet,a) { grid-column: 1 / -1; }
+.restock-app .workspace-content .empty-state { padding: 18px 0 24px; }
+.restock-app .workspace-content .calculation-checks { border: 0; border-block: 1px solid var(--line); padding: 18px 0; }
+.restock-app .workspace-content .evidence-display.panel > .panel-head { padding-inline: 0; }
+.restock-app .workspace-content .quick-links { display: flex; flex-wrap: wrap; gap: 16px 28px; padding-block: 16px; border-top: 1px solid var(--line); font-size: 14px; color: var(--forest); }
+.restock-app .workspace-content .reading-note { margin-block: 12px; font-size: 13px; color: #5c695c; }
+.restock-app .workspace-content .reading-note > summary { padding-block: 8px; cursor: pointer; }
+.restock-app .workspace-content .reading-note p { margin: 8px 0 12px; max-width: 78ch; }
+.restock-app .workspace-content .compact-note { font-size: 13px; color: #5c695c; margin-block: 12px 20px; }
+.restock-app .workspace-content .processing-complete { background: transparent; padding: 0; border-radius: 0; }
+@media(max-width:700px) {
+  .restock-app .quick-start-prompt { display: grid; grid-template-columns: minmax(0,1fr) 36px; gap: 12px; padding: 16px; }
+  .restock-app .quick-start-prompt > div { grid-column: 1; grid-row: 1; }
+  .restock-app .quick-start-prompt .icon-button { grid-column: 2; grid-row: 1; align-self: start; }
+  .restock-app .quick-start-prompt .button { grid-column: 1 / -1; justify-self: start; }
+  .restock-app .workspace-content .two-columns > .panel > :is(.panel-head,.panel-body,.empty-state) { padding: 18px; }
+  .restock-app .overview-summary .stat-strip { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+  .restock-app .overview-summary .stat-strip > div { display: block; }
+  .restock-app .overview-summary .stat-strip strong { font-size: 24px; }
+  .restock-app .overview-summary .stat-strip span { display: block; font-size: 11px; margin-top: 6px; }
+  .restock-app .workspace-content .two-columns { gap: 8px; }
+  .restock-app .workspace-content .panel { margin-bottom: 24px; }
+  .restock-app .workspace-content .panel-body.decision-brief { padding: 18px; }
+}
+.restock-app .attention-panel { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 20px; align-items: center; padding: 28px; border: 1px solid #ced9c9; border-left: 4px solid var(--forest); background: #edf1e8; margin: 0 0 28px; }
+.restock-app .attention-panel .eyebrow { margin: 0 0 8px; font-size: 10px; }
+.restock-app .attention-panel h2 { font-weight: 600; font-size: 24px; line-height: 1.25; letter-spacing: -.4px; margin: 0 0 10px; }
+.restock-app .attention-panel p:not(.eyebrow) { font-size: 14px; color: #526056; max-width: 72ch; margin: 0; }
+.restock-app .attention-warning { background: #fbf4e6; border-color: #e8d5af; border-left-color: #977335; }
+.restock-app .attention-icon { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #b9cbb4; color: var(--forest); }
+.restock-app .attention-warning .attention-icon { border-color: #dac49b; color: #80611c; }
+.restock-app .workflow-strip { display: flex; flex-wrap: wrap; gap: 0; list-style: none; padding: 0; margin: 22px 0; font-size: 12px; color: #546354; counter-reset: workflow; }
+.restock-app .workflow-strip li { display: flex; align-items: center; gap: 8px; counter-increment: workflow; padding: 8px 18px 8px 0; }
+.restock-app .workflow-strip li::before { content: counter(workflow, decimal-leading-zero); font-size: 10px; color: #657b60; }
+.restock-app .workflow-strip li:not(:last-child)::after { content: "→"; padding-left: 8px; color: #879482; }
+.restock-app .progress-track { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); list-style: none; gap: 16px; margin: 22px 0 0; padding: 0; }
+.restock-app .progress-track li { padding-top: 12px; border-top: 2px solid #cbd2c5; color: #68736b; font-size: 12px; }
+.restock-app .progress-track li[data-state=done] { border-color: #406b46; color: #2d5437; }
+.restock-app .progress-track li[data-state=current] { border-color: #b68834; color: #765519; }
+.restock-app .progress-track li[data-state=failed] { border-color: #b56449; color: #8b352a; }
+.restock-app .scope-note { padding: 14px 0; border-block: 1px solid var(--line); color: #59645c; font-size: 14px; line-height: 1.65; margin: 20px 0; }
+.restock-app .purchase-context { padding: 0 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.restock-app .purchase-context h3 { font-size: 18px; margin: 0 0 10px; font-weight: 600; }
+.restock-app .purchase-context .table-scroll { margin-block: 18px; border: 1px solid var(--line); }
+.restock-app .purchase-context > a { font-size: 14px; color: var(--forest); }
+.restock-app .assessment-story { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 0 28px; border-block: 1px solid var(--line); }
+.restock-app .assessment-story dt,.restock-app .assessment-story dd { padding: 18px 0; margin: 0; line-height: 1.6; border-bottom: 1px solid var(--line); }
+.restock-app .assessment-story dt { color: #50604f; font-size: 13px; }
+.restock-app .assessment-story dd { font-size: 15px; }
+.restock-app .assessment-story :nth-last-child(-n+2) { border-bottom: 0; }
+.restock-app .calculation-checks { border: 1px solid var(--line); padding: 20px; margin: 24px 0; }
+.restock-app .calculation-checks h3 { margin: 0 0 10px; }
+.restock-app .assessment-row { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.restock-app .assessment-row:first-child { padding-top: 0; }
+.restock-app .assessment-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.restock-app .assessment-row p { margin: 8px 0; }
+.restock-app .assessment-row > a { display: inline-block; font-size: 13px; margin-top: 8px; color: var(--forest); }
+.restock-app .deferred-feature { margin: 24px 0; color: var(--muted); font-size: 13px; }
+.restock-app .deferred-feature > summary { cursor: pointer; padding-block: 10px; }
+.restock-app .table-scroll { scrollbar-color: #b6c4ad #f1f3ed; }
+.restock-app table { font-size: 14px; }
+.restock-app .cost-ledger { max-width: 520px; margin-bottom: 20px; }
+.restock-app .cost-ledger strong { white-space: nowrap; }
+.restock-app .icon-button { min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
+.restock-app .mobile-menu { display: none; }
+.restock-app .mobile-table-hint { display: none; }
+.restock-app .navigation-backdrop { display: none; }
+.restock-app .sidebar { overflow-y: auto; }
+.restock-app .quiet,.restock-app td small { color: #5c695c; }
+.restock-app summary:hover { color: var(--forest); }
+@media(max-width:1100px) { .restock-app .attention-panel { grid-template-columns: 48px minmax(0,1fr); } .restock-app .attention-panel > .button { grid-column: 2; justify-self: start; } }
+@media(max-width:700px) {
+  .restock-app .mobile-table-hint { display: block; font-size: 12px; color: #596b57; padding-inline: 18px; }
+  .restock-app .attention-panel { grid-template-columns: minmax(0,1fr); gap: 16px; padding: 22px 18px; }
+  .restock-app .attention-panel h2 { font-size: 22px; }
+  .restock-app .attention-panel > .button { grid-column: 1; justify-self: stretch; }
+  .restock-app .attention-icon { display: none; }
+  .restock-app .assessment-story { grid-template-columns: minmax(0,1fr); gap: 0; }
+  .restock-app .assessment-story dt { border: 0; padding: 16px 0 4px; }
+  .restock-app .assessment-story dd { padding: 0 0 16px; }
+  .restock-app .progress-track { gap: 10px; }
+  .restock-app .calculation-checks { padding: 16px; }
+  .restock-app .mobile-menu { display: inline-grid; }
+  .restock-app .navigation-backdrop { display: block; position: fixed; inset: 70px 0 0; z-index: 19; background: #20282360; border: 0; }
+  .restock-app .service-date { gap: 8px; }
+}
+.restock-app .decision-brief { border-left: 3px solid #275442; background: #f2f5ee; }
+.restock-app .decision-brief .eyebrow { margin: 0 0 10px; }
+.restock-app .decision-brief h3 { margin: 0 0 12px; font-size: 20px; }
+.restock-app .decision-brief > p { max-width: 76ch; }
 .restock-app {
   --workspace-gutter: 32px;
   --panel-padding: 24px;

@@ -456,7 +456,7 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base + "/workspace/overview");
     await page.getByRole("button", { name: "Toggle navigation" }).click();
-    await page.getByRole("link", { name: "Inventory", exact: true }).click();
+    await page.getByRole("link", { name: "Stock & sales", exact: true }).click();
     await page.waitForURL("**/workspace/inventory");
     expire = true;
     await page.goto(base + "/workspace/activity");

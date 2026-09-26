@@ -87,18 +87,14 @@ export function ManagerEvidencePanel({
       <header className="panel-head">
         <div>
           <h3>Assessment summary</h3>
-          <p className="quiet">
-            Persisted facts for run {value.run_id}; private prompts and working
-            notes are excluded.
-          </p>
         </div>
         <Status value={value.run_status} />
       </header>
 
-      <dl>
-        <dt>What prompted this assessment?</dt>
+      <dl className="assessment-story">
+        <dt>Trigger</dt>
         <dd>{humanize(value.routing.trigger_type ?? value.trigger)}</dd>
-        <dt>What did ReStock conclude?</dt>
+        <dt>Conclusion</dt>
         <dd>
           {["QUEUED", "RUNNING"].includes(value.run_status)
             ? "No conclusion yet."
@@ -107,7 +103,7 @@ export function ManagerEvidencePanel({
                 ? humanize(value.decision.outcome)
                 : "No decision was recorded."))}
         </dd>
-        <dt>What should I do next?</dt>
+        <dt>Next step</dt>
         <dd>
           {value.run_status === "QUEUED"
             ? "Wait for processing. If the request stays queued, check that the assessment worker is running."
@@ -131,10 +127,14 @@ export function ManagerEvidencePanel({
                           : "Review the recorded decision, reasons and evidence gaps before acting."}
         </dd>
       </dl>
-      <Link href={`/workspace/activity/${encodeURIComponent(runId)}`}>
+      {value.approval.required && value.active_plan && (
+        <p><Link className="button button-primary" href={`/workspace/recommendations?version=${encodeURIComponent(value.active_plan.id)}`}>Review version {value.active_plan.version} →</Link></p>
+      )}
+      {compact && <Link href={`/workspace/activity/${encodeURIComponent(runId)}`}>
         Open this assessment →
-      </Link>
+      </Link>}
 
+      <details className="record-details"><summary>Plan & approval details</summary>
       <dl>
         <dt>Plan / version / status</dt>
         <dd>
@@ -166,6 +166,7 @@ export function ManagerEvidencePanel({
             " · " + value.decision.reason_codes.map(humanize).join(", ")}
         </dd>
       </dl>
+      </details>
 
       {!compact && value.plan_history.length > 0 && (
         <details className="record-details">

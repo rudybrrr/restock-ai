@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, NamedRecord } from "@/lib/api";
 import { EventRecord, SalesBatch } from "@/lib/operations-types";
@@ -72,11 +73,7 @@ export function SalesEntry({ day }: { day: string }) {
   }
   return (
     <>
-      <div className="notice">
-        Complete simulated interval reports. Omitted dishes mean zero sales;
-        partial reports are unsupported. Reports update estimates, while
-        materiality-driven assessment awaits integration.
-      </div>
+      <p className="compact-note">Submit complete interval reports. Omitted dishes count as zero; partial reports are not supported.</p>
       {menu.error && (
         <ErrorNotice error={menu.error} retry={() => menu.refetch()} />
       )}
@@ -156,6 +153,7 @@ export function SalesEntry({ day }: { day: string }) {
           {success && (
             <p className="notice" role="status">
               {success}
+              {" "}<Link href="/workspace/sales">Follow reported sales and assessment →</Link>
             </p>
           )}
           <div className="form-actions">
@@ -184,7 +182,7 @@ export function SalesEntry({ day }: { day: string }) {
         </header>
         {events.error ? (
           <ErrorNotice error={events.error} retry={() => events.refetch()} />
-        ) : (
+        ) : events.isPending ? <p className="empty-state" role="status">Loading recorded intervals…</p> : (
           <div className="table-scroll">
             <table>
               <thead>
@@ -229,6 +227,7 @@ export function SalesEntry({ day }: { day: string }) {
                   ))}
               </tbody>
             </table>
+            {!batches.some(b => localSingapore(b.period_start).startsWith(day)) && <p className="empty-state">No sales intervals recorded for {day}. Submit an explicit zero-sales interval to establish coverage when appropriate.</p>}
           </div>
         )}
       </section>

@@ -1,0 +1,227 @@
+// Isolated manager API fixtures; operational mutations are forbidden in this suite.
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const base = process.env.UI_TEST_URL || "http://localhost:3014";
+const at = "2026-02-16T09:00:00+08:00";
+const ingredient = { id: "vegetables", name: "Vegetables", unit: "kg", interval_days: 1, starting_date: "2026-02-16" };
+const line = { id: "line-1", ingredient_id: "vegetables", supplier_id: "market", quantity: "2.000", unit_price: "4.000", arrival_at: at, ordered_at: at, kind: "EMERGENCY", expiry_date: "2026-02-18", linked_quantity: "0.000", uncommitted_quantity: "2.000" };
+const purchase = { id: "delivery-fixed", ingredient_id: "vegetables", supplier_id: "market", kind: "EMERGENCY", expected_quantity: "4.000", received_quantity: "1.000", outstanding_quantity: "2.000", cancelled_quantity: "1.000", expected_at: at, ordered_at: at, source_validation: "APPROVED_ALLOCATION", expected_expiry_date: "2026-02-18", receipts: [{ id: "receipt-1", lot_id: "lot-1", quantity: "1.000", received_at: at, expiry_date: "2026-02-18" }] };
+const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", initial_quantity: "12.000", unit: "kg", expiry_date: "2026-02-18", received_at: at, counted_at: at, provenance: "PHYSICAL" };
+(async () => {
+  fs.mkdirSync("test-results", { recursive: true });
+  const browser = await chromium.launch({ channel: "msedge", headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    const errors = [];
+    page.on("pageerror", e => errors.push(e.message));
+    let mode = "pending", empty = false, errorData = false;
+    const plan = () => ({ id: "version-1", plan_id: "plan-1", version: 1, status: mode === "approved" ? "APPROVED" : "PENDING_APPROVAL", calculation_mode: "CONTINGENCY_ENGINE", cost_scope: "NEW_PURCHASE_CASH_ONLY", new_purchase_cash_cost: "11.000", total_purchase_cost: "8.000", delivery_cost: "3.000", emergency_penalty: "0.000", total_expected_cost: null, expected_waste_cost: null, expected_stockout_cost: null, lines: [line], run_id: "run-1", forecast_id: "forecast-1", inventory_snapshot_id: "snapshot-1", created_at: at });
+    const run = () => ({ id: "run-1", status: mode === "running" ? "RUNNING" : mode === "queued" ? "QUEUED" : "SUCCEEDED", trigger: "SALES_UPDATED", outcome: mode === "escalate" ? "ESCALATE" : "REVISE_PLAN", escalation_reason: mode === "escalate" ? "CALCULATION_INCOMPLETE" : null, as_of: at, created_at: at, completed_at: at, input_revision: 42, plan_version_id: mode === "escalate" ? null : "version-1", snapshot: { known_at: at, commitments: [purchase], ingredients: [ingredient], suppliers: [{ id: "market", name: "Market" }], decision_engine_artifacts: { validation: { complete: true, feasible: true } }, post_purchase_contingency_result: { id: "result-1", complete: true, findings: [], fixed_delivery_ids: [purchase.id], independent_validation: { complete: true, feasible: true } }, private_prompt: "NEVER_RENDER_THIS_PRIVATE_VALUE" } });
+    await page.route("http://localhost:8000/api/v1/**", async route => {
+      const req = route.request(), path = new URL(req.url()).pathname.replace("/api/v1", "");
+      assert(["GET", "OPTIONS"].includes(req.method()), "Unexpected operational mutation");
+      assert.equal(req.headers().authorization, undefined);
+      let body = [];
+      if (path === "/auth/me") body = { role: "manager", username: "manager" };
+      else if (errorData && path === "/runs") return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "UNAVAILABLE", message: "Assessment records temporarily unavailable" } }) });
+      else if (path === "/ingredients") body = empty ? [] : [ingredient];
+      else if (path.startsWith("/inventory")) body = empty ? [] : [{ ...lot, ...(path.includes("estimated") ? { quantity: "10.000", provenance: "ESTIMATED", coverage_complete: false, status: "ACTIVE", unallocated_consumption: "0.000" } : {}) }];
+      else if (path === "/menu-items") body = empty ? [] : [{ id: "vegetable-noodles", name: "Vegetable noodles" }];
+      else if (path === "/recipes") body = empty ? [] : [{ menu_item_id: "vegetable-noodles", ingredient_id: "vegetables", quantity: "0.200" }];
+      else if (path === "/suppliers") body = [{ id: "market", name: "Market" }];
+      else if (path === "/supplier-offers") body = [{ id: "offer-1", supplier_id: "market", ingredient_id: "vegetables", unit_price: "4.000", available_quantity: "30.000", moq: "1.000", pack_size: "1.000", current_status: "AVAILABLE", recent_on_time_rate: "0.95", lead_time_minutes: 480, order_cutoff: { kind: "LOCAL_TIME", local_time: "23:00:00" }, shelf_life_days_on_arrival: 3, delivery_fee_sgd: "5.000", emergency_fee_sgd: "12.000", observed_at: at, feasible_delivery_at: Array.from({ length: 84 }, (_, i) => `2026-02-${String(1 + Math.floor(i / 3)).padStart(2, "0")}T${["08", "14", "18"][i % 3]}:00:00+08:00`) }];
+      else if (path === "/promotions") body = empty ? [] : [{ id: "promo-1", name: "Lunch offer", start_date: "2026-02-16", end_date: "2026-02-18", active: true, demand_multiplier: "1.2", revision: 1, menu_item_ids: ["vegetable-noodles"], effective_at: at }];
+      else if (path === "/plan-history") body = empty || mode === "escalate" ? [] : [plan()];
+      else if (path === "/plans/version-1") body = plan();
+      else if (path === "/plans/version-1/lines") body = [line];
+      else if (path === "/runs") body = empty ? [] : [run()];
+      else if (path === "/runs/run-1") body = run();
+      else if (path === "/deliveries") body = empty ? [] : [purchase];
+      else if (path.startsWith("/daily-updates/")) body = { draft: null, revisions: [] };
+      else if (path.endsWith("/evidence")) body = { run_id: "run-1", run_status: "SUCCEEDED", trigger: "SALES_UPDATED", active_plan: { ...plan(), line_count: 1 }, plan_history: [], approval: { required: true, status: "PENDING_APPROVAL", plan_version: 1, latest_attempt: null, stale_attempts: [] }, decision: { outcome: "REVISE_PLAN", summary: "Additional vegetables cover the bounded shortfall.", reason_codes: [] }, routing: { specialists: ["DEMAND", "INVENTORY", "PROCUREMENT"], specialist_calls: 3, tool_calls: ["validate_purchase_plan"], tool_call_count: 1, retries: 0 }, timeline: [], validation: [], gaps: [], evaluation: null };
+      else if (path.endsWith("/sales-materiality")) body = { result_reference: "sales-1", result: { complete: true, material_change: true, inventory_feasible: null, findings: [], required_follow_up: [], evidence_refs: [], as_of: at, known_at: at, captured_state_revision: "42" } };
+      else if (path.endsWith("/inventory-adjustment")) body = null;
+      if (path === "/runs/run-1") body.snapshot.decision_engine_artifacts.search_result = { status: "INCOMPLETE", search_complete: false, optimal_in_domain: false, evaluated: 2, domain_size: null, work_used: 10 };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    for (const [state, heading] of [["pending", "An additional purchase is awaiting your decision."], ["running", "ReStock is assessing the latest facts."], ["queued", "Your assessment is in the queue."], ["escalate", "A change needs your review."], ["approved", "Your recommendation is approved."]]) {
+      mode = state;
+      await page.goto(base + "/workspace/overview");
+      await page.getByRole("heading", { name: heading, exact: true }).waitFor();
+    }
+    mode = "pending";
+    await page.goto(base + "/workspace/overview");
+    const nav = page.getByRole("navigation", { name: "Workspace navigation", exact: true });
+    await nav.waitFor();
+    assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Today", "Stock & sales", "Purchasing", "Activity", "Restaurant settings"]);
+    await page.getByRole("heading", { name: "New to ReStock?", exact: true }).waitFor();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.screenshot({ path: `test-results/overview-clean-${width}.png`, fullPage: true });
+      const guideButton = page.getByRole("button", { name: "Open quick start", exact: true });
+      await guideButton.click();
+      const guideDialog = page.getByRole("dialog", { name: "Your first day with ReStock", exact: true });
+      await guideDialog.waitFor();
+      await guideDialog.getByRole("link", { name: "Open purchasing →", exact: true }).waitFor();
+      assert(await guideDialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      await page.screenshot({ path: `test-results/quick-start-${width}.png` });
+      await page.keyboard.press("Escape");
+      await guideDialog.waitFor({ state: "hidden" });
+      assert(await guideButton.evaluate(el => document.activeElement === el));
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole("button", { name: "Dismiss quick start", exact: true }).click();
+    await page.reload();
+    await page.getByRole("button", { name: "Show quick start", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Show quick start", exact: true }).click();
+    await page.getByRole("heading", { name: "New to ReStock?", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Dismiss quick start", exact: true }).click();
+    const stocks = page.getByRole("region", { name: "Stock comparison", exact: true });
+    assert.equal(await stocks.count(), 0);
+    await page.getByRole("tab", { name: "Daily operations", exact: true }).click();
+    await page.getByText("Lunch offer", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("heading", { name: "Your purchase plan", exact: true }).count(), 0);
+    await page.getByRole("tab", { name: "Stock overview", exact: true }).click();
+    assert.equal(await page.getByText("Lunch offer", { exact: true }).count(), 0);
+    await stocks.getByRole("cell", { name: "12.000 kg", exact: true }).waitFor();
+    await stocks.getByRole("cell", { name: "10.000 kg", exact: true }).waitFor();
+    await stocks.getByLabel("Estimate through (Singapore · 2026-02-16)", { exact: true }).fill("08:30");
+    await stocks.getByRole("columnheader", { name: "Usable estimate · 08:30", exact: true }).waitFor();
+    for (const route of ["overview", "inventory", "daily", "sales", "recommendations", "deliveries", "suppliers", "activity", "activity/run-1"]) {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(base + "/workspace/" + route);
+      await page.locator(".page-heading h1").waitFor();
+      await page.locator('.workspace-content [role="status"]').filter({ hasText: /^Loading/ }).first().waitFor({ state: "hidden" });
+      const area = ["inventory", "daily", "sales"].includes(route) ? "Stock & sales" : ["recommendations", "deliveries"].includes(route) ? "Purchasing" : route.startsWith("activity") ? "Activity" : route === "suppliers" ? "Restaurant settings" : "Today";
+      assert.equal(await nav.getByRole("link", { name: area, exact: true }).getAttribute("aria-current"), "page");
+      assert((await page.locator(".area-intro > p").innerText()).length > 20);
+      const areaGuide = page.locator(".area-guide");
+      assert.equal(await areaGuide.getAttribute("open"), null);
+      await areaGuide.locator("summary").click();
+      assert.equal(await areaGuide.locator("dt").count(), 3);
+      assert((await areaGuide.locator("dd").first().innerText()).length > 40);
+      for (const tab of await page.getByRole("tab").all()) {
+        await tab.click();
+        await page.locator(".tab-description").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`${route} missing guidance after tab click at ${page.url()} ${JSON.stringify(errors)} ${(await page.locator("body").innerText()).slice(0, 1000)}`); });
+        assert((await page.locator(".tab-description").innerText()).length > 20, `${route} missing tab guidance`);
+        const viewGuide = page.locator(".view-guide");
+        await viewGuide.locator("summary").click();
+        assert.deepEqual(await viewGuide.locator("dt").allTextContents(), ["Typical task", "Keep in mind"]);
+        assert((await viewGuide.locator("dd").last().innerText()).length > 40);
+      }
+      if (route === "sales") {
+        await page.getByRole("tab", { name: "Stock estimates", exact: true }).click();
+        await page.getByRole("heading", { name: "Estimated-stock timeline", exact: true }).waitFor();
+        assert.equal(await page.getByRole("heading", { name: "Recipe-implied ingredient usage", exact: true }).count(), 0);
+        await page.getByLabel("Window start", { exact: true }).fill("08:30");
+        await page.getByRole("tab", { name: "Ingredient usage", exact: true }).click();
+        assert.equal(await page.getByLabel("Window start", { exact: true }).inputValue(), "08:30");
+        assert.equal(await page.getByRole("heading", { name: "Estimated-stock timeline", exact: true }).count(), 0);
+      }
+      assert.equal(await page.locator(".workspace-content .placeholder").count(), 0, `${route} still exposes an unfinished screen`);
+      for (const panel of await page.locator(".workspace-content .panel").all()) {
+        const style = await panel.evaluate(el => { const css = getComputedStyle(el); return { radius: css.borderTopLeftRadius, background: css.backgroundColor, leftBorder: css.borderLeftWidth }; });
+        const grouped = await panel.evaluate(el => el.parentElement.classList.contains("two-columns"));
+        assert.deepEqual(style, grouped ? { radius: "0px", background: "rgb(255, 255, 255)", leftBorder: "1px" } : { radius: "0px", background: "rgba(0, 0, 0, 0)", leftBorder: "0px" }, `${route} section hierarchy inconsistent`);
+      }
+      assert.equal(await page.getByRole("tab", { name: "Forecast", exact: true }).count(), 0);
+      assert.equal(await page.getByRole("tab", { name: "Projections", exact: true }).count(), 0);
+      assert(!(await page.locator("body").innerText()).includes("About optional waste records"));
+      for (const width of [1440, 820, 390]) {
+        await page.setViewportSize({ width, height: 1000 });
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${route} overflow at ${width}`);
+        await page.screenshot({ path: `test-results/final-${route.replaceAll("/", "-")}-${width}.png`, fullPage: true });
+      }
+      assert(!(await page.locator("body").innerText()).includes("NEVER_RENDER_THIS_PRIVATE_VALUE"));
+    }
+    await page.goto(base + "/workspace/recommendations");
+    const workflow = page.getByRole("navigation", { name: "Purchasing workflow", exact: true });
+    assert.equal(await workflow.locator('[aria-current="step"]').innerText().then(text => text.includes("Review")), true);
+    mode = "approved";
+    await page.reload();
+    await workflow.getByText("Version 1 approved. No order placed.", { exact: true }).waitFor();
+    assert((await workflow.locator('[aria-current="step"]').innerText()).includes("Record purchase"));
+    await workflow.getByRole("link", { name: "Receive", exact: true }).click();
+    await page.getByRole("tab", { name: "Outstanding", exact: true }).waitFor();
+    assert.equal(await page.getByRole("tab", { name: "Outstanding", exact: true }).getAttribute("aria-selected"), "true");
+    mode = "pending";
+    await page.goto(base + "/workspace/recommendations");
+    await page.getByRole("heading", { name: "Already arranged · not new purchases", exact: true }).waitFor();
+    await page.getByRole("cell", { name: "4.000", exact: true }).waitFor();
+    const commitments = page.getByRole("region", { name: "Existing purchases", exact: true });
+    await commitments.getByRole("columnheader", { name: "Cancelled", exact: true }).waitFor();
+    await commitments.getByRole("cell", { name: "kg", exact: true }).waitFor();
+    assert.equal(await commitments.locator("details").getAttribute("open"), null);
+    await commitments.getByText("Capture times", { exact: true }).click();
+    await commitments.getByText(/Operational cutoff:/).waitFor();
+    await page.getByText("Why this recommendation?", { exact: true }).click();
+    await page.getByText("Additional vegetables cover the bounded shortfall.", { exact: true }).waitFor();
+    await page.goto(base + "/workspace/activity/run-1");
+    await page.getByText("Complete · candidate feasible within its captured scope", { exact: true }).waitFor();
+    await page.getByText("Stored procurement search evidence", { exact: true }).click();
+    await page.getByText("Incomplete — not a certified optimum", { exact: true }).waitFor();
+    await page.getByText("2 / Not recorded", { exact: true }).waitFor();
+    await page.goto(base + "/workspace/sales");
+    await page.getByRole("link", { name: "Record or correct sales →" }).click();
+    await page.getByRole("heading", { name: "Record a sales interval", exact: true }).waitFor();
+    await page.goto(base + "/workspace/suppliers");
+    const trigger = page.getByRole("button", { name: "View terms", exact: true });
+    await trigger.waitFor();
+    const row = trigger.locator("xpath=ancestor::tr");
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const before = (await row.boundingBox()).height;
+      await trigger.click();
+      const dialog = page.getByRole("dialog", { name: "Market · Vegetables", exact: true });
+      await dialog.waitFor();
+      assert.equal(await dialog.locator(".arrival-day").count(), 28);
+      assert.equal(await dialog.locator(".arrival-day").first().locator("span").count(), 3);
+      const schedule = dialog.getByLabel("Reported arrival schedule", { exact: true });
+      assert(await schedule.evaluate(el => el.scrollHeight > el.clientHeight));
+      assert(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      assert.equal((await row.boundingBox()).height, before);
+      await page.screenshot({ path: `test-results/supplier-terms-${width}.png` });
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "hidden" });
+      assert.equal(await trigger.evaluate(el => document.activeElement === el), true);
+    }
+    await trigger.click();
+    await page.getByRole("button", { name: "Close supplier terms", exact: true }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.goto(base + "/workspace/inventory");
+    const stockNav = page.getByRole("navigation", { name: "Stock & sales pages", exact: true });
+    await stockNav.getByRole("link", { name: "Sales", exact: true }).click();
+    await page.getByRole("heading", { name: "Sales during service", exact: true }).waitFor();
+    await stockNav.getByRole("link", { name: "Closing update", exact: true }).click();
+    await page.getByRole("heading", { name: "Closing update", exact: true }).waitFor();
+    await stockNav.getByRole("link", { name: "Inventory", exact: true }).click();
+    await page.getByText("Created by a recorded delivery receipt", { exact: true }).waitFor();
+    await page.getByPlaceholder("Search ingredients").fill("no-match");
+    await page.getByText("No lots match this ingredient. Try a different search.", { exact: true }).waitFor();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(base + "/workspace/inventory?view=menu");
+    await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Restaurant settings", exact: true }).waitFor();
+    assert.equal(await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Restaurant settings", exact: true }).getAttribute("aria-current"), "page");
+    await page.getByRole("heading", { name: "Vegetable noodles", exact: true }).waitFor();
+    await page.getByRole("navigation", { name: "Restaurant settings pages", exact: true }).getByRole("link", { name: "Ordering schedules", exact: true }).click();
+    await page.getByText("Every 1 days", { exact: true }).waitFor();
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.getByRole("button", { name: "Toggle navigation", exact: true }).click();
+    await page.getByRole("link", { name: "Stock & sales", exact: true }).focus();
+    await page.keyboard.press("Escape");
+    assert.equal(await page.getByRole("button", { name: "Toggle navigation", exact: true }).getAttribute("aria-expanded"), "false");
+    empty = true;
+    await page.goto(base + "/workspace/overview");
+    await page.getByRole("heading", { name: "Keep today’s records complete.", exact: true }).waitFor();
+    await page.goto(base + "/workspace/activity");
+    await page.getByRole("tab", { name: "Audit details", exact: true }).click();
+    await page.getByText("No audit entries recorded.", { exact: true }).waitFor();
+    errorData = true;
+    await page.goto(base + "/workspace/overview");
+    await page.getByRole("heading", { name: "Some records could not be checked.", exact: true }).waitFor({ timeout: 20000 });
+    assert.deepEqual(errors, []);
+    console.log("PASS: next-action priorities, counted/estimated stock with explicit cutoff, nine screens/three widths, captured commitments, stored validation, sales handoff, provenance, navigation, empty/filter/error states and no private trace rendering.");
+  } finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

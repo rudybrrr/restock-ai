@@ -517,13 +517,16 @@ async function main() {
   });
   try {
     await page.goto(base + "/workspace/sales");
-    await page.getByRole("cell", { name: "0.875 kg", exact: true }).waitFor();
     await page.getByRole("cell", { name: "7", exact: true }).waitFor();
     assert.equal(
       await page.getByRole("cell", { name: "3", exact: true }).count(),
       0,
     );
+    await page.getByRole("tab", { name: "Ingredient usage", exact: true }).click();
+    await page.getByRole("cell", { name: "0.875 kg", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Stock estimates", exact: true }).click();
     await page.getByText("Incomplete", { exact: true }).first().waitFor();
+    await page.getByRole("tab", { name: "Reported sales", exact: true }).click();
     await page.getByLabel("Refresh every 10 seconds").uncheck();
     reports.push({
       ...first,
@@ -533,10 +536,13 @@ async function main() {
     });
     await page.getByRole("button", { name: "Refresh now" }).click();
     await page.getByText(/Overlapping intervals detected/).waitFor();
+    await page.getByRole("tab", { name: "Ingredient usage", exact: true }).click();
     assert.equal(
       await page.getByRole("cell", { name: "0.875 kg", exact: true }).count(),
       0,
     );
+    await page.getByRole("cell", { name: "Unavailable kg", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Reported sales", exact: true }).click();
     if (screenshotsEnabled) {
       await page.screenshot({
         path: "test-results/intraday-wide.png",
@@ -554,8 +560,10 @@ async function main() {
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/recommendations");
+    await page.getByText("Why this recommendation?", { exact: true }).click();
     await page.getByText("Calculation references", { exact: true }).click();
     await page.getByText("Assessment summary", { exact: true }).waitFor();
+    await page.getByText("Plan & approval details", { exact: true }).click();
     await page.getByText(/1 stale attempt/).waitFor();
     await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page.getByText("S$100.00", { exact: true }).waitFor();
@@ -578,7 +586,7 @@ async function main() {
       );
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("tab", { name: "Forecast", exact: true }).click();
+    await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page
       .getByRole("heading", { name: "Forecast inputs—not forecast results" })
       .waitFor();
@@ -634,11 +642,12 @@ async function main() {
       .waitFor();
     await page.goto(base + "/workspace/activity");
     await page.getByRole("tab", { name: "Assessments", exact: true }).click();
-    await page.locator("details").first().locator("summary").first().click();
+    await page.locator(".record-details").first().locator("summary").first().click();
     await page
       .getByText("Captured inputs and procurement evidence", { exact: true })
       .click();
     await page.getByText("42", { exact: true }).waitFor();
+    await page.getByText("Plan & approval details", { exact: true }).click();
     await page.getByText(/Pending approval for version 1/).waitFor();
     await page
       .locator("summary")

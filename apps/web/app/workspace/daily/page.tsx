@@ -1,5 +1,7 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, InventoryLot, NamedRecord } from "@/lib/api";
 import { DailyHistory, DailyRevision, Draft } from "@/lib/operations-types";
@@ -7,21 +9,29 @@ import { localSingapore, singaporeTime, timestamp } from "@/lib/format";
 import {
   ErrorNotice,
   PageHeading,
-  Placeholder,
   Status,
+  TabDescription,
   useServiceDate,
 } from "@/components/workspace";
 import { SalesEntry } from "@/components/sales-entry";
 import { ChangeHistory } from "@/components/change-events";
 
 export default function DailyPage() {
+  return <Suspense fallback={<p role="status">Loading daily operations…</p>}><DailyContent /></Suspense>;
+}
+function DailyContent() {
+  const params = useSearchParams();
+  const view = params.get("view");
+  return <DailyTabs key={view} initialTab={view === "sales" ? "Sales intervals" : "Closing update"} />;
+}
+function DailyTabs({ initialTab }: { initialTab: string }) {
   const { day } = useServiceDate();
-  const [tab, setTab] = useState("Closing update");
+  const [tab, setTab] = useState(initialTab);
   return (
     <>
       <PageHeading
         eyebrow="DAILY OPERATIONS"
-        title="Close the day with confidence."
+        title={tab === "Sales intervals" ? "Report sales" : "Closing update"}
         description={`Physical counts and final dish sales · ${day} · Singapore time`}
       />
       <div className="tabs" role="tablist" aria-label="Daily operations">
@@ -36,6 +46,7 @@ export default function DailyPage() {
           </button>
         ))}
       </div>
+      <TabDescription tab={tab} />
       {tab === "Closing update" ? (
         <>
           <DailyEditor key={day} day={day} />
@@ -315,10 +326,7 @@ function DailyEditor({ day }: { day: string }) {
           )}
         </fieldset>
       </form>
-      <Placeholder title="Optional recorded waste">
-        A dedicated waste-entry API is not connected. Stock discrepancies remain
-        separate from measured waste.
-      </Placeholder>
+      {message && <p><Link href="/workspace/activity">Review assessments and submission activity →</Link></p>}
       <section className="panel">
         <header className="panel-head">
           <h2>Submission history & reconciliation</h2>

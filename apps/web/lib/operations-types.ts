@@ -52,6 +52,7 @@ export type Delivery = {
   cancelled_quantity: string;
   outstanding_quantity: string;
   expected_at: string;
+  expected_expiry_date?: string | null;
   ordered_at: string;
   source_plan_line_id: string | null;
   source_validation: string;

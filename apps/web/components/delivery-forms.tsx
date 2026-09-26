@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord, PlanLine } from "@/lib/api";
 import { Delivery } from "@/lib/operations-types";
+import Link from "next/link";
 import { localSingapore, timestamp } from "@/lib/format";
 import { ErrorNotice } from "./workspace";
 type Allocation = PlanLine & { id: string; uncommitted_quantity: string };
@@ -52,6 +53,10 @@ export function PurchaseForm({
     e.preventDefault();
     if (pending) return;
     const f = new FormData(e.currentTarget);
+    if (f.get("expiry") && String(f.get("expiry")) < String(f.get("arrival")).slice(0, 10)) {
+      setError(new Error("Expected expiry cannot precede the expected arrival date."));
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -64,6 +69,7 @@ export function PurchaseForm({
           expected_quantity: f.get("quantity"),
           ordered_at: timestamp(String(f.get("ordered"))),
           expected_at: timestamp(String(f.get("arrival"))),
+          expected_expiry_date: f.get("expiry") || null,
           source_plan_line_id: allocation?.id ?? null,
           cycle_date: f.get("cycle") || null,
         },
@@ -187,6 +193,8 @@ export function PurchaseForm({
               min="0.001"
               max={allocation?.uncommitted_quantity}
               step="0.001"
+              key={allocation?.id ?? "manual"}
+              defaultValue={allocation?.uncommitted_quantity ?? ""}
             />
             {allocation && (
               <small>
@@ -196,7 +204,7 @@ export function PurchaseForm({
           </label>
           <label>
             Purchase type
-            <select name="kind">
+            <select name="kind" key={allocation?.id ?? "manual"} defaultValue={allocation?.kind ?? "NORMAL"}>
               <option>NORMAL</option>
               <option>EMERGENCY</option>
             </select>
@@ -207,8 +215,13 @@ export function PurchaseForm({
               type="datetime-local"
               name="ordered"
               required
-              defaultValue={`${day}T08:00`}
+              key={allocation?.id ?? day}
+              defaultValue={allocation?.ordered_at ? localSingapore(allocation.ordered_at) : `${day}T08:00`}
             />
+          </label>
+          <label>
+            Expected expiry date (optional)
+            <input type="date" name="expiry" key={allocation?.id ?? "manual"} defaultValue={allocation?.expiry_date ?? ""} />
           </label>
           <label>
             Expected arrival (Singapore)
@@ -295,6 +308,7 @@ export function DeliveryAction({
         : {
             expected_quantity: f.get("quantity"),
             expected_at: timestamp(String(f.get("arrival"))),
+            expected_expiry_date: f.get("expected-expiry") || null,
             effective_at: timestamp(String(f.get("effective"))),
             cancel_remainder: f.get("cancel") === "on",
           };
@@ -398,6 +412,11 @@ export function DeliveryAction({
                 <input name="cancel" type="checkbox" />
                 <small>Cancellation closes the remaining commitment.</small>
               </label>
+              <label>
+                Expected expiry date (optional)
+                <input name="expected-expiry" type="date" defaultValue={delivery.expected_expiry_date ?? ""} />
+                <small>Leaving this blank retains any previously recorded expected expiry.</small>
+              </label>
             </>
           )}
         </div>
@@ -476,6 +495,7 @@ export function DeliveryAction({
       {message && (
         <p className="notice" role="status">
           {message}
+          {mode === "receive" && <> <Link href="/workspace/inventory">Inspect the received stock →</Link></>}
         </p>
       )}
     </form>

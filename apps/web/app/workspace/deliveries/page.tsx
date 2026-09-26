@@ -1,5 +1,7 @@
 "use client";
 import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { PurchasingSteps } from "@/components/purchasing-steps";
 import { useQuery } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord } from "@/lib/api";
 import { Delivery } from "@/lib/operations-types";
@@ -8,14 +10,19 @@ import {
   ErrorNotice,
   PageHeading,
   Status,
+  TabDescription,
   useServiceDate,
 } from "@/components/workspace";
 import { PurchaseForm, DeliveryAction } from "@/components/delivery-forms";
 import { ChangeHistory } from "@/components/change-events";
 export default function DeliveriesPage() {
+  const view = useSearchParams().get("view");
+  return <DeliveriesContent key={view} receiving={view === "receive"} />;
+}
+function DeliveriesContent({ receiving }: { receiving: boolean }) {
   const { day } = useServiceDate();
   const [create, setCreate] = useState(false);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState(receiving ? "Outstanding" : "All");
   const [arrivalDay, setArrivalDay] = useState("");
   const [action, setAction] = useState<{
     delivery: Delivery;
@@ -37,8 +44,8 @@ export default function DeliveriesPage() {
     <>
       <PageHeading
         eyebrow="ACTUAL PURCHASES & DELIVERIES"
-        title="From supplier to stockroom."
-        description="Track what you have arranged, what is still on its way, and what has actually arrived."
+        title="Purchases & deliveries"
+        description="Track actual purchases, arrivals and receipts."
       >
         <button
           className="button button-primary"
@@ -47,6 +54,7 @@ export default function DeliveriesPage() {
           {create ? "Close purchase form" : "Record actual purchase"}
         </button>
       </PageHeading>
+      <PurchasingSteps receiving={filter === "Outstanding" || action?.mode === "receive"} />
       <Suspense fallback={<p role="status">Loading purchase form…</p>}>
         <PurchaseForm
           day={day}
@@ -54,6 +62,7 @@ export default function DeliveriesPage() {
           onClose={() => setCreate(false)}
         />
       </Suspense>
+      <p className="compact-note">Purchases are expected supply. Only a receipt adds inventory.</p>
       <div className="tabs" role="tablist" aria-label="Delivery filter">
         {["All", "Outstanding", "Closed"].map((t) => (
           <button
@@ -66,6 +75,7 @@ export default function DeliveriesPage() {
           </button>
         ))}
       </div>
+      <TabDescription tab={filter} />
       <label className="field-label">
         Expected arrival date (optional)
         <input
@@ -144,6 +154,7 @@ export default function DeliveriesPage() {
                           )}
                           <small>Delivery: {d.id}</small>
                           <small>Ordered: {singaporeTime(d.ordered_at)}</small>
+                          <small>Expected expiry: {d.expected_expiry_date ?? "Not recorded"}</small>
                           <small>Cancelled: {d.cancelled_quantity}</small>
                         </details>
                       </td>
@@ -196,6 +207,7 @@ export default function DeliveriesPage() {
               </p>
             </div>
           )}
+          {!!q.data?.length && !q.data.some(d => (!arrivalDay || localSingapore(d.expected_at).startsWith(arrivalDay)) && (filter === "All" || (filter === "Outstanding" ? Number(d.outstanding_quantity) > 0 : Number(d.outstanding_quantity) === 0))) && <p className="empty-state">No deliveries match these filters. Choose All or clear the arrival date.</p>}
         </section>
       )}
     </>

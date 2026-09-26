@@ -1,5 +1,6 @@
 import { Providers } from "@/components/providers";
 import { Workspace } from "@/components/workspace";
+import { Suspense } from "react";
 export default function WorkspaceLayout({
   children,
 }: {
@@ -7,7 +8,7 @@ export default function WorkspaceLayout({
 }) {
   return (
     <Providers>
-      <Workspace>{children}</Workspace>
+      <Suspense fallback={<p role="status">Opening workspace…</p>}><Workspace>{children}</Workspace></Suspense>
     </Providers>
   );
 }

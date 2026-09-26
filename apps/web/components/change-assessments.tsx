@@ -215,13 +215,15 @@ function SavedAssessment({
 export function ChangeAssessments({
   runId,
   active = false,
+  initiallyOpen = false,
 }: {
   runId: string;
   active?: boolean;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Sales and stock-correction assessments</summary>
       {open && (
         <>

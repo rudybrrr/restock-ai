@@ -1,6 +1,10 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { OverviewOperations } from "@/components/overview-operations";
+import { OverviewAttention } from "@/components/overview-attention";
+import { QuickStart } from "@/components/quick-start";
+import { StockComparison } from "@/components/stock-comparison";
 import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
 import { singaporeTime } from "@/lib/format";
 import { moneyOrUnavailable, planCostSummary } from "@/lib/plan-cost";
@@ -9,12 +13,13 @@ import { api, Ingredient, InventoryLot, Plan, Run } from "@/lib/api";
 import {
   ErrorNotice,
   PageHeading,
-  Placeholder,
   Status,
+  TabDescription,
   useServiceDate,
 } from "@/components/workspace";
 
 export default function Overview() {
+  const [tab, setTab] = useState("Summary");
   const { day } = useServiceDate();
   const ingredients = useQuery({
     queryKey: ["ingredients"],
@@ -27,6 +32,7 @@ export default function Overview() {
   const plans = useQuery({
     queryKey: ["plans"],
     queryFn: ({ signal }) => api<Plan[]>("/plan-history", { signal }),
+    refetchInterval: 5000,
   });
   const runs = useQuery({
     queryKey: ["runs"],
@@ -44,16 +50,24 @@ export default function Overview() {
     <>
       <PageHeading
         eyebrow="YOUR DAY, IN ORDER"
-        title="A clearer view of the kitchen."
+        title="Today"
         description={`Service overview · ${day} · historical demonstration date`}
       >
-        <Link href="/workspace/daily" className="button button-primary">
+        <Link href="/workspace/daily" className="button button-secondary">
           Complete daily update →
         </Link>
       </PageHeading>
       {errors.map((q, i) => (
         <ErrorNotice key={i} error={q.error!} retry={() => q.refetch()} />
       ))}
+      <OverviewAttention />
+      <div className="tabs" role="tablist" aria-label="Today views">
+        {["Summary", "Daily operations", "Stock overview"].map(t => <button key={t} id={`today-${t.replaceAll(" ", "-")}`} role="tab" aria-selected={tab === t} aria-controls="today-panel" onClick={() => setTab(t)}>{t}</button>)}
+      </div>
+      <TabDescription tab={tab} />
+      <div id="today-panel" role="tabpanel" aria-labelledby={`today-${tab.replaceAll(" ", "-")}`}>
+      {tab === "Summary" && <div className="overview-summary">
+      <QuickStart />
       <div className="stat-strip">
         <div>
           <strong>{ingredients.data?.length ?? "—"}</strong>
@@ -91,7 +105,7 @@ export default function Overview() {
             <div className="panel-body">
               <Status value={active.status} />
               <h3>Purchase plan · version {active.version}</h3>
-              <p>{active.lines.length} ingredient allocations</p>
+              <p>{active.lines.length} ingredients · {active.calculation_mode === "CONTINGENCY_ENGINE" ? "Additional purchases" : "Purchase recommendation"}</p>
               <p>
                 {planCostSummary(active).label}: {moneyOrUnavailable(planCostSummary(active).value)}
               </p>
@@ -106,14 +120,13 @@ export default function Overview() {
               >
                 Review recommendation
               </Link>
-              <ManagerEvidencePanel runId={active.run_id} compact />
+              <details className="record-details"><summary>Why this recommendation?</summary><ManagerEvidencePanel runId={active.run_id} compact /></details>
             </div>
           ) : (
             <div className="empty-state">
               <h3>No current recommendation.</h3>
               <p>
-                Your next completed assessment will appear here. Approval and
-                actual purchasing are separate steps.
+                Request an assessment to get started.
               </p>
             </div>
           )}
@@ -134,10 +147,12 @@ export default function Overview() {
                 .sort((a, b) => b.created_at.localeCompare(a.created_at))
                 .slice(0, 3)
                 .map((r) => (
-                  <div key={r.id} style={{ marginBottom: 20 }}>
+                  <div key={r.id} className="assessment-row">
                     <Status value={r.status} />
                     <p>{r.trigger.replaceAll("_", " ").toLowerCase()}</p>
                     <small>{singaporeTime(r.as_of)}</small>
+                    <p className="quiet">{r.outcome ? r.outcome.replaceAll("_", " ").toLowerCase() : "Conclusion not yet recorded"}</p>
+                    <Link href={`/workspace/activity/${encodeURIComponent(r.id)}`}>Review assessment →</Link>
                   </div>
                 ))
             ) : (
@@ -146,31 +161,23 @@ export default function Overview() {
           </div>
         </section>
       </div>
-      <OverviewOperations />
-      <Placeholder title="A view of what’s ahead">
-        Projected shortages and demand will appear here when the forecast and
-        inventory evidence are connected. Physical counts and estimates remain
-        available in Inventory.
-      </Placeholder>
-      <section className="panel">
-        <header className="panel-head">
-          <h2>Keep the day moving</h2>
-        </header>
-        <div className="panel-body form-actions">
-          <Link className="button button-secondary" href="/workspace/inventory">
+      </div>}
+      {tab === "Daily operations" && <OverviewOperations />}
+      {tab === "Stock overview" && <StockComparison />}
+      <nav className="quick-links" aria-label="Quick actions">
+          <Link href="/workspace/inventory">
             Inspect inventory
           </Link>
           <Link
-            className="button button-secondary"
             href="/workspace/deliveries"
           >
             Track deliveries
           </Link>
-          <Link className="button button-secondary" href="/workspace/suppliers">
+          <Link href="/workspace/suppliers">
             Report a supplier change
           </Link>
-        </div>
-      </section>
+      </nav>
+      </div>
     </>
   );
 }

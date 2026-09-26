@@ -51,11 +51,7 @@ export function InventorySummary({
           </tbody>
         </table>
       </div>
-      <p className="panel-body quiet">
-        Physical totals can combine observations from different count times and
-        include historical expired lots. Inspect batch timestamps and expiry
-        below before treating them as usable current stock.
-      </p>
+      <p className="compact-note">Latest counts may include expired lots or different count times. Check batch details before using these totals.</p>
     </section>
   );
 }

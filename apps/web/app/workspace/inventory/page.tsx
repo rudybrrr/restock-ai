@@ -1,20 +1,31 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { InventorySummary } from "@/components/inventory-summary";
 import { useQuery } from "@tanstack/react-query";
 import { api, Ingredient, InventoryLot, NamedRecord } from "@/lib/api";
+import { Delivery } from "@/lib/operations-types";
 import {
   ErrorNotice,
   PageHeading,
-  Placeholder,
   Status,
+  TabDescription,
   useServiceDate,
 } from "@/components/workspace";
 
 type Recipe = { menu_item_id: string; ingredient_id: string; quantity: string };
 export default function Inventory() {
+  return <Suspense fallback={<p role="status">Loading inventory…</p>}><InventoryRoute /></Suspense>;
+}
+function InventoryRoute() {
+  const view = useSearchParams().get("view");
+  return <InventoryContent key={view} initialTab={view === "menu" ? "Menu & recipes" : view === "schedules" ? "Ordering schedules" : "Physical counts"} />;
+}
+function InventoryContent({ initialTab }: { initialTab: string }) {
   const { day } = useServiceDate();
-  const [tab, setTab] = useState("Physical counts");
+  const [tab, setTab] = useState(initialTab);
+  const referenceView = ["Menu & recipes", "Ordering schedules"].includes(initialTab);
   const [time, setTime] = useState("08:00");
   const [search, setSearch] = useState("");
   const ingredients = useQuery({
@@ -40,23 +51,21 @@ export default function Inventory() {
     queryFn: ({ signal }) => api<Recipe[]>("/recipes", { signal }),
     enabled: tab === "Menu & recipes",
   });
+  const deliveries = useQuery({ queryKey: ["deliveries"], queryFn: ({ signal }) => api<Delivery[]>("/deliveries", { signal }), enabled: tab === "Physical counts" });
   const names = Object.fromEntries(
     (ingredients.data ?? []).map((i) => [i.id, i.name]),
   );
   return (
     <>
       <PageHeading
-        eyebrow="INVENTORY"
-        title="Know what’s on hand."
-        description="Physical counts, sales-based estimates, and future projections each tell a different part of the story."
+        eyebrow={referenceView ? "RESTAURANT SETTINGS" : "STOCK & SALES"}
+        title={referenceView ? initialTab : "Inventory"}
+        description={tab === "Menu & recipes" ? "Inspect dishes and ingredient quantities per portion. Recipes are read-only." : tab === "Ordering schedules" ? "See each ingredient’s interval and starting date. Manage occasion decisions under Suppliers & promotions." : "Compare recorded counts with sales-based estimates."}
       />
-      <div className="tabs" role="tablist" aria-label="Inventory views">
+      {!referenceView && <div className="tabs" role="tablist" aria-label="Inventory views">
         {[
           "Physical counts",
           "Estimates",
-          "Projections",
-          "Menu & recipes",
-          "Ordering schedules",
         ].map((t) => (
           <button
             role="tab"
@@ -67,20 +76,15 @@ export default function Inventory() {
             {t}
           </button>
         ))}
-      </div>
+      </div>}
+      {!referenceView && <TabDescription tab={tab} />}
       {ingredients.error && (
         <ErrorNotice
           error={ingredients.error}
           retry={() => ingredients.refetch()}
         />
       )}{" "}
-      {tab === "Projections" ? (
-        <Placeholder title="Your service-day stock projection">
-          Dated demand, incoming commitments, expiry, and first shortage
-          intervals will appear once the engine evidence is connected. There is
-          no measured stock figure to substitute for a projection.
-        </Placeholder>
-      ) : tab === "Menu & recipes" ? (
+      {tab === "Menu & recipes" ? (
         <>
           {menu.error && (
             <ErrorNotice error={menu.error} retry={() => menu.refetch()} />
@@ -91,6 +95,8 @@ export default function Inventory() {
               retry={() => recipes.refetch()}
             />
           )}{" "}
+          {(menu.isPending || recipes.isPending) && <p role="status">Loading menu and recipes…</p>}
+          {menu.data?.length === 0 && <p className="empty-state">No menu items recorded.</p>}
           {menu.data?.map((d) => (
             <section className="panel" key={d.id}>
               <header className="panel-head">
@@ -158,6 +164,7 @@ export default function Inventory() {
               Schedules indicate occasions to order; a purchase is not
               automatically required.
             </p>
+            <Link href="/workspace/suppliers">Manage ordering occasions →</Link>
           </div>
         </section>
       ) : (
@@ -239,6 +246,7 @@ export default function Inventory() {
                             <td>
                               {names[l.ingredient_id] ?? l.ingredient_id}
                               <small>{l.id}</small>
+                              {tab === "Physical counts" && <small>{deliveries.data?.some(d => d.receipts.some(r => r.lot_id === l.id)) ? "Created by a recorded delivery receipt" : deliveries.error || deliveries.isPending ? "Receipt provenance unavailable" : "No delivery receipt link recorded"}</small>}
                             </td>
                             <td>
                               {l.quantity}{" "}
@@ -299,6 +307,7 @@ export default function Inventory() {
                       No inventory lots have been recorded.
                     </p>
                   )}
+                  {!!lots.data?.length && !lots.data.some(l => (names[l.ingredient_id] ?? l.ingredient_id).toLowerCase().includes(search.toLowerCase())) && <p className="empty-state">No lots match this ingredient. Try a different search.</p>}
                 </div>
               )}
             </section>

@@ -1,5 +1,9 @@
 # Frontend feature coverage
 
+September 26 navigation update: the manager workspace is now grouped into Today, Stock & sales, Purchasing, Activity and Restaurant settings. Existing page routes still work; menu/recipe and ordering schedule references now appear under Restaurant settings. See `FRONTEND_FINAL_POLISH.md` for the current completion audit and verified scope. Older placeholder/deferred wording below is historical: unfinished Forecast/Projections/waste screens are hidden, while working workflows and supported evidence remain visible.
+
+**Final frontend polish:** [26 September handoff and completion audit](FRONTEND_FINAL_POLISH.md) supersedes older UI-pending statements below. It records the connected flows, verification and remaining backend-dependent placeholders.
+
 This maps the workspace-root `FRONTEND_USER_FEATURE_INVENTORY.md` to the implementation. “Connected” means a frontend request uses the inspected backend route, not a claim that the complete ML/agent workflow has passed live acceptance.
 
 **26 September update:** The current [validation record](FINAL_VALIDATION_2026-09-26.md) supersedes older pending statements for the live organiser gateway, deterministic sales materiality, and bounded post-purchase contingency. The manager UI now labels `CONTINGENCY_ENGINE` and `NEW_PURCHASE_CASH_ONLY` costs explicitly. This table remains the 17 September feature inventory, not the final evidence ledger.

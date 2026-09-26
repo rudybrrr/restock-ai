@@ -3,17 +3,19 @@ import { ReassessAction } from "@/components/reassess-action";
 import Link from "next/link";
 import { ProcurementEvidence } from "@/components/procurement-evidence";
 import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
+import { PurchaseContext } from "@/components/purchase-context";
+import { PurchasingSteps } from "@/components/purchasing-steps";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Ingredient, NamedRecord, Plan, PlanLine } from "@/lib/api";
+import { api, ApiError, Ingredient, NamedRecord, Plan, PlanLine } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
 import { moneyOrUnavailable, planCostSummary } from "@/lib/plan-cost";
 import {
   ErrorNotice,
   PageHeading,
-  Placeholder,
   Status,
+  TabDescription,
 } from "@/components/workspace";
 type StoredLine = PlanLine & {
   id: string;
@@ -36,6 +38,7 @@ function RecommendationView({ requested }: { requested: string }) {
   const q = useQuery({
     queryKey: ["plans"],
     queryFn: ({ signal }) => api<Plan[]>("/plan-history", { signal }),
+    refetchInterval: 5000,
   });
   const [selection, setSelected] = useState<string | null>(null);
   const selected = selection ?? requested;
@@ -44,6 +47,7 @@ function RecommendationView({ requested }: { requested: string }) {
     queryFn: ({ signal }) =>
       api<Plan>(`/plans/${encodeURIComponent(selected)}`, { signal }),
     enabled: !!selected,
+    refetchInterval: 5000,
   });
   const [tab, setTab] = useState("Purchase plans");
   const active = q.data?.find((p) =>
@@ -59,15 +63,15 @@ function RecommendationView({ requested }: { requested: string }) {
     <>
       <PageHeading
         eyebrow="PURCHASE RECOMMENDATIONS"
-        title="A plan you can stand behind."
-        description="Review quantities, timing, and costs. You approve the recommendation and arrange the actual purchase separately."
+        title="Review purchase recommendation"
+        description="Review quantities, arrivals and costs. Approval does not place an order."
       >
-        <Link href="/workspace/activity" className="button button-primary">
+        <Link href="/workspace/activity" className="button button-secondary">
           Request assessment →
         </Link>
       </PageHeading>
       <div className="tabs" role="tablist" aria-label="Recommendation views">
-        {["Purchase plans", "Forecast", "Policy"].map((t) => (
+        {["Purchase plans", "Policy"].map((t) => (
           <button
             role="tab"
             aria-selected={tab === t}
@@ -78,20 +82,8 @@ function RecommendationView({ requested }: { requested: string }) {
           </button>
         ))}
       </div>
-      {tab === "Forecast" ? (
-        <>
-          <ProcurementEvidence historyOnly />
-          <Placeholder title="Demand and ingredient forecast">
-            Daily dish forecasts, dated service intervals, and ingredient
-            requirements will appear when persisted calculation artifacts are
-            available.
-          </Placeholder>
-          <Placeholder title="Inventory projection & shortage evidence">
-            Opening counts, outstanding deliveries, FEFO, expiry, and
-            first-shortage evidence will be connected to the selected plan.
-          </Placeholder>
-        </>
-      ) : tab === "Policy" ? (
+      <TabDescription tab={tab} />
+      {tab === "Policy" ? (
         <ProcurementEvidence />
       ) : selected && exact.error ? (
         <ErrorNotice error={exact.error} retry={() => exact.refetch()} />
@@ -169,6 +161,8 @@ function PlanDetail({ plan }: { plan: Plan }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [success, setSuccess] = useState("");
+  const [stale, setStale] = useState(false);
+  const contingency = plan.calculation_mode === "CONTINGENCY_ENGINE";
   const cashOnly = plan.cost_scope === "NEW_PURCHASE_CASH_ONLY";
   const costRows: [string, string | null][] = cashOnly
     ? [
@@ -176,7 +170,6 @@ function PlanDetail({ plan }: { plan: Plan }) {
         ["New purchase delivery", plan.delivery_cost],
         ["New purchase emergency fee", plan.emergency_penalty],
         ["New purchase cash total", plan.new_purchase_cash_cost],
-        ["Full expected economic cost", plan.total_expected_cost],
       ]
     : [
         ["Purchase cost", plan.total_purchase_cost],
@@ -187,7 +180,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
         ["Total expected cost", plan.total_expected_cost],
       ];
   async function confirm() {
-    if (!decision || pending) return;
+    if (!decision || pending || stale || plan.status !== "PENDING_APPROVAL") return;
     setPending(true);
     setError(null);
     try {
@@ -209,12 +202,18 @@ function PlanDetail({ plan }: { plan: Plan }) {
       await cache.invalidateQueries();
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Decision failed."));
+      if (e instanceof ApiError && e.code === "PLAN_VERSION_STALE") {
+        setStale(true);
+        setDecision(null);
+        await cache.invalidateQueries();
+      }
     } finally {
       setPending(false);
     }
   }
   return (
     <>
+      <PurchasingSteps plan={plan} />
       <section className="panel" style={{ marginTop: 24 }}>
         <header className="panel-head">
           <div>
@@ -223,13 +222,22 @@ function PlanDetail({ plan }: { plan: Plan }) {
           </div>
           <Status value={plan.status} />
         </header>
+        <div className="panel-body decision-brief" aria-label="Recommendation summary">
+          <p className="eyebrow">{contingency ? "ADDITIONAL PURCHASE ONLY" : "PURCHASE RECOMMENDATION"}</p>
+          <p>{contingency
+            ? "Additional quantities only. Existing purchases stay unchanged."
+            : "Approval applies only to this version. Arrange and record purchases separately."}</p>
+          <strong>{planCostSummary(plan).label}: {moneyOrUnavailable(planCostSummary(plan).value)}</strong>
+          {plan.status === "PENDING_APPROVAL" && !stale && <p>Awaiting your approval · version {plan.version}</p>}
+        </div>
         {plan.calculation_mode === "DEVELOPMENT_FIXTURE" && (
           <div className="notice" style={{ margin: 20 }}>
             Development fixture. This result does not demonstrate the real
             engine’s feasibility or contingency calculation.
           </div>
         )}
-        <div className="table-scroll">
+        <p className="mobile-table-hint">Scroll the table sideways for arrival dates and purchasing details →</p>
+        <div id="purchase-lines" className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -238,6 +246,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
                 <th>Quantity</th>
                 <th>Unit price</th>
                 <th>Arrival (Singapore)</th>
+                <th>Purchase type / expiry</th>
                 <th>Purchasing</th>
               </tr>
             </thead>
@@ -269,6 +278,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
                   </td>
                   <td>S$ {l.unit_price}</td>
                   <td>{singaporeTime(l.arrival_at)}</td>
+                  <td>{l.kind ? l.kind.toLowerCase() : "Not recorded"}<small>Expiry: {l.expiry_date ?? "Not recorded"}</small></td>
                   <td>
                     {l.uncommitted_quantity !== null ? (
                       <>
@@ -300,6 +310,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
           <ErrorNotice error={lines.error} retry={() => lines.refetch()} />
         )}
         <div className="panel-body">
+          {contingency && <PurchaseContext runId={plan.run_id} />}
           <div className="cost-ledger">
             {costRows.map(([label, value]) => (
               <div key={label}>
@@ -310,15 +321,25 @@ function PlanDetail({ plan }: { plan: Plan }) {
           </div>
           <p className="quiet">
             {cashOnly
-              ? "Existing purchases and deliveries remain fixed. Cash covers only the new recommended purchase; full waste and stockout economics are unavailable."
-              : "Values are the stored calculation output. Total expected cost is not automatically the same as immediate cash."}
+              ? "New purchase cash only. Waste and stockout economics are not included."
+              : "Stored calculation output. Expected cost may differ from immediate cash."}
           </p>
           {error && (
             <ErrorNotice
               error={error}
-              retry={() => cache.invalidateQueries({ queryKey: ["plans"] })}
+              retry={stale ? undefined : () => cache.invalidateQueries({ queryKey: ["plans"] })}
             />
           )}{" "}
+          {stale && (
+            <div className="notice" role="status">
+              <h3>Approval not saved. This version is out of date.</h3>
+              <p>No purchase was placed. Review the latest recommendation and assessment before deciding again.</p>
+              <div className="form-actions">
+                <Link className="button button-secondary" href="/workspace/recommendations">Review latest recommendation</Link>
+                <Link href="/workspace/activity">View recent assessments →</Link>
+              </div>
+            </div>
+          )}
           {success && (
             <p role="status" className="notice">
               {success}
@@ -337,8 +358,8 @@ function PlanDetail({ plan }: { plan: Plan }) {
               recommendation before making a decision.
             </p>
           )}
-          {plan.status === "PENDING_APPROVAL" && (
-            <div className="form-actions">
+          {plan.status === "PENDING_APPROVAL" && !stale && (
+            <div id="plan-decision" className="form-actions">
               <button
                 disabled={pending}
                 className="button button-primary"
@@ -355,7 +376,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
               </button>
             </div>
           )}
-          {decision && (
+          {decision && plan.status === "PENDING_APPROVAL" && !stale && (
             <section className="notice">
               <h3>
                 {decision === "APPROVED" ? "Approve" : "Reject"} version{" "}
@@ -391,7 +412,8 @@ function PlanDetail({ plan }: { plan: Plan }) {
               </div>
             </section>
           )}
-          <ManagerEvidencePanel runId={plan.run_id} compact />
+          {plan.status === "APPROVED" && <p className="scope-note">Use “Record purchase” on the approved lines above after arranging the order. Linked and uncommitted quantities help prevent recording the allocation twice.</p>}
+          <details className="record-details"><summary>Why this recommendation?</summary><ManagerEvidencePanel runId={plan.run_id} compact /></details>
           <details className="record-details">
             <summary>Calculation references</summary>
             <dl className="evidence-list">

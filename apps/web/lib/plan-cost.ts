@@ -10,6 +10,12 @@ export function planCostSummary(plan: PlanCostFields) {
     : { label: "Total expected cost", value: plan.total_expected_cost };
 }
 
-export function moneyOrUnavailable(value: string | null) {
-  return value === null ? "Unavailable" : `S$ ${value}`;
+export function moneyOrUnavailable(value: string | null | undefined) {
+  if (value == null) return "Unavailable";
+  const parts = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
+  if (!parts) return "Unavailable";
+  // Display cents without floating-point rounding; retain significant sub-cent precision.
+  const whole = parts[2].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const fraction = (parts[3] ?? "").replace(/0+$/, "").padEnd(2, "0");
+  return `S$ ${parts[1]}${whole}.${fraction}`;
 }
