@@ -94,6 +94,11 @@ tabs. This handback does not authorize frontend fallback calculations.
 
 ## Verification
 
+Integration baseline `5b0dbc7` combines Rudy's `50a78e0` with main `30f50a9`.
+Its worker acceptance passed 17 tests; the remaining suite, excluding that
+already-passed file, passed 1,314 tests (1,331 total). Ruff and Pyright passed.
+This baseline result is separate from the subsequent manager-output feature.
+
 Two PostgreSQL manager-result tests passed (storage/read parity, Decimal strings,
 unavailable output, retained history, stale marking, tamper rejection and manager
 authorization). Twenty worker/engine regressions passed. Ruff passed and Pyright
