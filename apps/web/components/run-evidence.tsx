@@ -7,7 +7,7 @@ import { AssessmentProgress } from "./assessment-progress";
 
 const explanations: Record<string, string> = {
   CALCULATION_INCOMPLETE:
-    "The calculation could not be completed with the available evidence. Review missing inputs and required follow-up before deciding whether a purchase is needed.",
+    "The approved calculation could not establish a supported purchase recommendation. Review the recorded findings and required follow-up; no new purchase is authorized by this result.",
   MISSING_REQUIRED_DATA:
     "Required inputs are missing. A purchasing conclusion cannot be drawn from this assessment.",
   NO_FEASIBLE_SUPPLIER:

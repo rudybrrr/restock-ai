@@ -9,6 +9,7 @@ import {
   ManagerTimelineEntry,
 } from "@/lib/api";
 import { humanize, singaporeTime } from "@/lib/format";
+import { moneyOrUnavailable, planCostSummary } from "@/lib/plan-cost";
 import { ErrorNotice, Status } from "./workspace";
 
 function isManagerEvidence(value: unknown): value is ManagerRunEvidence {
@@ -120,7 +121,7 @@ export function ManagerEvidencePanel({
                       ["INVALIDATED", "SUPERSEDED"].includes(
                         value.active_plan.status,
                       )
-                    ? "This version is no longer actionable. Review the latest recommendation before deciding."
+                    ? "This version is no longer actionable. Review the latest assessment and any new recommendation before deciding."
                     : value.approval.required
                       ? "Review the exact recommendation version before approving. Approval does not place an order."
                       : value.decision.outcome === "KEEP_CURRENT_PLAN"
@@ -176,8 +177,8 @@ export function ManagerEvidencePanel({
                   {plan.plan_id} · version {plan.version}
                 </strong>
                 <span>
-                  {humanize(plan.status)} · {plan.line_count} lines · S
-                  {plan.total_expected_cost}
+                  {humanize(plan.status)} · {plan.line_count} lines ·{" "}
+                  {planCostSummary(plan).label}: {moneyOrUnavailable(planCostSummary(plan).value)}
                 </span>
               </li>
             ))}

@@ -100,13 +100,15 @@ export type Plan = {
     | "REJECTED"
     | "INVALIDATED"
     | "SUPERSEDED";
-  calculation_mode: "DEVELOPMENT_FIXTURE" | "ENGINE";
+  calculation_mode: "DEVELOPMENT_FIXTURE" | "ENGINE" | "CONTINGENCY_ENGINE";
+  cost_scope: "LEGACY_FIELDS" | "NEW_PURCHASE_CASH_ONLY";
+  new_purchase_cash_cost: string | null;
   lines: PlanLine[];
   total_purchase_cost: string;
   delivery_cost: string;
-  total_expected_cost: string;
-  expected_waste_cost: string;
-  expected_stockout_cost: string;
+  total_expected_cost: string | null;
+  expected_waste_cost: string | null;
+  expected_stockout_cost: string | null;
   emergency_penalty: string;
   forecast_id: string;
   inventory_snapshot_id: string;
@@ -151,7 +153,9 @@ export type ManagerPlanReference = {
   run_id: string;
   created_at: string;
   line_count: number;
-  total_expected_cost: string;
+  cost_scope: "LEGACY_FIELDS" | "NEW_PURCHASE_CASH_ONLY";
+  new_purchase_cash_cost: string | null;
+  total_expected_cost: string | null;
 };
 export type ManagerTimelineEntry = {
   id: string;
