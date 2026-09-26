@@ -391,13 +391,33 @@ def test_audit_event_is_business_level_and_strict() -> None:
         )
 
 
-def test_tool_evidence_provenance_is_complete_or_absent() -> None:
+def test_run_bound_and_tool_evidence_provenance_are_validated() -> None:
+    run_bound = EvidenceRef(
+        category=EvidenceCategory.POST_PURCHASE_RESULT,
+        source=EvidenceSource.BACKEND,
+        reference_id="post-purchase:RUN-1:RESULT-1",
+        state_revision="STATE-1",
+        run_id="RUN-1",
+    )
+    assert run_bound.run_id == "RUN-1"
+
     with pytest.raises(ValidationError):
-        EvidenceRef.model_validate(
-            {
-                **evidence(EvidenceCategory.SUPPLIER_STATE).model_dump(),
-                "run_id": "RUN-1",
-            }
+        EvidenceRef(
+            category=EvidenceCategory.SUPPLIER_STATE,
+            source=EvidenceSource.BACKEND,
+            reference_id="SUPPLIER-1",
+            state_revision="STATE-1",
+            run_id="RUN-1",
+        )
+
+    with pytest.raises(ValidationError):
+        EvidenceRef(
+            category=EvidenceCategory.CANDIDATE_RESULT,
+            source=EvidenceSource.DECISION_ENGINE,
+            reference_id="CANDIDATE-1",
+            state_revision="STATE-1",
+            run_id="RUN-1",
+            specialist_call_id="TASK-1",
         )
 
     linked = EvidenceRef(

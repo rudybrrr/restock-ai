@@ -3,6 +3,7 @@ import Link from "next/link";
 import { OverviewOperations } from "@/components/overview-operations";
 import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
 import { singaporeTime } from "@/lib/format";
+import { moneyOrUnavailable, planCostSummary } from "@/lib/plan-cost";
 import { useQuery } from "@tanstack/react-query";
 import { api, Ingredient, InventoryLot, Plan, Run } from "@/lib/api";
 import {
@@ -91,7 +92,9 @@ export default function Overview() {
               <Status value={active.status} />
               <h3>Purchase plan · version {active.version}</h3>
               <p>{active.lines.length} ingredient allocations</p>
-              <p>Total expected cost: S$ {active.total_expected_cost}</p>
+              <p>
+                {planCostSummary(active).label}: {moneyOrUnavailable(planCostSummary(active).value)}
+              </p>
               {active.calculation_mode === "DEVELOPMENT_FIXTURE" && (
                 <p className="notice">
                   Development calculation — not a connected engine result.

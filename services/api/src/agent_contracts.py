@@ -67,6 +67,7 @@ class EvidenceCategory(StrEnum):
     STOCKOUT_RISK = "STOCKOUT_RISK"
     SUPPLIER_STATE = "SUPPLIER_STATE"
     CANDIDATE_RESULT = "CANDIDATE_RESULT"
+    POST_PURCHASE_RESULT = "POST_PURCHASE_RESULT"
     VALIDATION_RESULT = "VALIDATION_RESULT"
     POLICY_RESULT = "POLICY_RESULT"
     APPROVAL_REQUIREMENT = "APPROVAL_REQUIREMENT"
@@ -95,19 +96,30 @@ class EvidenceRef(ContractModel):
     def require_version_or_revision(self) -> "EvidenceRef":
         if self.version is None and self.state_revision is None:
             raise ValueError("evidence must identify a version or state revision")
-        provenance = (
-            self.run_id,
+        tool_provenance = (
             self.specialist_call_id,
             self.tool_call_id,
             self.producer_tool,
             self.call_sequence,
         )
-        if any(value is not None for value in provenance) and any(
-            value is None for value in provenance
+        if any(value is not None for value in tool_provenance) and (
+            self.run_id is None or any(value is None for value in tool_provenance)
         ):
             raise ValueError(
                 "tool evidence provenance requires run, specialist call, tool call, "
                 "producer tool, and call sequence"
+            )
+        if (
+            self.run_id is not None
+            and not any(value is not None for value in tool_provenance)
+            and self.category
+            not in {
+                EvidenceCategory.CANDIDATE_RESULT,
+                EvidenceCategory.POST_PURCHASE_RESULT,
+            }
+        ):
+            raise ValueError(
+                "run-bound evidence without tool provenance must identify a result"
             )
         return self
 

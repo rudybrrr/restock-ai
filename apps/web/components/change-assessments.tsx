@@ -85,7 +85,7 @@ function SavedAssessment({
               : result.material_change === null
                 ? "Assessment recorded; material change is unknown."
                 : result.material_change
-                  ? "A material change was recorded. Review the assessment outcome and any revised recommendation."
+                  ? "A material change was recorded. Review the final outcome; materiality alone does not authorize a new purchase."
                   : "The completed assessment found no material change within its assessed scope."}
           </p>
           <dl>

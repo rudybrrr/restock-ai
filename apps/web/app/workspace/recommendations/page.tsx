@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord, Plan, PlanLine } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
+import { moneyOrUnavailable, planCostSummary } from "@/lib/plan-cost";
 import {
   ErrorNotice,
   PageHeading,
@@ -168,6 +169,23 @@ function PlanDetail({ plan }: { plan: Plan }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [success, setSuccess] = useState("");
+  const cashOnly = plan.cost_scope === "NEW_PURCHASE_CASH_ONLY";
+  const costRows: [string, string | null][] = cashOnly
+    ? [
+        ["New purchase acquisition", plan.total_purchase_cost],
+        ["New purchase delivery", plan.delivery_cost],
+        ["New purchase emergency fee", plan.emergency_penalty],
+        ["New purchase cash total", plan.new_purchase_cash_cost],
+        ["Full expected economic cost", plan.total_expected_cost],
+      ]
+    : [
+        ["Purchase cost", plan.total_purchase_cost],
+        ["Delivery cost", plan.delivery_cost],
+        ["Expected waste cost", plan.expected_waste_cost],
+        ["Expected stockout cost", plan.expected_stockout_cost],
+        ["Emergency penalty", plan.emergency_penalty],
+        ["Total expected cost", plan.total_expected_cost],
+      ];
   async function confirm() {
     if (!decision || pending) return;
     setPending(true);
@@ -283,24 +301,17 @@ function PlanDetail({ plan }: { plan: Plan }) {
         )}
         <div className="panel-body">
           <div className="cost-ledger">
-            {[
-              ["Purchase cost", plan.total_purchase_cost],
-              ["Delivery cost", plan.delivery_cost],
-              ["Expected waste cost", plan.expected_waste_cost],
-              ["Expected stockout cost", plan.expected_stockout_cost],
-              ["Emergency penalty", plan.emergency_penalty],
-              ["Total expected cost", plan.total_expected_cost],
-            ].map(([label, value]) => (
+            {costRows.map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>
-                <strong>S$ {value ?? "Unavailable"}</strong>
+                <strong>{moneyOrUnavailable(value)}</strong>
               </div>
             ))}
           </div>
           <p className="quiet">
-            Values are the stored calculation output. Total expected cost is not
-            automatically the same as immediate cash. Shipment fee groups and
-            the full economic ledger await their shared interface.
+            {cashOnly
+              ? "Existing purchases and deliveries remain fixed. Cash covers only the new recommended purchase; full waste and stockout economics are unavailable."
+              : "Values are the stored calculation output. Total expected cost is not automatically the same as immediate cash."}
           </p>
           {error && (
             <ErrorNotice
@@ -443,9 +454,13 @@ function PlanComparison({
               <td>{selected.lines.length}</td>
             </tr>
             <tr>
-              <td>Total expected cost</td>
-              <td>S$ {prior.total_expected_cost}</td>
-              <td>S$ {selected.total_expected_cost}</td>
+              <td>Cost basis</td>
+              <td>
+                {planCostSummary(prior).label}: {moneyOrUnavailable(planCostSummary(prior).value)}
+              </td>
+              <td>
+                {planCostSummary(selected).label}: {moneyOrUnavailable(planCostSummary(selected).value)}
+              </td>
             </tr>
             <tr>
               <td>Status</td>

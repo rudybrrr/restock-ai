@@ -1,5 +1,8 @@
 """Backend-owned transport for the approved sales-materiality calculation."""
 
+from collections.abc import Mapping
+from dataclasses import fields, is_dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -9,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    field_serializer,
     model_validator,
 )
 
@@ -67,6 +71,42 @@ class SalesMaterialityEngineRequest(StrictModel):
     plan_reference: str | None
     safety_reference: str
     risk: dict[str, JsonValue] | None
+
+    @field_serializer("issued_forecast", when_used="json")
+    def serialize_issued_forecast(self, value: ForecastVersion) -> JsonValue:
+        return _json_safe(value)
+
+
+def _json_safe(value: object) -> JsonValue:
+    """Normalize frozen forecast dataclasses for canonical JSON transport."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _json_safe(getattr(value, field.name))
+            for field in fields(value)
+            if field.init
+        }
+    if isinstance(value, BaseModel):
+        return _json_safe(value.model_dump(mode="python"))
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise TypeError("Forecast mappings must have string keys for JSON transport")
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"Unsupported forecast transport value: {type(value).__name__}")
+
+
+def serialize_engine_request(
+    request: SalesMaterialityEngineRequest,
+) -> dict[str, JsonValue]:
+    """Return the one canonical JSON-safe payload used for persistence and hashing."""
+    return request.model_dump(mode="json")
 
 
 class MaterialityFinding(StrictModel):
@@ -159,6 +199,29 @@ class SalesMaterialityAssessment(StrictModel):
     completed_at: AwareDatetime | None
 
 
+class IssuedForecastDisplay(StrictModel):
+    """Allowlisted stored forecast; never the complete engine request."""
+
+    schema_version: Literal["ISSUED_FORECAST_DISPLAY_V1"] = "ISSUED_FORECAST_DISPLAY_V1"
+    request_sha256: str
+    captured_state_revision: str
+    assessment_as_of: AwareDatetime
+    assessment_known_at: AwareDatetime
+    forecast_input_id: str
+    forecast_input_version: int
+    plan_reference: str | None
+    timezone: Literal["Asia/Singapore"] = "Asia/Singapore"
+    bucket_boundary: Literal["START_INCLUSIVE_END_EXCLUSIVE"] = "START_INCLUSIVE_END_EXCLUSIVE"
+    portions_semantics: Literal["FRACTIONAL_EXPECTATION"] = "FRACTIONAL_EXPECTATION"
+    forecast: ForecastVersion
+    dish_names: dict[str, str]
+    limitations: list[str]
+
+    @field_serializer("forecast", when_used="json")
+    def serialize_forecast(self, value: ForecastVersion) -> JsonValue:
+        return _json_safe(value)
+
+
 class SalesMaterialityDisplay(StrictModel):
     """Manager evidence without the full engine request or frozen operational state."""
 
@@ -168,3 +231,4 @@ class SalesMaterialityDisplay(StrictModel):
     created_at: AwareDatetime
     completed_at: AwareDatetime | None
     result: SalesMaterialityResult | None
+    issued_forecast: IssuedForecastDisplay | None = None
