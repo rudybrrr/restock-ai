@@ -29,6 +29,7 @@ from src.procurement_specialist import (
 )
 
 ISSUE_TIME = datetime.fromisoformat("2026-02-15T22:00:00+08:00")
+LATE_ASSESSMENT = datetime.fromisoformat("2026-02-16T08:00:00+08:00")
 
 
 class ProcurementOnlyClassifier:
@@ -129,6 +130,31 @@ class RecordingBackendTools(BackendProcurementTools):
     def execute(self, request: ToolRequest):
         self.calls.append(request.tool)
         return super().execute(request)
+
+
+def test_late_enumeration_preserves_unsupported_issue_opening(
+    database_url: str,
+) -> None:
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            request_run(session, LATE_ASSESSMENT)
+            run = claim_run(session)
+            result = BackendProcurementTools(session).execute(
+                ToolRequest(
+                    tool_call_id="TASK-1-TOOL-1",
+                    run_id=run.id,
+                    tool=AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS,
+                    captured_state_revision=str(run.input_revision),
+                    input_refs=[],
+                )
+            )
+            assert isinstance(result, ErrorResponse)
+            assert result.error.code == "CALCULATION_INCOMPLETE"
+            assert "UNSUPPORTED_ISSUE_OPENING" in result.error.message
+            assert "cannot be reopened" in result.error.message
+    finally:
+        engine.dispose()
 
 
 def test_backend_adapter_derives_first_slice_oracle_from_frozen_contract(
