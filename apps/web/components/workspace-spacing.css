@@ -244,6 +244,11 @@
 .restock-app .evidence-display.panel > .panel-head { padding-inline: var(--panel-padding); }
 .restock-app .evidence-display :is(ul,ol) { padding-left: 20px; }
 .restock-app .evidence-display li + li { margin-top: 8px; }
+/* Progress stages are grid peers, not vertically spaced evidence-list items. */
+.restock-app .evidence-display .progress-track { padding-left: 0; align-items: start; }
+.restock-app .evidence-display .progress-track > li { margin: 0; line-height: 1.5; }
+.restock-app .evidence-display .record-details > summary { font-family: inherit; font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--ink,#202823); }
+.restock-app .evidence-display .record-details > summary:hover { color: var(--forest); }
 .restock-app .tabs { gap: 24px; }
 .restock-app .tabs button { min-height: 44px; font-size: 14px; }
 /* Shared presentation rules: task forms, filters and captured evidence. */

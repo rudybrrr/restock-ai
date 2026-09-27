@@ -223,7 +223,7 @@ export function ChangeAssessments({
 }) {
   const [open, setOpen] = useState(initiallyOpen);
   return (
-    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="record-details" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Sales and stock-correction assessments</summary>
       {open && (
         <>

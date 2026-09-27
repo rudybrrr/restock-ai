@@ -145,6 +145,22 @@ const at = "2026-02-16T09:00:00+08:00";
           .getAttribute("open"),
         null,
       );
+      for (const width of [1440, 768, 390, 320]) {
+        await page.setViewportSize({ width, height: 900 });
+        const stages = await page.locator(".progress-track > li").evaluateAll(items => items.map(item => ({ top: item.getBoundingClientRect().top, margin: getComputedStyle(item).marginTop })));
+        assert.equal(stages.length, 3);
+        assert(stages.every(item => Math.abs(item.top - stages[0].top) < 1 && item.margin === "0px"), `${state}: progress lines must be level at ${width}px`);
+        const summaries = await page.locator(".evidence-display .record-details > summary").evaluateAll(items => items.map(item => {
+          const style = getComputedStyle(item);
+          return { size: style.fontSize, weight: style.fontWeight, line: style.lineHeight, family: style.fontFamily, left: item.getBoundingClientRect().left, height: item.getBoundingClientRect().height };
+        }));
+        assert(summaries.length >= 3);
+        assert(summaries.every(item => item.size === "14px" && item.weight === "500" && item.line === "21px" && item.family === summaries[0].family && item.height >= 44), "Evidence summaries must share typography and touch-target sizing");
+        assert(summaries.every(item => Math.abs(item.left - summaries[0].left) < 1), "Evidence summaries must share the same left edge");
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        if (state === "SUCCEEDED" && [1440, 390].includes(width)) await page.screenshot({ path: `test-results/assessment-formatting-${width}.png`, fullPage: true, animations: "disabled" });
+      }
+      await page.setViewportSize({ width: 1440, height: 900 });
     }
     await page
       .getByLabel("Assess through (Singapore time)")
@@ -235,7 +251,7 @@ const at = "2026-02-16T09:00:00+08:00";
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: four lifecycle states, collapsed evidence, explicit retry time, failure recovery, exact new-run link and duplicate prevention.",
+      "PASS: four lifecycle states, level progress stages and consistent evidence typography at 320–1440px, collapsed evidence, explicit retry time, failure recovery, exact new-run link and duplicate prevention.",
     );
   } finally {
     await browser.close();
