@@ -6,13 +6,24 @@ ReStock is an adaptive restaurant inventory and procurement agent that maintains
 
 ReStock does not just predict what a restaurant should order — it keeps the purchasing plan valid as reality changes. Bounded specialist investigation and deterministic validation produce evidence-backed recommendations for exact-version human approval.
 
+## Submission
+
+Team NW0H3J8Y · ShowMeYourAgent Hackathon
+
+- **Demo video (10 min):** https://youtu.be/0L013kw7Kd8 — recorded from commit `eba56bf`
+- **Live deployment (AWS Lightsail):** https://restock.13.250.80.71.sslip.io/ — access details are provided to judges separately
+- **Business proposal:** [docs/submission/ReStock_Business_Proposal.pdf](docs/submission/ReStock_Business_Proposal.pdf)
+- **Technical document:** [docs/submission/ReStock_Technical_Document.pdf](docs/submission/ReStock_Technical_Document.pdf)
+
+All demo data is synthetic.
+
 ## What is proven
 
 The current branch contains a working local path for Procurement, Demand, and Inventory specialists; dynamic Coordinator routing; deterministic demand/inventory/procurement calculations; genuine `PENDING_APPROVAL` plan publication; supplier, promotion, delivery, and sales-materiality replanning; stale approval rejection; append-only audit history; manager evidence projections; and a provider-free evaluation/demo harness.
 
 AI selects what needs investigation and when a plan should be reconsidered. Deterministic Python systems calculate and validate the candidate. The Backend is the only authority that validates state, publishes plan versions, applies lifecycle transitions, accepts approval, and persists audit records.
 
-The organiser gateway has now been exercised with real typed Demand, Inventory, and Procurement calls. A fresh normal assessment published an `ENGINE` plan pending approval, and a later material sales event escalated safely at the unsupported issue opening. A separate post-purchase contingency run preserved fixed commitments and recommended only an additional purchase. [The 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md) names those runs and distinguishes controlled setup from live-model execution. Hosted deployment, AWS/Bedrock, live-model service-level reliability, restaurant savings, and production SME outcomes are not proven.
+The organiser gateway has now been exercised with real typed Demand, Inventory, and Procurement calls. A fresh normal assessment published an `ENGINE` plan pending approval, and a later material sales event escalated safely at the unsupported issue opening. A separate post-purchase contingency run preserved fixed commitments and recommended only an additional purchase. [The 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md) names those runs and distinguishes controlled setup from live-model execution. A hosted AWS Lightsail deployment has also completed a supported live assessment to a pending-approval `ENGINE` plan. AWS/Bedrock, live-model service-level reliability, restaurant savings, and production SME outcomes are not proven.
 
 ## Architecture
 
@@ -108,16 +119,16 @@ The local safety suite covers permission boundaries, prompt-injection attempts, 
 
 The checked-in manifest contains 19 runnable scenario rows. It includes development and held-out splits and keeps expected truth separate from runtime inputs. The supported golden pass measures seven development scenarios across Static, Rule, and local Adaptive ReStock adapters: 21 executions, zero failed executions, stable observed-boundary fingerprints across two runs, and stale approval evidence with a persisted audit reference.
 
-The historical provider-free evaluation on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). At that checkpoint, the PostgreSQL suite passed 782 tests and the separate synthetic-history suite passed 68. Current full-suite and live-flow evidence is in [the 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md); those historical totals are not current test counts.
+The historical provider-free evaluation on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). At that checkpoint, the PostgreSQL suite passed 782 tests and the separate synthetic-history suite passed 68. Current full-suite and live-flow evidence is in [the 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md); those historical totals are not current test counts. On commit `eba56bf` (27 September 2026), a fresh full backend PostgreSQL run passed 1,341 tests, with Ruff and Pyright clean. When running the full suite, set `RESTOCK_TEST_TMP` to a directory outside the repository; the synthetic-history tests refuse to write generated datasets inside it.
 
 The local evaluation reports routing, outcome, specialist-call, tool-call, retry, latency, failure, and prompt-injection evidence only where the harness supports it. Live model calls and connected worker paths have since been demonstrated separately; live token usage, cost distributions, and business outcomes remain unmeasured. The data is synthetic and first-slice; it is not evidence of food-waste reduction, stockout reduction, lost-sales reduction, procurement savings, emergency-order savings, or real restaurant performance.
 
 ## Current open items
 
-- Run `python -m src.assessment_worker --loop` alongside the API for queue polling; it has claimed a queued local run. A hosted process supervisor is still needed.
+- Run `python -m src.assessment_worker --loop` alongside the API for queue polling. The hosted deployment's worker has completed a live assessment; persistence and recovery after a hosted restart are not yet verified.
 - Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
 - AWS/Bedrock verification, live token/cost metrics, and a statistically useful live-model reliability evaluation.
-- Deployment, production reliability, hosted URLs, video, screenshots, and external submission actions.
+- Production reliability and long-running hosted operation.
 - Real-world restaurant and SME outcome metrics.
 
 The current local status is tracked in [docs/AGENTS_TASKS.md](docs/AGENTS_TASKS.md).
