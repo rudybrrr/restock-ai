@@ -85,7 +85,12 @@ TRUSTED_DOMAIN_ERRORS: dict[str, frozenset[AgentToolName]] = {
         }
     ),
     EscalationReason.CALCULATION_INCOMPLETE.value: frozenset(
-        {AgentToolName.OPTIMISE_PURCHASE_PLAN}
+        {
+            AgentToolName.CHECK_SUPPLIER_FEASIBILITY,
+            AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS,
+            AgentToolName.OPTIMISE_PURCHASE_PLAN,
+            AgentToolName.GET_APPROVAL_REQUIREMENT,
+        }
     ),
     EscalationReason.POLICY_VIOLATION.value: frozenset(
         {

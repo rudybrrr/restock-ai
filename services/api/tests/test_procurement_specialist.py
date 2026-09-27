@@ -394,7 +394,7 @@ def test_no_feasible_supplier_is_propagated_only_from_canonical_tool_error() -> 
     ("code", "wrong_tool"),
     [
         ("NO_FEASIBLE_SUPPLIER", AgentToolName.GET_SUPPLIER_OPTIONS),
-        ("CALCULATION_INCOMPLETE", AgentToolName.CHECK_SUPPLIER_FEASIBILITY),
+        ("CALCULATION_INCOMPLETE", AgentToolName.GET_SUPPLIER_OPTIONS),
         ("POLICY_VIOLATION", AgentToolName.OPTIMISE_PURCHASE_PLAN),
     ],
 )
@@ -414,7 +414,44 @@ def test_protected_domain_errors_require_an_authorized_origin_tool(
         ),
         FakeTools(lambda request, count: error),
     ).execute(delegation())
+    assert result.status is SpecialistStatus.ESCALATED
     assert result.escalation_reason is EscalationReason.TOOL_FAILURE
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        AgentToolName.CHECK_SUPPLIER_FEASIBILITY,
+        AgentToolName.ENUMERATE_SUPPLIER_ALLOCATIONS,
+        AgentToolName.OPTIMISE_PURCHASE_PLAN,
+        AgentToolName.GET_APPROVAL_REQUIREMENT,
+    ],
+)
+def test_engine_backed_tools_preserve_incomplete_issue_opening(
+    tool: AgentToolName,
+) -> None:
+    message = (
+        "UNSUPPORTED_ISSUE_OPENING: the approved normal purchase issue time "
+        "cannot be reopened; no new normal plan was created"
+    )
+    error = ErrorResponse(
+        error=ErrorDetail(code="CALCULATION_INCOMPLETE", message=message)
+    )
+    result = specialist(
+        ScriptedModel(
+            lambda context: decision(
+                ProcurementDecisionAction.CALL_TOOL,
+                tool=tool,
+                input_refs=[context.delegation.trigger_ref],
+            )
+        ),
+        FakeTools(lambda request, count: error),
+    ).execute(delegation())
+    assert result.status is SpecialistStatus.ESCALATED
+    assert result.escalation_reason is EscalationReason.CALCULATION_INCOMPLETE
+    assert result.escalation_detail is None
+    assert result.summary == message
+    assert result.evidence_refs == delegation().context_refs
 
 
 def test_calculation_incomplete_preserves_search_limit_detail() -> None:
