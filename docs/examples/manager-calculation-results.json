@@ -1,23 +1,26 @@
 {
-  "run_id": "47b57963-d2f1-4dfb-b598-0646a455827d",
+  "run_id": "ef2bf160-32ad-477c-b912-72f20dbcc623",
+  "run_status": "SUCCEEDED",
+  "outcome": "REVISE_PLAN",
+  "escalation_reason": null,
   "status": "AVAILABLE",
   "current_state_revision": "1",
   "stale": false,
-  "plan_version_id": "bd47d495-78c4-418b-924a-e7652ad106ec",
+  "plan_version_id": "1bcee269-e6b5-41d6-9def-bc471fa65002",
   "artifact": {
-    "id": "manager-calculation:47b57963-d2f1-4dfb-b598-0646a455827d:0ca71d99f7de835f686b9d4d96b88af00b459d346d443158b5237f2b8d7b9f6a",
-    "content_sha256": "0ca71d99f7de835f686b9d4d96b88af00b459d346d443158b5237f2b8d7b9f6a",
+    "id": "manager-calculation:ef2bf160-32ad-477c-b912-72f20dbcc623:060764ac07939175d8355a6ff57cdfaeac36c2dea8fa2c73a5f580f31fcd78a6",
+    "content_sha256": "060764ac07939175d8355a6ff57cdfaeac36c2dea8fa2c73a5f580f31fcd78a6",
     "outputs": {
       "schema_version": "MANAGER_CALCULATION_OUTPUTS_V1",
-      "run_id": "47b57963-d2f1-4dfb-b598-0646a455827d",
+      "run_id": "ef2bf160-32ad-477c-b912-72f20dbcc623",
       "as_of": "2026-02-15T22:00:00+08:00",
-      "known_at": "2026-09-26T14:06:46.603251Z",
+      "known_at": "2026-09-26T18:55:38.597418Z",
       "captured_state_revision": "1",
       "policy_id": "policy:CASH_SLICE_V1:1",
       "policy_version": 1,
       "forecast_input_id": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1",
       "forecast_input_version": 1,
-      "candidate_id": "candidate:0c269c63ea18987f0a1e2c6f20b7951b90f92dfca43b815b19adb666daa5c568",
+      "candidate_id": "candidate:9046e6f31cb685a628e08856f5193dafd0e9d600bd1edc9368db3392caff9835",
       "timezone": "Asia/Singapore",
       "bucket_boundary": "START_INCLUSIVE_END_EXCLUSIVE",
       "forecast_method": "SEASONAL_BASELINE_V1",
@@ -191,9 +194,9 @@
         }
       ],
       "forecast": {
-        "reference": "47b57963-d2f1-4dfb-b598-0646a455827d:forecast:normal",
+        "reference": "ef2bf160-32ad-477c-b912-72f20dbcc623:forecast:normal",
         "as_of": "2026-02-15T22:00:00+08:00",
-        "known_at": "2026-09-26T14:06:46.603251+00:00",
+        "known_at": "2026-09-26T18:55:38.597418+00:00",
         "target_date": "2026-02-16",
         "profile": [
           {
@@ -212,7 +215,7 @@
             "catalogue",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:catalogue",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -220,7 +223,7 @@
             "history",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -228,7 +231,7 @@
             "model",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:model",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -236,7 +239,7 @@
             "other_context",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:other_context",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -244,7 +247,7 @@
             "policy",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:policy",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -252,7 +255,7 @@
             "profile",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:profile",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ],
@@ -260,7 +263,7 @@
             "recipe",
             {
               "reference": "forecast-input:CASH_SLICE_20260216_HISTORY_V1:1:recipe",
-              "available_at": "2026-09-26T14:06:46.603251+00:00",
+              "available_at": "2026-09-26T18:55:38.597418+00:00",
               "captured_revision": "1"
             }
           ]
@@ -422,7 +425,7 @@
           }
         ],
         "promotion_state": "EXCLUDED",
-        "base_reference": "47b57963-d2f1-4dfb-b598-0646a455827d:forecast:normal",
+        "base_reference": "ef2bf160-32ad-477c-b912-72f20dbcc623:forecast:normal",
         "actuals": [],
         "promotions": [],
         "context_evidence": null,
@@ -434,7 +437,7 @@
       "existing_commitments_projection": {
         "as_of": "2026-02-15T22:00:00+08:00",
         "horizon_end": "2026-02-16T21:00:00+08:00",
-        "known_at": "2026-09-26T22:06:46.603251+08:00",
+        "known_at": "2026-09-27T02:55:38.597418+08:00",
         "captured_revision": "1",
         "fixture_fefo": "FEFO_EXPIRY_RECEIVED_LOT_ID_V1",
         "evidence": [
@@ -442,7 +445,7 @@
             "catalogue",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -450,7 +453,7 @@
             "forecast",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -458,7 +461,7 @@
             "opening",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -466,7 +469,7 @@
             "profile",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -474,7 +477,7 @@
             "recipe",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -482,7 +485,7 @@
             "snapshot",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -490,7 +493,7 @@
             "supply",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ]
@@ -3438,7 +3441,7 @@
       "with_recommendation_projection": {
         "as_of": "2026-02-15T22:00:00+08:00",
         "horizon_end": "2026-02-16T21:00:00+08:00",
-        "known_at": "2026-09-26T22:06:46.603251+08:00",
+        "known_at": "2026-09-27T02:55:38.597418+08:00",
         "captured_revision": "1",
         "fixture_fefo": "FEFO_EXPIRY_RECEIVED_LOT_ID_V1",
         "evidence": [
@@ -3446,7 +3449,7 @@
             "catalogue",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3454,7 +3457,7 @@
             "forecast",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3462,7 +3465,7 @@
             "opening",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3470,7 +3473,7 @@
             "profile",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3478,7 +3481,7 @@
             "recipe",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3486,7 +3489,7 @@
             "snapshot",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3494,7 +3497,7 @@
             "supply",
             {
               "reference": "CASH_SLICE_20260216_DEMAND_HISTORY_SOURCE_V1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3502,7 +3505,7 @@
             "expiry:proposed:fresh-chicken:normal:20260215T2200+0800",
             {
               "reference": "CASH_SLICE_20260216_SOURCE_V1:opportunity:fresh-chicken:normal:1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ],
@@ -3510,7 +3513,7 @@
             "expiry:proposed:fresh-noodles:normal:20260215T2200+0800",
             {
               "reference": "CASH_SLICE_20260216_SOURCE_V1:opportunity:fresh-noodles:normal:1",
-              "available_at": "2026-09-26T14:06:46.603251Z",
+              "available_at": "2026-09-26T18:55:38.597418Z",
               "captured_revision": "1"
             }
           ]

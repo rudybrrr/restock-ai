@@ -199,6 +199,29 @@ class SalesMaterialityAssessment(StrictModel):
     completed_at: AwareDatetime | None
 
 
+class IssuedForecastDisplay(StrictModel):
+    """Allowlisted stored forecast; never the complete engine request."""
+
+    schema_version: Literal["ISSUED_FORECAST_DISPLAY_V1"] = "ISSUED_FORECAST_DISPLAY_V1"
+    request_sha256: str
+    captured_state_revision: str
+    assessment_as_of: AwareDatetime
+    assessment_known_at: AwareDatetime
+    forecast_input_id: str
+    forecast_input_version: int
+    plan_reference: str | None
+    timezone: Literal["Asia/Singapore"] = "Asia/Singapore"
+    bucket_boundary: Literal["START_INCLUSIVE_END_EXCLUSIVE"] = "START_INCLUSIVE_END_EXCLUSIVE"
+    portions_semantics: Literal["FRACTIONAL_EXPECTATION"] = "FRACTIONAL_EXPECTATION"
+    forecast: ForecastVersion
+    dish_names: dict[str, str]
+    limitations: list[str]
+
+    @field_serializer("forecast", when_used="json")
+    def serialize_forecast(self, value: ForecastVersion) -> JsonValue:
+        return _json_safe(value)
+
+
 class SalesMaterialityDisplay(StrictModel):
     """Manager evidence without the full engine request or frozen operational state."""
 
@@ -208,3 +231,4 @@ class SalesMaterialityDisplay(StrictModel):
     created_at: AwareDatetime
     completed_at: AwareDatetime | None
     result: SalesMaterialityResult | None
+    issued_forecast: IssuedForecastDisplay | None = None

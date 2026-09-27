@@ -21,6 +21,9 @@ The response model is `ManagerCalculationDisplay` in OpenAPI `/docs`.
 - `NOT_RECORDED` returns `artifact: null`, not empty buckets or zero forecasts.
   This includes queued runs, historical runs produced before this implementation,
   and calculation paths that have not persisted this artifact.
+- `run_status`, `outcome` and the allowlisted `escalation_reason` distinguish a
+  pending run, failed run and completed escalation (including calculated
+  infeasibility versus missing data). No missing artifact implies zero/safe output.
 - Unknown run: 404. Missing login: 401. Agent-only caller: 403.
 - An inconsistent stored artifact returns 409 `CALCULATION_ARTIFACT_MISMATCH`.
 - `stale` compares the artifact's captured revision with current Backend revision.
@@ -79,14 +82,54 @@ content fails with 409 `CALCULATION_ARTIFACT_CONFLICT`. Read-side validation che
 the hash and the run/revision binding. Existing run-snapshot lifecycle protections
 continue to apply.
 
-Current availability is successful normal first-slice calculations (including
-supported promotion calculations). Contingency, incomplete/no-candidate results,
-and standalone sales-materiality forecast views need additional explicit mapping;
-do not display this as an all-scenario result catalogue yet.
+Current availability of `calculation-results` is successful normal first-slice
+calculations (including supported promotion calculations). Normal calculations
+without a published numerical artifact expose their run state and escalation
+instead of synthesized forecast/projection values. Do not interpret unavailable
+output as a complete projection.
 
-Waste entry remains disabled pending its approved persistence, inventory-effect,
-correction and eligibility contract. Full-economic policy activation and result
-publication remain separate from `CASH_SLICE_V1`/`NEW_PURCHASE_CASH_ONLY`.
+## Sales assessment forecast
+
+The existing `GET /api/v1/manager/runs/{run_id}/sales-materiality` additionally
+returns `issued_forecast` (`IssuedForecastDisplay`, version
+`ISSUED_FORECAST_DISPLAY_V1`). This allowlists the exact persisted forecast,
+frozen dish names, input identity/version, plan reference, assessment clocks,
+revision and canonical request SHA-256. It does not expose the engine request.
+The route still returns null when no sales assessment exists.
+
+This forecast is the issued comparison basis, not a new demand adjustment. Its
+own clocks can precede the assessment clocks. Per-dish method/eligible-history
+metadata is unavailable in this exchange and is explicitly identified as such;
+it is not reconstructed on read. The existing `result.projection`, findings,
+limitations and completeness retain the canonical calculated stock-risk output.
+An incomplete materiality result does not imply its comparison forecast is zero
+or that no stock risk exists. Select this response by the exact sales run ID.
+
+## Post-purchase contingency
+
+`GET /api/v1/manager/runs/{run_id}/contingency-projection` returns
+`ManagerContingencyProjection` (`MANAGER_CONTINGENCY_PROJECTION_V1`) or null when
+no post-purchase result is recorded. It validates the existing persisted result's
+identity and input binding before selecting numerical output. It never calculates
+on GET or exposes an Agent-only endpoint to the browser.
+
+The result retains reference, input hash, clocks/revision, stale state, linked plan
+and candidate, outcome/escalation/findings, and fixed delivery IDs. Both projection
+fields use `MultiDayProjection`, including ingredient-specific protected ends,
+assessment ends, verified prefixes, movements, breaches and per-ingredient units.
+`existing_commitments_projection` comes from the no-purchase calculation;
+`with_recommendation_projection` comes only from independent validation of a
+`REVISE_PLAN` candidate. KEEP and ESCALATE never expose a diagnostic incumbent as
+a recommendation. Null means unavailable, not an empty/zero safe projection.
+Projection completeness and search completeness remain distinct; read the nested
+projection flags even when the overall contingency calculation completed.
+
+## Confirmed optional scope decision
+
+On 27 September 2026 CY explicitly selected **Defer both optional features**:
+waste submission and full-economic policy activation. Keep the disabled waste
+scaffold outside demo navigation. The numerical modules do not activate either
+feature. Existing `CASH_SLICE_V1`/`NEW_PURCHASE_CASH_ONLY` labels remain unchanged.
 
 ET should map the canonical response into frontend display models, preserve all
 unknown/stale states, and connect a real scenario before enabling normal-navigation
@@ -104,3 +147,9 @@ unavailable output, retained history, stale marking, tamper rejection and manage
 authorization). Twenty worker/engine regressions passed. Ruff passed and Pyright
 reported zero errors/warnings. These results cover this Backend slice; frontend
 rendering and hosted end-to-end acceptance remain pending.
+
+Follow-up verification: three manager forecast/calculation PostgreSQL tests and
+two post-purchase projection PostgreSQL tests passed on the final schemas.
+Three sales-materiality contract tests and three contract unit tests also passed
+after adding the issued-forecast read. Ruff and Pyright remain clean. The sample
+manager response was recaptured from an isolated database for the final shape.
