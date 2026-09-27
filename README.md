@@ -19,7 +19,7 @@ All demo data is synthetic.
 
 ## What is proven
 
-The current branch contains a working local path for Procurement, Demand, and Inventory specialists; dynamic Coordinator routing; deterministic demand/inventory/procurement calculations; genuine `PENDING_APPROVAL` plan publication; supplier, promotion, delivery, and sales-materiality replanning; stale approval rejection; append-only audit history; manager evidence projections; and a provider-free evaluation/demo harness.
+ReStock contains a working path for Procurement, Demand, and Inventory specialists; dynamic Coordinator routing; deterministic demand/inventory/procurement calculations; genuine `PENDING_APPROVAL` plan publication; supplier, promotion, delivery, and sales-materiality replanning; stale approval rejection; append-only audit history; manager evidence projections; and a provider-free evaluation/demo harness.
 
 AI selects what needs investigation and when a plan should be reconsidered. Deterministic Python systems calculate and validate the candidate. The Backend is the only authority that validates state, publishes plan versions, applies lifecycle transitions, accepts approval, and persists audit records.
 
@@ -107,9 +107,9 @@ uv run python -m src.evaluation.local_demo run `
   --output .tmp/golden-demo-result.json
 ```
 
-The inventory-adjustment route uses Backend PR #32's canonical event/context/assessment contract. The safe case keeps the current plan without Procurement; the material case reaches the real Procurement engine and publishes a revision.
+The inventory-adjustment route uses the Backend's canonical event, context and assessment contract. The safe case keeps the current plan without Procurement; the material case reaches the real Procurement engine and publishes a revision.
 
-See [docs/LOCAL_DEMO_SCRIPT.md](docs/LOCAL_DEMO_SCRIPT.md) for the live contingency rehearsal and local evaluation fallback. No capture or external submission is performed by the repository.
+See [docs/LOCAL_DEMO_SCRIPT.md](docs/LOCAL_DEMO_SCRIPT.md) for the live contingency rehearsal and local evaluation fallback. The recorded walkthrough is the [demo video](https://youtu.be/0L013kw7Kd8).
 
 ## Approval and safety boundary
 
@@ -125,16 +125,17 @@ The historical provider-free evaluation on 19 September 2026 is recorded in [doc
 
 The local evaluation reports routing, outcome, specialist-call, tool-call, retry, latency, failure, and prompt-injection evidence only where the harness supports it. Live model calls and connected worker paths have since been demonstrated separately; live token usage, cost distributions, and business outcomes remain unmeasured. The data is synthetic and first-slice; it is not evidence of food-waste reduction, stockout reduction, lost-sales reduction, procurement savings, emergency-order savings, or real restaurant performance.
 
-## Current open items
+## Known limitations
 
-- Run `python -m src.assessment_worker --loop` alongside the API for queue polling. The hosted deployment's worker has completed a live assessment; persistence and recovery after a hosted restart are not yet verified.
-- Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
-- AWS/Bedrock verification, live token/cost metrics, and a statistically useful live-model reliability evaluation.
-- Production reliability and long-running hosted operation.
-- Real-world restaurant and SME outcome metrics.
+- **Scope:** connected normal procurement is a bounded one-day `CASH_SLICE_V1` slice. The forecast and stock-projection view is first-slice scoped, not a general 21-day forecast.
+- **Economics and waste:** bounded 21-day economic numerical work and observed-waste helpers exist, but neither is connected to an actionable manager workflow.
+- **Integrations:** there is no automatic external POS integration and no supplier checkout. Approval changes plan status only; it never places an order.
+- **Live model:** the organiser gateway does not always return a usable decision. Malformed or unusable decisions are rejected and the assessment fails closed, but live-model reliability, token usage, cost and latency have not been measured. AWS/Bedrock hosting is not verified.
+- **Hosting:** the Lightsail deployment has completed a live assessment; persistence and recovery after a hosted restart, and long-running production operation, are not yet verified.
+- **Outcomes:** all data is synthetic. No real restaurant savings, waste reduction or stockout reduction has been measured.
+- **Human review:** a persisted human-review request workflow is not yet defined by the Backend contract.
 
-The current local status is tracked in [docs/AGENTS_TASKS.md](docs/AGENTS_TASKS.md).
-The exact hosted handoff is in [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HANDOFF.md).
+Deployment setup is in [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HANDOFF.md); development status is tracked in [docs/AGENTS_TASKS.md](docs/AGENTS_TASKS.md).
 
 ## Project material
 
@@ -142,7 +143,7 @@ The exact hosted handoff is in [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HAND
 - [Local evaluation harness](docs/evaluation/LOCAL_HARNESS.md)
 - [Measured local evaluation results](docs/evaluation/LOCAL_RESULTS_2026-09-19.md)
 - [Local demo script](docs/LOCAL_DEMO_SCRIPT.md)
-- [Submission material](docs/SUBMISSION_MATERIALS.md)
+- [Submission evidence summary (26 September 2026)](docs/SUBMISSION_MATERIALS.md)
 - [Backend setup and API notes](services/api/README.md)
 - [Connected synthetic contingency first case](docs/BACKEND_CONTINGENCY_FIRST_CASE.md)
 - [Frontend development and verification](apps/web/FRONTEND.md)
