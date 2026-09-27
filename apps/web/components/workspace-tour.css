@@ -1,0 +1,34 @@
+.restock-app .tour-replay { background: transparent; border: 1px solid var(--line); color: var(--ink); padding: 8px 12px; min-height: 44px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.restock-app .workspace-tour { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink); overflow: hidden; }
+.workspace-tour::backdrop { background: #15261e99; }
+.workspace-tour:has(.tour-spotlight)::backdrop { background: transparent; }
+.restock-app .tour-spotlight { position: fixed; border: 2px solid #b9d49e; border-radius: 4px; box-shadow: 0 0 0 200vmax #15261eb3; pointer-events: none; transition: top .2s, left .2s, width .2s, height .2s; }
+.restock-app .tour-card { position: absolute; right: 28px; bottom: 28px; width: min(470px, calc(100% - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; background: #fafbf6; border: 1px solid #d3dbce; box-shadow: 0 16px 60px #12271e40; padding: 26px; border-radius: 8px; }
+.restock-app .tour-copy { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.restock-app .tour-top, .restock-app .tour-progress, .restock-app .tour-actions { flex-shrink: 0; }
+.restock-app .tour-welcome { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.restock-app .tour-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-size: 11px; line-height: 1.6; letter-spacing: .5px; color: #536556; }
+.restock-app .tour-top > span { padding-top: 10px; }
+.restock-app .tour-skip { border: 0; background: transparent; color: #365642; text-decoration: underline; text-underline-offset: 4px; min-height: 44px; padding: 8px 0 8px 12px; white-space: nowrap; cursor: pointer; font: inherit; font-size: 12px; }
+.restock-app .tour-progress { height: 3px; background: #e1e7db; margin: 14px 0 22px; }
+.restock-app .tour-progress span { display: block; height: 100%; background: #275442; transition: width .2s; }
+.restock-app .tour-copy h2 { font-size: 24px; line-height: 1.25; font-weight: 600; margin: 18px 0; outline: none; }
+.restock-app .tour-copy p, .restock-app .tour-copy li { font-size: 14px; line-height: 1.7; }
+.restock-app .tour-copy ul { padding-left: 20px; margin: 0 0 18px; }
+.restock-app .tour-copy li + li { margin-top: 12px; }
+.restock-app .tour-note { padding: 14px 16px; background: #edf2e8; border-left: 2px solid #789866; margin: 18px 0 0; }
+.restock-app .tour-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 22px; }
+.restock-app .tour-actions button { min-width: 88px; }
+.restock-app .tour-actions button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 600px) {
+  .restock-app .tour-card { right: 16px; bottom: 16px; padding: 20px; max-height: calc(100dvh - var(--tour-clearance, 210px)); }
+  .restock-app .tour-welcome { right: auto; bottom: auto; max-height: calc(100dvh - 32px); }
+  .restock-app .tour-copy h2 { font-size: 21px; }
+  .restock-app .tour-copy p, .restock-app .tour-copy li { font-size: 13px; }
+  .restock-app .tour-replay { padding-inline: 8px; font-size: 11px; }
+  .restock-app .workspace-header { flex-wrap: wrap; gap: 8px; height: auto; min-height: 80px; padding-block: 12px; }
+  .restock-app .service-date { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .restock-app .tour-spotlight, .restock-app .tour-progress span { transition: none; }
+}

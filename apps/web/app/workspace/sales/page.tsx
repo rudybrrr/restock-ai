@@ -13,6 +13,7 @@ import {
   PageHeading,
   TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 
 type Recipe = { menu_item_id: string; ingredient_id: string; quantity: string };
@@ -23,9 +24,9 @@ export default function Sales() {
 }
 
 function SalesDay({ day }: { day: string }) {
-  const [tab, setTab] = useState("Reported sales");
-  const [start, setStart] = useState("08:00");
-  const [end, setEnd] = useState("21:00");
+  const [tab, setTab] = useWorkspaceView("sales-tab", "Reported sales");
+  const [start, setStart] = useWorkspaceView(`sales-start:${day}`, "08:00");
+  const [end, setEnd] = useWorkspaceView(`sales-end:${day}`, "21:00");
   const [refresh, setRefresh] = useState(true);
   const interval = refresh ? 10000 : false;
   const events = useQuery({
@@ -99,7 +100,7 @@ function SalesDay({ day }: { day: string }) {
       <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-${tab.replaceAll(" ", "-")}`}>
       {tab === "Sales assessment" ? <SalesAssessment day={day} /> : <>
       <section className="panel">
-        <div className="panel-body form-grid">
+        <div className="panel-body filter-toolbar">
           <label>
             Window start
             <input

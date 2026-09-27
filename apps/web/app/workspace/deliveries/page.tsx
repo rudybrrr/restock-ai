@@ -12,6 +12,7 @@ import {
   Status,
   TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 import { PurchaseForm, DeliveryAction } from "@/components/delivery-forms";
 import { ChangeHistory } from "@/components/change-events";
@@ -22,8 +23,8 @@ export default function DeliveriesPage() {
 function DeliveriesContent({ receiving }: { receiving: boolean }) {
   const { day } = useServiceDate();
   const [create, setCreate] = useState(false);
-  const [filter, setFilter] = useState(receiving ? "Outstanding" : "All");
-  const [arrivalDay, setArrivalDay] = useState("");
+  const [filter, setFilter] = useWorkspaceView(`delivery-filter:${receiving}`, receiving ? "Outstanding" : "All");
+  const [arrivalDay, setArrivalDay] = useWorkspaceView("delivery-arrival", "");
   const [action, setAction] = useState<{
     delivery: Delivery;
     mode: "receive" | "update";

@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { CalculationResult, Projection } from "@/lib/calculation-results";
 import { singaporeTime, humanize } from "@/lib/format";
+import { displayQuantity } from "@/lib/quantity-display";
 
 const quantity = (v: string | null | undefined) => v ?? "Unknown";
 const interval = (start: string, end: string) => `${singaporeTime(start)} → ${singaporeTime(end)}`;
@@ -24,6 +25,13 @@ function Forecast({ data }: { data: Outputs }) {
   </>;
 }
 
+function BalanceTable({ data, ingredient, formatted = false }: { data: Projection; ingredient: string; formatted?: boolean }) {
+  return <div className="table-scroll"><table><thead><tr>{["Service interval · Singapore", "Unit", "Opening", "Arrivals", "Required", "Allocated", "Unmet", "Expired", "Closing"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{data.buckets?.map(b => {
+    const i = b.ingredients.find(i => i.ingredient_id === ingredient);
+    return <tr key={b.start}><td>{interval(b.start, b.end)}</td><td>{quantity(i?.unit)}</td>{[i?.opening, i?.admitted, i?.required, i?.allocated, i?.unmet, i?.expired, i?.closing].map((v, n) => <td key={n}>{formatted ? <span title={v ?? "Unknown"} aria-label={v == null ? "Unknown" : `${displayQuantity(v).text}; exact stored value ${v}`}>{displayQuantity(v).text}</span> : quantity(v)}</td>)}</tr>;
+  })}</tbody></table></div>;
+}
+
 function ProjectionView({ data, proposed }: { data: Projection; proposed: string[] }) {
   const ids = [...new Set(data.buckets?.flatMap(b => b.ingredients.map(i => i.ingredient_id)) ?? [])];
   const [ingredient, setIngredient] = useState(ids[0] ?? "");
@@ -35,7 +43,9 @@ function ProjectionView({ data, proposed }: { data: Projection; proposed: string
     {data.buckets === null ? <p>Balance calculations unavailable. Unknown stock is not zero.</p> : <>
       <label className="field-label">Ingredient<select value={ingredient} onChange={e => setIngredient(e.target.value)}>{ids.map(id => <option key={id} value={id}>{humanize(id.replaceAll("-", " "))}</option>)}</select></label>
       <p className="compact-note">Opening is usable stock after arrivals/expiry at interval start; closing is after allocated demand. Do not add arrivals to opening again.</p>
-      <div className="table-scroll"><table><thead><tr>{["Service interval · Singapore", "Unit", "Opening", "Arrivals", "Required", "Allocated", "Unmet", "Expired", "Closing"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{data.buckets.map(b => { const i = b.ingredients.find(i => i.ingredient_id === ingredient); return <tr key={b.start}><td>{interval(b.start, b.end)}</td><td>{i?.unit ?? "Unknown"}</td>{[i?.opening, i?.admitted, i?.required, i?.allocated, i?.unmet, i?.expired, i?.closing].map((v, n) => <td key={n}>{quantity(v)}</td>)}</tr>; })}</tbody></table></div>
+      <p className="compact-note">Balances display three decimal places. ≈ marks rounding for display only; exact stored values remain available below. Very small non-zero quantities are not exact zero.</p>
+      <BalanceTable data={data} ingredient={ingredient} formatted />
+      <details className="record-details"><summary>Full-precision balance values</summary><BalanceTable data={data} ingredient={ingredient} /></details>
       {!data.buckets.length && <p>No balance rows recorded—not proof of sufficient stock.</p>}
       <details className="record-details"><summary>Lot provenance for selected ingredient</summary><p>Source classifications and identifiers are frozen engine evidence, not newly received stock.</p><div className="table-scroll"><table><thead><tr><th>Interval</th><th>Lot key</th><th>Origin</th><th>Closing</th><th>Unit</th></tr></thead><tbody>{data.buckets.flatMap(b => b.lots.filter(l => l.ingredient_id === ingredient).map(l => <tr key={`${b.start}-${l.key}`}><td>{interval(b.start, b.end)}</td><td>{l.key}</td><td>{l.source}</td><td>{l.closing}</td><td>{l.unit}</td></tr>))}</tbody></table></div>{!!proposed.length && <><h3>Hypothetical supply identifiers</h3><ul>{proposed.map(id => <li key={id}>{id}</li>)}</ul></>}</details>
     </>}
@@ -44,7 +54,7 @@ function ProjectionView({ data, proposed }: { data: Projection; proposed: string
   </>;
 }
 
-export function CalculationResults({ result }: { result: CalculationResult }) {
+export function CalculationResults({ result, embedded = false }: { result: CalculationResult; embedded?: boolean }) {
   const [tab, setTab] = useState("Forecast");
   const [basis, setBasis] = useState("existing");
   if (result.status === "NOT_RECORDED" || !result.artifact) return <div className="empty-state"><h2>{["QUEUED", "RUNNING"].includes(result.run_status) ? "Assessment in progress" : "No stored calculation output for this assessment."}</h2><p>Assessment status: {humanize(result.run_status)}. {["QUEUED", "RUNNING"].includes(result.run_status) ? "This view checks automatically while the assessment is pending." : "Older, contingency and unsupported calculation paths may not record this artifact."}</p>{result.outcome && <p>Outcome: {humanize(result.outcome)}</p>}{result.escalation_reason && <p className="notice">Escalation: {humanize(result.escalation_reason)}</p>}<p>This is not a zero forecast or a safe-stock result.</p></div>;
@@ -65,6 +75,6 @@ export function CalculationResults({ result }: { result: CalculationResult }) {
       </>}
     </section>
     <details className="record-details"><summary>Captured result identity</summary><dl className="terms-facts">{Object.entries({ Assessment: result.run_id, Artifact: result.artifact.id, SHA256: result.artifact.content_sha256, "Operational cutoff": singaporeTime(data.as_of), "Knowledge cutoff": singaporeTime(data.known_at), "Captured revision": data.captured_state_revision, "Current revision": result.current_state_revision, Policy: `${data.policy_id} · v${data.policy_version}`, "Forecast input": `${data.forecast_input_id} · v${data.forecast_input_version}` }).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></details>
-    <Link href={`/workspace/activity/${encodeURIComponent(result.run_id)}`}>Open assessment activity →</Link>
+    {!embedded && <Link href={`/workspace/activity/${encodeURIComponent(result.run_id)}`}>Open assessment activity →</Link>}
   </>;
 }

@@ -10,6 +10,7 @@ async function main() {
   );
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   const page = await browser.newPage({ reducedMotion: "reduce" });
+  await page.addInitScript(username => localStorage.setItem(`restock:workspace-tour:v1:${encodeURIComponent(username)}`, "seen"), process.env.RESTOCK_TEST_USERNAME || "manager");
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {

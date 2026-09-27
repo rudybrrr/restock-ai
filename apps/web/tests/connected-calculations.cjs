@@ -5,6 +5,7 @@ const fs = require('node:fs');
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
   try {
     const page = await browser.newPage();
+    await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
     const errors = [], reads = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.route('http://localhost:8000/api/v1/**', async route => {
@@ -43,6 +44,12 @@ const fs = require('node:fs');
     await page.getByLabel(/^Ingredient/).selectOption('chicken');
     assert.match(await page.locator('body').innerText(), /17\.000/);
     await page.getByLabel(/^Projection basis/).selectOption('candidate');
+    const rounded = page.locator('span[title]').filter({ hasText: /^≈ / }).first();
+    await rounded.waitFor();
+    const exactValue = await rounded.getAttribute('title');
+    await page.getByText('Full-precision balance values', { exact: true }).click();
+    await page.getByRole('cell', { name: exactValue, exact: true }).first().waitFor();
+    await page.getByText('Full-precision balance values', { exact: true }).click();
     await page.waitForFunction(() => [...document.querySelectorAll('p')].some(p => p.textContent.startsWith('Published plan version: ') && !p.textContent.includes('Not published')));
     assert.match(await page.locator('body').innerText(), /not orders or received stock/);
     fs.mkdirSync('test-results', { recursive: true });
@@ -53,6 +60,31 @@ const fs = require('node:fs');
     }
     assert(reads.length >= 1);
     assert(reads.every(path => path.includes(process.env.CONNECTED_RUN_ID)));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const published = (await page.locator('p').allTextContents()).find(p => p.startsWith('Published plan version: ')).split(': ')[1].split('.')[0];
+    await page.goto(ui + '/workspace/recommendations?version=' + encodeURIComponent(published));
+    await page.getByRole('button', { name: /^Approve version/ }).waitFor();
+    const reviewUrl = page.url();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const button = page.getByRole('button', { name: 'Forecast & stock projection', exact: true });
+      await button.scrollIntoViewIfNeeded();
+      const before = await page.evaluate(() => scrollY);
+      await button.click();
+      const drawer = page.getByRole('dialog', { name: 'Forecast & stock projection', exact: true });
+      await drawer.getByRole('heading', { name: 'Daily baseline', exact: true }).waitFor();
+      await drawer.getByRole('tab', { name: 'Stock projection', exact: true }).click();
+      await drawer.getByLabel(/^Projection basis/).selectOption('candidate');
+      assert.equal(page.url(), reviewUrl, 'Supporting details must not leave the recommendation');
+      assert.equal(await drawer.getByRole('link').count(), 0);
+      assert(await drawer.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'Drawer overflow');
+      await page.screenshot({ path: `test-results/recommendation-drawer-${width}.png` });
+      await page.keyboard.press('Escape');
+      await drawer.waitFor({ state: 'hidden' });
+      assert(await button.evaluate(el => document.activeElement === el), 'Focus returns to the review');
+      assert(Math.abs(await page.evaluate(() => scrollY) - before) < 2, 'Review scroll must be retained');
+      await page.getByRole('button', { name: /^Approve version/ }).waitFor();
+    }
     assert.deepEqual(errors, []);
     console.log('PASS: real manager login, queued-to-success automatic refresh without reload, exact run read, frozen forecast, both projection bases, desktop/mobile, no browser errors.');
   } finally { await browser.close(); }

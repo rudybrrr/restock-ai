@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { api, ApiError, Identity } from "@/lib/api";
 import { Wordmark } from "./wordmark";
+import { WorkspaceTour } from "./workspace-tour";
 import { areaGuides, areas, tabDescriptions, tabGuides, workspaceArea } from "@/lib/workspace-navigation";
 import "./restock.css";
 import "./workspace-spacing.css";
@@ -23,6 +24,12 @@ const DateContext = createContext<{
   setDay: (day: string) => void;
 }>({ day: "2026-02-16", setDay: () => {} });
 export const useServiceDate = () => useContext(DateContext);
+const ViewContext = createContext<{ values: Record<string, string>; set: (key: string, value: string) => void }>({ values: {}, set: () => {} });
+// Only navigation preferences live here. Never retain forms, credentials or operational facts.
+export function useWorkspaceView(key: string, initial: string): [string, (value: string) => void] {
+  const context = useContext(ViewContext);
+  return [context.values[key] ?? initial, value => context.set(key, value)];
+}
 const icons = [LayoutDashboard, Package, FileCheck2, History, Store];
 
 export function Workspace({ children }: { children: React.ReactNode }) {
@@ -33,6 +40,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const cache = useQueryClient();
   const [day, setDay] = useState("2026-02-16");
+  const [views, setViews] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const identity = useQuery({
@@ -113,6 +121,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     );
   return (
     <DateContext.Provider value={{ day, setDay }}>
+    <ViewContext.Provider value={{ values: views, set: (key, value) => setViews(previous => ({ ...previous, [key]: value })) }}>
       <div className="restock-app workspace">
         <a className="skip-link" href="#workspace-main">
           Skip to content
@@ -166,6 +175,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               <Menu size={21} />
             </button>
             <span>{area.label}</span>
+            <WorkspaceTour key={identity.data.username} username={identity.data.username} />
             <label className="service-date">
               Service date
               <input
@@ -197,7 +207,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
-    </DateContext.Provider>
+    </ViewContext.Provider></DateContext.Provider>
   );
 }
 

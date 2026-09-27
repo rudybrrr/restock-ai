@@ -13,6 +13,7 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
     const errors = [];
     page.on("pageerror", e => errors.push(e.message));
     let mode = "pending", empty = false, errorData = false;
@@ -54,37 +55,20 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
     await page.goto(base + "/workspace/overview");
     const nav = page.getByRole("navigation", { name: "Workspace navigation", exact: true });
     await nav.waitFor();
-    assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Today", "Stock & sales", "Purchasing", "Activity", "Restaurant settings"]);
-    await page.getByRole("heading", { name: "New to ReStock?", exact: true }).waitFor();
+    assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Today", "Daily operations", "Purchasing", "Activity", "Settings"]);
+    assert.equal(await page.getByRole("tab").count(), 0, "Today must have no nested tabs");
+    await page.getByText("New to ReStock?", { exact: true }).click();
+    await page.getByText("Activity is your history. Settings contains suppliers, promotions and restaurant reference data.", { exact: true }).waitFor();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await page.screenshot({ path: `test-results/overview-clean-${width}.png`, fullPage: true });
-      const guideButton = page.getByRole("button", { name: "Open quick start", exact: true });
-      await guideButton.click();
-      const guideDialog = page.getByRole("dialog", { name: "Your first day with ReStock", exact: true });
-      await guideDialog.waitFor();
-      await guideDialog.getByRole("link", { name: "Open purchasing →", exact: true }).waitFor();
-      assert(await guideDialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
-      await page.screenshot({ path: `test-results/quick-start-${width}.png` });
-      await page.keyboard.press("Escape");
-      await guideDialog.waitFor({ state: "hidden" });
-      assert(await guideButton.evaluate(el => document.activeElement === el));
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("button", { name: "Dismiss quick start", exact: true }).click();
-    await page.reload();
-    await page.getByRole("button", { name: "Show quick start", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Show quick start", exact: true }).click();
-    await page.getByRole("heading", { name: "New to ReStock?", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Dismiss quick start", exact: true }).click();
     const stocks = page.getByRole("region", { name: "Stock comparison", exact: true });
     assert.equal(await stocks.count(), 0);
-    await page.getByRole("tab", { name: "Daily operations", exact: true }).click();
-    await page.getByText("Lunch offer", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("heading", { name: "Your purchase plan", exact: true }).count(), 0);
-    await page.getByRole("tab", { name: "Stock overview", exact: true }).click();
-    assert.equal(await page.getByText("Lunch offer", { exact: true }).count(), 0);
+    await nav.getByRole("link", { name: "Daily operations", exact: true }).click();
+    await page.getByText("Compare counts with estimates side by side", { exact: true }).click();
     await stocks.getByRole("cell", { name: "12.000 kg", exact: true }).waitFor();
     await stocks.getByRole("cell", { name: "10.000 kg", exact: true }).waitFor();
     await stocks.getByLabel("Estimate through (Singapore · 2026-02-16)", { exact: true }).fill("08:30");
@@ -94,14 +78,15 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
       await page.goto(base + "/workspace/" + route);
       await page.locator(".page-heading h1").waitFor();
       await page.locator('.workspace-content [role="status"]').filter({ hasText: /^Loading/ }).first().waitFor({ state: "hidden" });
-      const area = ["inventory", "daily", "sales"].includes(route) ? "Stock & sales" : ["recommendations", "deliveries"].includes(route) ? "Purchasing" : route.startsWith("activity") ? "Activity" : route === "suppliers" ? "Restaurant settings" : "Today";
+      const area = ["inventory", "daily", "sales"].includes(route) ? "Daily operations" : ["recommendations", "deliveries"].includes(route) ? "Purchasing" : route.startsWith("activity") ? "Activity" : route === "suppliers" ? "Settings" : "Today";
       assert.equal(await nav.getByRole("link", { name: area, exact: true }).getAttribute("aria-current"), "page");
       assert((await page.locator(".area-intro > p").innerText()).length > 20);
       const areaGuide = page.locator(".area-guide");
       assert.equal(await areaGuide.getAttribute("open"), null);
       await areaGuide.locator("summary").click();
-      assert.equal(await areaGuide.locator("dt").count(), 3);
+      assert.equal(await areaGuide.locator("dt").count(), area === "Daily operations" ? 4 : 3);
       assert((await areaGuide.locator("dd").first().innerText()).length > 40);
+      if (area === "Daily operations") assert.equal(await areaGuide.locator("dl").evaluate(el => getComputedStyle(el).gridTemplateColumns.split(" ").length), 2, "Four guides must form a balanced 2×2 layout");
       for (const tab of await page.getByRole("tab").all()) {
         await tab.click();
         await page.locator(".tab-description").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`${route} missing guidance after tab click at ${page.url()} ${JSON.stringify(errors)} ${(await page.locator("body").innerText()).slice(0, 1000)}`); });
@@ -110,6 +95,7 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
         await viewGuide.locator("summary").click();
         assert.deepEqual(await viewGuide.locator("dt").allTextContents(), ["Typical task", "Keep in mind"]);
         assert((await viewGuide.locator("dd").last().innerText()).length > 40);
+        await viewGuide.locator("summary").click();
       }
       if (route === "sales") {
         await page.getByRole("tab", { name: "Stock estimates", exact: true }).click();
@@ -129,25 +115,40 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
       assert.equal(await page.getByRole("tab", { name: "Forecast", exact: true }).count(), 0);
       assert.equal(await page.getByRole("tab", { name: "Projections", exact: true }).count(), 0);
       assert(!(await page.locator("body").innerText()).includes("About optional waste records"));
-      for (const width of [1440, 820, 390]) {
+      await areaGuide.locator("summary").click();
+      for (const width of [1440, 820, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${route} overflow at ${width}`);
+        if (width <= 390) {
+          for (const tabs of await page.locator('.area-tabs,.tabs').all()) assert(await tabs.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${route}: clipped navigation labels at ${width}`);
+          await areaGuide.locator('summary').click();
+          assert.equal(await areaGuide.locator('dl').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 1, 'Phone guides must stack cleanly');
+          await areaGuide.locator('summary').click();
+        }
+        const problems = await page.locator('.workspace-content').evaluate(root => [...root.querySelectorAll('input:not([type=checkbox]):not([type=radio]),select,textarea,.button')].filter(el => el.getClientRects().length && !el.closest('dialog:not([open])')).flatMap(el => {
+          const r = el.getBoundingClientRect();
+          const p = el.closest('.table-scroll')?.getBoundingClientRect();
+          return r.height < 43 || (!p && (r.left < -1 || r.right > innerWidth + 1)) ? [el.getAttribute('aria-label') || el.textContent || el.tagName] : [];
+        }));
+        assert.deepEqual(problems, [], `${route} clipped or undersized controls at ${width}`);
         await page.screenshot({ path: `test-results/final-${route.replaceAll("/", "-")}-${width}.png`, fullPage: true });
       }
       assert(!(await page.locator("body").innerText()).includes("NEVER_RENDER_THIS_PRIVATE_VALUE"));
     }
     await page.goto(base + "/workspace/recommendations");
-    const workflow = page.getByRole("navigation", { name: "Purchasing workflow", exact: true });
+    const workflow = page.locator('.purchasing-steps');
+    assert.equal(await workflow.getByRole("link").count(), 0, "Stages must not be maze navigation");
     assert.equal(await workflow.locator('[aria-current="step"]').innerText().then(text => text.includes("Review")), true);
     mode = "approved";
     await page.reload();
     await workflow.getByText("Version 1 approved. No order placed.", { exact: true }).waitFor();
     assert((await workflow.locator('[aria-current="step"]').innerText()).includes("Record purchase"));
-    await workflow.getByRole("link", { name: "Receive", exact: true }).click();
+    await page.goto(base + "/workspace/deliveries?view=receive");
     await page.getByRole("tab", { name: "Outstanding", exact: true }).waitFor();
     assert.equal(await page.getByRole("tab", { name: "Outstanding", exact: true }).getAttribute("aria-selected"), "true");
     mode = "pending";
     await page.goto(base + "/workspace/recommendations");
+    await page.getByText("Existing purchases and commitments", { exact: true }).click();
     await page.getByRole("heading", { name: "Already arranged · not new purchases", exact: true }).waitFor();
     await page.getByRole("cell", { name: "4.000", exact: true }).waitFor();
     const commitments = page.getByRole("region", { name: "Existing purchases", exact: true });
@@ -156,8 +157,17 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
     assert.equal(await commitments.locator("details").getAttribute("open"), null);
     await commitments.getByText("Capture times", { exact: true }).click();
     await commitments.getByText(/Operational cutoff:/).waitFor();
-    await page.getByText("Why this recommendation?", { exact: true }).click();
+    const evidenceButton = page.getByRole("button", { name: "Explanation & evidence", exact: true });
+    const reviewUrl = page.url();
+    await evidenceButton.click();
+    const evidenceDialog = page.getByRole("dialog", { name: "Explanation & evidence", exact: true });
+    await evidenceDialog.waitFor();
     await page.getByText("Additional vegetables cover the bounded shortfall.", { exact: true }).waitFor();
+    assert.equal(page.url(), reviewUrl);
+    assert.equal(await evidenceDialog.getByRole("link").count(), 0);
+    await page.keyboard.press("Escape");
+    await evidenceDialog.waitFor({ state: "hidden" });
+    assert(await evidenceButton.evaluate(el => document.activeElement === el));
     await page.goto(base + "/workspace/activity/run-1");
     await page.getByText("Complete · candidate feasible within its captured scope", { exact: true }).waitFor();
     await page.getByText("Stored procurement search evidence", { exact: true }).click();
@@ -191,7 +201,7 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
     await page.getByRole("button", { name: "Close supplier terms", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
     await page.goto(base + "/workspace/inventory");
-    const stockNav = page.getByRole("navigation", { name: "Stock & sales pages", exact: true });
+    const stockNav = page.getByRole("navigation", { name: "Daily operations pages", exact: true });
     await stockNav.getByRole("link", { name: "Sales", exact: true }).click();
     await page.getByRole("heading", { name: "Sales during service", exact: true }).waitFor();
     await stockNav.getByRole("link", { name: "Closing update", exact: true }).click();
@@ -200,16 +210,22 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
     await page.getByText("Created by a recorded delivery receipt", { exact: true }).waitFor();
     await page.getByPlaceholder("Search ingredients").fill("no-match");
     await page.getByText("No lots match this ingredient. Try a different search.", { exact: true }).waitFor();
+    await stockNav.getByRole("link", { name: "Sales", exact: true }).click();
+    await page.getByLabel("Window start", { exact: true }).fill("08:45");
+    await stockNav.getByRole("link", { name: "Inventory", exact: true }).click();
+    assert.equal(await page.getByPlaceholder("Search ingredients").inputValue(), "no-match", "Search must survive leaving the task");
+    await stockNav.getByRole("link", { name: "Sales", exact: true }).click();
+    assert.equal(await page.getByLabel("Window start", { exact: true }).inputValue(), "08:45", "Sales window must survive leaving the task");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/inventory?view=menu");
-    await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Restaurant settings", exact: true }).waitFor();
-    assert.equal(await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Restaurant settings", exact: true }).getAttribute("aria-current"), "page");
+    await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Settings", exact: true }).waitFor();
+    assert.equal(await page.getByRole("navigation", { name: "Workspace navigation", exact: true }).getByRole("link", { name: "Settings", exact: true }).getAttribute("aria-current"), "page");
     await page.getByRole("heading", { name: "Vegetable noodles", exact: true }).waitFor();
-    await page.getByRole("navigation", { name: "Restaurant settings pages", exact: true }).getByRole("link", { name: "Ordering schedules", exact: true }).click();
+    await page.getByRole("navigation", { name: "Settings pages", exact: true }).getByRole("link", { name: "Ordering schedules", exact: true }).click();
     await page.getByText("Every 1 days", { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.getByRole("button", { name: "Toggle navigation", exact: true }).click();
-    await page.getByRole("link", { name: "Stock & sales", exact: true }).focus();
+    await page.getByRole("link", { name: "Daily operations", exact: true }).focus();
     await page.keyboard.press("Escape");
     assert.equal(await page.getByRole("button", { name: "Toggle navigation", exact: true }).getAttribute("aria-expanded"), "false");
     empty = true;
@@ -222,6 +238,6 @@ const lot = { id: "lot-1", ingredient_id: "vegetables", quantity: "12.000", init
     await page.goto(base + "/workspace/overview");
     await page.getByRole("heading", { name: "Some records could not be checked.", exact: true }).waitFor({ timeout: 20000 });
     assert.deepEqual(errors, []);
-    console.log("PASS: next-action priorities, counted/estimated stock with explicit cutoff, nine screens/three widths, captured commitments, stored validation, sales handoff, provenance, navigation, empty/filter/error states and no private trace rendering.");
+    console.log("PASS: next-action priorities, counted/estimated stock with explicit cutoff, nine screens/four widths (320–1440), balanced guides, unclipped 44px controls, captured commitments, stored validation, sales handoff, provenance, navigation, empty/filter/error states and no private trace rendering.");
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

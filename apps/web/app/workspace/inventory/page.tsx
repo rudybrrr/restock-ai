@@ -3,6 +3,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { InventorySummary } from "@/components/inventory-summary";
+import { StockComparison } from "@/components/stock-comparison";
 import { useQuery } from "@tanstack/react-query";
 import { api, Ingredient, InventoryLot, NamedRecord } from "@/lib/api";
 import { Delivery } from "@/lib/operations-types";
@@ -12,6 +13,7 @@ import {
   Status,
   TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 
 type Recipe = { menu_item_id: string; ingredient_id: string; quantity: string };
@@ -24,10 +26,11 @@ function InventoryRoute() {
 }
 function InventoryContent({ initialTab }: { initialTab: string }) {
   const { day } = useServiceDate();
-  const [tab, setTab] = useState(initialTab);
+  const [tab, setTab] = useWorkspaceView(`inventory-tab:${initialTab}`, initialTab);
   const referenceView = ["Menu & recipes", "Ordering schedules"].includes(initialTab);
-  const [time, setTime] = useState("08:00");
-  const [search, setSearch] = useState("");
+  const [time, setTime] = useWorkspaceView(`inventory-time:${day}`, "08:00");
+  const [search, setSearch] = useWorkspaceView("inventory-search", "");
+  const [comparison, setComparison] = useState(false);
   const ingredients = useQuery({
     queryKey: ["ingredients"],
     queryFn: ({ signal }) => api<Ingredient[]>("/ingredients", { signal }),
@@ -58,7 +61,7 @@ function InventoryContent({ initialTab }: { initialTab: string }) {
   return (
     <>
       <PageHeading
-        eyebrow={referenceView ? "RESTAURANT SETTINGS" : "STOCK & SALES"}
+        eyebrow={referenceView ? "SETTINGS" : "DAILY OPERATIONS"}
         title={referenceView ? initialTab : "Inventory"}
         description={tab === "Menu & recipes" ? "Inspect dishes and ingredient quantities per portion. Recipes are read-only." : tab === "Ordering schedules" ? "See each ingredient’s interval and starting date. Manage occasion decisions under Suppliers & promotions." : "Compare recorded counts with sales-based estimates."}
       />
@@ -314,6 +317,7 @@ function InventoryContent({ initialTab }: { initialTab: string }) {
           )}
         </>
       )}
+      {!referenceView && <details className="record-details" onToggle={e => setComparison(e.currentTarget.open)}><summary>Compare counts with estimates side by side</summary>{comparison && <StockComparison />}</details>}
       <p className="quiet">
         FEFO uses earlier-expiring eligible lots first, then earlier receipt
         time, then ascending lot ID. Only arrived, unexpired lots are eligible.

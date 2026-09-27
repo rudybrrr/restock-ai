@@ -34,7 +34,7 @@ def main():
             database_url=url,
             manager_password=SecretStr("test-manager-password"),
             agent_token=SecretStr("test-agent-token"),
-            allowed_origins=["https://frontend.example", "http://localhost:3025"],
+            allowed_origins=["https://frontend.example", os.environ.get("UI_TEST_URL", "http://localhost:3025")],
             cookie_secure=False,
             enable_development_calculator=True,
         )

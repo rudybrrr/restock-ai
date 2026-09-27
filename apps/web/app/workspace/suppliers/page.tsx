@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { SupplierTerms } from "@/components/supplier-terms";
+import { ProcurementEvidence } from "@/components/procurement-evidence";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord } from "@/lib/api";
 import { Offer, Promotion, OrderCycle } from "@/lib/operations-types";
@@ -11,11 +12,13 @@ import {
   Status,
   TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 export default function SuppliersPage() {
   const { day } = useServiceDate();
   const cache = useQueryClient();
-  const [tab, setTab] = useState("Supplier offers");
+  const [tab, setTab] = useWorkspaceView("supplier-tab", "Supplier offers");
+  const [policyOpen, setPolicyOpen] = useState(false);
   const [editing, setEditing] = useState<Offer | null>(null);
   const [terms, setTerms] = useState<Offer | null>(null);
   const [promotion, setPromotion] = useState<Promotion | null | undefined>(
@@ -24,7 +27,7 @@ export default function SuppliersPage() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [message, setMessage] = useState("");
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useWorkspaceView("supplier-filter", "");
   const suppliers = useQuery({
     queryKey: ["suppliers"],
     queryFn: ({ signal }) => api<NamedRecord[]>("/suppliers", { signal }),
@@ -412,19 +415,19 @@ export default function SuppliersPage() {
                       defaultValue={`${day}T08:00`}
                     />
                   </label>
-                  <label>
-                    Active
+                  <label className="checkbox-field">
                     <input
                       type="checkbox"
                       name="active"
                       defaultChecked={promotion?.active ?? true}
                     />
+                    Active
                   </label>
                 </div>
-                <fieldset style={{ marginTop: 20 }}>
+                <fieldset className="checkbox-group" style={{ marginTop: 20 }}>
                   <legend>Affected dishes (select at least one)</legend>
                   {menu.data?.map((m) => (
-                    <label key={m.id} style={{ display: "block" }}>
+                    <label key={m.id}>
                       <input
                         type="checkbox"
                         name="dishes"
@@ -614,6 +617,7 @@ export default function SuppliersPage() {
           </p>
         </section>
       )}
+      {tab === "Supplier offers" && <details className="record-details" onToggle={e => setPolicyOpen(e.currentTarget.open)}><summary>Procurement policy version history · reference only</summary>{policyOpen && <ProcurementEvidence />}</details>}
       {terms && <SupplierTerms offer={terms}
         supplier={suppliers.data?.find(s => s.id === terms.supplier_id)?.name ?? terms.supplier_id}
         ingredient={ingredients.data?.find(i => i.id === terms.ingredient_id)?.name ?? terms.ingredient_id}

@@ -6,6 +6,7 @@ const fs = require("node:fs");
   try {
     fs.mkdirSync("test-results", { recursive: true });
     const page = await browser.newPage();
+    await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
     const errors = [];
     page.on("pageerror", e => errors.push(e.message));
     await page.route("http://localhost:8000/api/v1/**", async route => {

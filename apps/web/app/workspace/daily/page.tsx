@@ -213,6 +213,7 @@ function DailyEditor({ day }: { day: string }) {
                           </small>
                         </td>
                         <td>
+                          <div className="quantity-field">
                           <input
                             aria-label={`Closing quantity for ${l.id}`}
                             type="number"
@@ -226,9 +227,9 @@ function DailyEditor({ day }: { day: string }) {
                               else counts[l.id] = e.target.value;
                               change({ counts });
                             }}
-                            style={{ width: 110 }}
-                          />{" "}
-                          {l.unit}
+                          />
+                          <span>{l.unit}</span>
+                          </div>
                         </td>
                       </tr>
                     ))}

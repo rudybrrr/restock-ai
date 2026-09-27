@@ -339,6 +339,7 @@ async function main() {
     reducedMotion: "reduce",
     viewport: { width: 1440, height: 1000 },
   });
+  await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(5000);
   const errors = [],
@@ -441,7 +442,7 @@ async function main() {
           snapshot: { known_at: at("08:00"), missing_offer_history: [] },
         },
       ];
-    if (path === "/plan-history")
+    if (path === "/plan-history" || path === "/plans/version-1")
       body = [
         {
           id: "version-1",
@@ -481,6 +482,7 @@ async function main() {
         outcome: "CALCULATION_INCOMPLETE",
         snapshot: { procurement_contract: { captured_state_revision: "42" } },
       };
+    if (path === "/plans/version-1") body = body[0];
     if (path === "/plans/missing-version") {
       status = 404;
       body = {
@@ -560,12 +562,13 @@ async function main() {
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + "/workspace/recommendations");
-    await page.getByText("Why this recommendation?", { exact: true }).click();
     await page.getByText("Calculation references", { exact: true }).click();
+    await page.getByRole("button", { name: "Explanation & evidence", exact: true }).click();
     await page.getByText("Assessment summary", { exact: true }).waitFor();
     await page.getByText("Plan & approval details", { exact: true }).click();
     await page.getByText(/1 stale attempt/).waitFor();
-    await page.getByRole("tab", { name: "Policy", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Policy & captured inputs", exact: true }).click();
     await page.getByText("S$100.00", { exact: true }).waitFor();
     await page.getByText("fresh · chicken · offer-1", { exact: true }).click();
     await page.getByText("4.50", { exact: true }).waitFor();
@@ -586,7 +589,6 @@ async function main() {
       );
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page
       .getByRole("heading", { name: "Forecast inputs—not forecast results" })
       .waitFor();

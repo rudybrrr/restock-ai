@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({channel:'msedge',headless:true});
  const page=await browser.newPage({reducedMotion:'reduce'});
+ await page.addInitScript(username => localStorage.setItem(`restock:workspace-tour:v1:${encodeURIComponent(username)}`, "seen"), process.env.RESTOCK_TEST_USERNAME || "manager");
  const base=process.env.UI_TEST_URL||'http://localhost:3002';
  try{
   page.on('request',r=>{if(r.url().includes('/api/v1/')&&r.method()!=='GET'&&r.method()!=='OPTIONS')assert(/\/auth\/(login|logout)$/.test(r.url()),'Unexpected operational write');});

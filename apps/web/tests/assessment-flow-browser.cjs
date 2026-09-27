@@ -6,6 +6,7 @@ const at = "2026-02-16T09:00:00+08:00";
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     const page = await browser.newPage({ reducedMotion: "reduce" });
+    await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let status = "QUEUED",

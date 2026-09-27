@@ -1,6 +1,6 @@
 export const areas = [
   { id: "today", label: "Today", href: "/workspace/overview", description: "See what needs attention and choose your next action.", pages: [] },
-  { id: "stock", label: "Stock & sales", href: "/workspace/inventory", description: "Check stock, report sales during service and submit counts at closing.", pages: [
+  { id: "stock", label: "Daily operations", href: "/workspace/inventory", description: "Check stock, record sales and finish the day. Choose the task you need below.", pages: [
     { label: "Inventory", href: "/workspace/inventory" },
     { label: "Sales", href: "/workspace/sales" },
     { label: "Forecast & projections", href: "/workspace/calculations" },
@@ -11,7 +11,7 @@ export const areas = [
     { label: "Purchases & deliveries", href: "/workspace/deliveries" },
   ] },
   { id: "activity", label: "Activity", href: "/workspace/activity", description: "Follow recorded changes and assessments. Open evidence when you need more detail.", pages: [] },
-  { id: "settings", label: "Restaurant settings", href: "/workspace/suppliers", description: "Manage suppliers, promotions and ordering occasions; inspect menu and recipe reference data.", pages: [
+  { id: "settings", label: "Settings", href: "/workspace/suppliers", description: "Suppliers, promotions and restaurant reference data live here—not in your daily task list.", pages: [
     { label: "Suppliers & promotions", href: "/workspace/suppliers" },
     { label: "Menu & recipes", href: "/workspace/inventory?view=menu" },
     { label: "Ordering schedules", href: "/workspace/inventory?view=schedules" },

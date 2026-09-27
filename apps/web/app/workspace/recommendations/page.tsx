@@ -1,12 +1,11 @@
 "use client";
 import { ReassessAction } from "@/components/reassess-action";
 import Link from "next/link";
-import { ProcurementEvidence } from "@/components/procurement-evidence";
-import { ManagerEvidencePanel } from "@/components/manager-run-evidence";
+import { RecommendationDetails } from "@/components/recommendation-details";
 import { PurchaseContext } from "@/components/purchase-context";
 import { PurchasingSteps } from "@/components/purchasing-steps";
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, Ingredient, NamedRecord, Plan, PlanLine } from "@/lib/api";
 import { singaporeTime } from "@/lib/format";
@@ -15,7 +14,6 @@ import {
   ErrorNotice,
   PageHeading,
   Status,
-  TabDescription,
 } from "@/components/workspace";
 type StoredLine = PlanLine & {
   id: string;
@@ -35,6 +33,7 @@ function RecommendationsContent() {
   return <RecommendationView key={requested} requested={requested} />;
 }
 function RecommendationView({ requested }: { requested: string }) {
+  const router = useRouter();
   const q = useQuery({
     queryKey: ["plans"],
     queryFn: ({ signal }) => api<Plan[]>("/plan-history", { signal }),
@@ -49,7 +48,6 @@ function RecommendationView({ requested }: { requested: string }) {
     enabled: !!selected,
     refetchInterval: 5000,
   });
-  const [tab, setTab] = useState("Purchase plans");
   const active = q.data?.find((p) =>
     ["APPROVED", "PENDING_APPROVAL"].includes(p.status),
   );
@@ -59,6 +57,9 @@ function RecommendationView({ requested }: { requested: string }) {
       q.data
         ?.slice()
         .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]);
+  useEffect(() => {
+    if (!selected && plan) router.replace(`/workspace/recommendations?version=${encodeURIComponent(plan.id)}`, { scroll: false });
+  }, [selected, plan, router]);
   return (
     <>
       <PageHeading
@@ -66,26 +67,11 @@ function RecommendationView({ requested }: { requested: string }) {
         title="Review purchase recommendation"
         description="Review quantities, arrivals and costs. Approval does not place an order."
       >
-        <Link href="/workspace/activity" className="button button-secondary">
+        {!plan && <Link href="/workspace/activity" className="button button-primary">
           Request assessment →
-        </Link>
+        </Link>}
       </PageHeading>
-      <div className="tabs" role="tablist" aria-label="Recommendation views">
-        {["Purchase plans", "Policy"].map((t) => (
-          <button
-            role="tab"
-            aria-selected={tab === t}
-            key={t}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-      <TabDescription tab={tab} />
-      {tab === "Policy" ? (
-        <ProcurementEvidence />
-      ) : selected && exact.error ? (
+      {selected && exact.error ? (
         <ErrorNotice error={exact.error} retry={() => exact.refetch()} />
       ) : selected && exact.isPending ? (
         <p role="status">Loading the requested plan version…</p>
@@ -93,6 +79,8 @@ function RecommendationView({ requested }: { requested: string }) {
         <ErrorNotice error={q.error} retry={() => q.refetch()} />
       ) : !selected && q.isPending ? (
         <p role="status">Loading recommendations…</p>
+      ) : !selected && plan ? (
+        <p role="status">Opening recommendation version {plan.version}…</p>
       ) : !plan ? (
         <section className="panel">
           <div className="empty-state">
@@ -110,7 +98,7 @@ function RecommendationView({ requested }: { requested: string }) {
             Plan history
             <select
               value={plan.id}
-              onChange={(e) => setSelected(e.target.value)}
+              onChange={(e) => { setSelected(e.target.value); router.replace(`/workspace/recommendations?version=${encodeURIComponent(e.target.value)}`, { scroll: false }); }}
             >
               {selected && plan && !q.data?.some((p) => p.id === plan.id) && (
                 <option value={plan.id}>
@@ -130,7 +118,7 @@ function RecommendationView({ requested }: { requested: string }) {
           </label>
           <PlanDetail key={plan.id} plan={plan} />
           {q.data && q.data.length > 1 && (
-            <PlanComparison selected={plan} plans={q.data} />
+            <details className="record-details"><summary>Compare with the previous version</summary><PlanComparison selected={plan} plans={q.data} /></details>
           )}
         </>
       )}
@@ -310,7 +298,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
           <ErrorNotice error={lines.error} retry={() => lines.refetch()} />
         )}
         <div className="panel-body">
-          {contingency && <PurchaseContext runId={plan.run_id} />}
+          {contingency && <details className="record-details"><summary>Existing purchases and commitments</summary><PurchaseContext runId={plan.run_id} /></details>}
           <div className="cost-ledger">
             {costRows.map(([label, value]) => (
               <div key={label}>
@@ -358,7 +346,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
               recommendation before making a decision.
             </p>
           )}
-          {plan.status === "PENDING_APPROVAL" && !stale && (
+          {plan.status === "PENDING_APPROVAL" && !stale && !decision && (
             <div id="plan-decision" className="form-actions">
               <button
                 disabled={pending}
@@ -413,7 +401,7 @@ function PlanDetail({ plan }: { plan: Plan }) {
             </section>
           )}
           {plan.status === "APPROVED" && <p className="scope-note">Use “Record purchase” on the approved lines above after arranging the order. Linked and uncommitted quantities help prevent recording the allocation twice.</p>}
-          <details className="record-details"><summary>Why this recommendation?</summary><ManagerEvidencePanel runId={plan.run_id} compact /></details>
+          <RecommendationDetails plan={plan} />
           <details className="record-details">
             <summary>Calculation references</summary>
             <dl className="evidence-list">
@@ -431,11 +419,6 @@ function PlanDetail({ plan }: { plan: Plan }) {
                 </div>
               ))}
             </dl>
-            <Link
-              href={`/workspace/activity/${encodeURIComponent(plan.run_id)}`}
-            >
-              View assessment and existing-purchase evidence →
-            </Link>
           </details>
         </div>
       </section>

@@ -1,14 +1,32 @@
 /* Shared workspace rhythm. Landing-page composition remains independent. */
-.restock-app .area-intro { margin-bottom: 28px; }
+.restock-app .task-list { list-style: none; padding: 0; margin: 20px 0 0; }
+.restock-app .task-list li { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding: 22px 0; border-top: 1px solid var(--line); }
+.restock-app .task-list li p { margin: 8px 0 0; color: #657360; font-size: 13px; }
+.restock-app .task-list a { flex-shrink: 0; font-size: 13px; color: var(--forest); }
+.restock-app .day-summary { margin: 0; }
+.restock-app .day-summary > div { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.restock-app .day-summary dt { font-size: 12px; color: #657360; margin-bottom: 8px; }
+.restock-app .day-summary dd { margin: 0; line-height: 1.6; }
+.restock-app .first-day-guide { padding-left: 20px; }
+.restock-app .first-day-guide li { margin-top: 16px; line-height: 1.7; }
+.restock-app .recommendation-support { display: flex; flex-wrap: wrap; gap: 8px 24px; padding-top: 24px; margin-top: 24px; border-top: 1px solid var(--line); }
+.restock-app .recommendation-support > span { width: 100%; font-size: 12px; color: #657360; }
+.restock-app .text-action { border: 0; background: transparent; padding: 12px 0; color: var(--forest); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 5px; }
+.restock-app .supplier-terms-dialog.recommendation-drawer { width: min(960px,100vw); }
+.restock-app .recommendation-drawer .terms-header { position: sticky; top: 0; background: #f8f9f4; z-index: 2; }
+.restock-app .workflow-note { max-width: 760px; padding-top: 12px; }
+@media(max-width:700px) { .restock-app .task-list li { flex-direction: column; gap: 12px; } .restock-app .today-focus { grid-template-columns: minmax(0,1fr); } }
+.restock-app .area-intro { margin-bottom: 24px; }
 .restock-app .area-intro > p { font-size: 13px; color: #5c695c; margin: 0 0 14px; max-width: 84ch; }
 .restock-app .area-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .restock-app .area-tabs a { padding: 10px 0 14px; font-size: 14px; white-space: nowrap; color: #657360; border-bottom: 2px solid transparent; }
 .restock-app .area-tabs a[aria-current=page] { color: var(--forest); font-weight: 600; border-color: var(--forest); }
-.restock-app .tab-description { font-size: 13px; color: #5c695c; margin: -8px 0 24px; max-width: 86ch; }
+.restock-app .tab-description { font-size: 13px; color: #5c695c; margin: 0 0 12px; max-width: 86ch; line-height: 1.65; }
 .restock-app :is(.area-guide,.view-guide) { font-size: 13px; color: #5c695c; }
 .restock-app :is(.area-guide,.view-guide) summary { cursor: pointer; padding-block: 10px; color: var(--forest); width: fit-content; }
 .restock-app .area-guide { margin-top: 8px; }
 .restock-app :is(.area-guide,.view-guide) dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; margin: 8px 0 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.restock-app .area-guide dl:has(> div:nth-child(4)) { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .restock-app :is(.area-guide,.view-guide) dt { font-weight: 600; color: var(--ink,#202823); margin-bottom: 8px; }
 .restock-app :is(.area-guide,.view-guide) dd { margin: 0; line-height: 1.65; }
 .restock-app .view-guidance { margin-bottom: 24px; }
@@ -85,7 +103,7 @@
 .restock-app .overview-summary .assessment-row .status-tag { grid-column: 2; grid-row: 1; }
 .restock-app .overview-summary .assessment-row p { margin: 0; }
 .restock-app .overview-summary .assessment-row :is(small,.quiet,a) { grid-column: 1 / -1; }
-.restock-app .workspace-content .empty-state { padding: 18px 0 24px; }
+.restock-app .workspace-content .empty-state { padding: 32px 0; }
 .restock-app .workspace-content .calculation-checks { border: 0; border-block: 1px solid var(--line); padding: 18px 0; }
 .restock-app .workspace-content .evidence-display.panel > .panel-head { padding-inline: 0; }
 .restock-app .workspace-content .quick-links { display: flex; flex-wrap: wrap; gap: 16px 28px; padding-block: 16px; border-top: 1px solid var(--line); font-size: 14px; color: var(--forest); }
@@ -203,12 +221,12 @@
 .restock-app .calculation-display li { overflow-wrap: anywhere; }
 .restock-app .calculation-display hr { border: 0; border-top: 1px solid var(--line); margin-block: 32px; }
 .restock-app .workspace-content > .field-label > :is(input,select) { width: min(100%, 360px); }
-.restock-app .form-grid { gap: 20px 24px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.restock-app .form-grid { gap: 20px 24px; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; }
 .restock-app .form-grid > label { min-width: 0; gap: 8px; }
 .restock-app :is(input:not([type=checkbox]):not([type=radio]),select) { min-height: 44px; }
 .restock-app textarea { min-height: 100px; resize: vertical; }
 .restock-app .service-date input { min-height: 36px; }
-.restock-app .form-actions { gap: 12px; align-items: flex-end; margin-top: 24px; }
+.restock-app .form-actions { gap: 12px; align-items: flex-end; margin-top: 24px; padding-bottom: 8px; }
 .restock-app .panel-body.form-actions { margin-top: 0; }
 .restock-app .button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; line-height: 1.4; text-align: center; }
 .restock-app th { padding: 14px 20px; font-size: 11px; letter-spacing: .5px; }
@@ -228,10 +246,66 @@
 .restock-app .evidence-display li + li { margin-top: 8px; }
 .restock-app .tabs { gap: 24px; }
 .restock-app .tabs button { min-height: 44px; font-size: 14px; }
+/* Shared presentation rules: task forms, filters and captured evidence. */
+.restock-app .workspace-content :is(h1,h2,h3,h4) { text-wrap: balance; }
+.restock-app .workspace-content p { line-height: 1.65; }
+.restock-app .page-heading { gap: 24px; align-items: flex-start; margin-bottom: 28px; }
+.restock-app .page-heading > div { min-width: 0; }
+.restock-app .page-heading h1 { font-size: clamp(26px,2.3vw,34px); font-weight: 600; letter-spacing: -.8px; }
+.restock-app .page-heading p:last-child { max-width: 82ch; overflow-wrap: anywhere; }
+.restock-app .page-heading > .button { flex-shrink: 0; margin-top: 22px; }
+.restock-app .workspace-content > .page-heading { animation: none; }
+.restock-app .workspace-content .empty-state h3 { font-size: 18px; font-weight: 600; }
+.restock-app .workspace-content .empty-state p { max-width: 72ch; margin-top: 10px; }
+.restock-app :is(.area-guide,.view-guide,.record-details) > summary { min-height: 44px; padding-block: 12px; }
+.restock-app .record-details { padding-block: 8px; }
+.restock-app .record-details[open] > :not(summary) { margin-top: 16px; }
+.restock-app :is(.workspace-content,.terms-body) :is(input,select,textarea) { font: inherit; font-size: 14px; min-width: 0; max-width: 100%; }
+.restock-app :is(input[type=checkbox],input[type=radio]) { accent-color: var(--forest); }
+.restock-app .form-grid > label { align-content: start; line-height: 1.5; }
+.restock-app .form-grid > label > :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { width: 100%; }
+.restock-app form .form-grid { max-width: 880px; }
+.restock-app .form-grid > .checkbox-field { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.restock-app .workspace-content .panel-body > p + .form-grid { margin-top: 16px; }
+.restock-app .workspace-content .panel > p { margin: 0 0 20px; font-size: 14px; }
+.restock-app fieldset { min-width: 0; }
+.restock-app .filter-toolbar { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; padding-block: 20px; }
+.restock-app .filter-toolbar > label:not(.refresh-toggle) { display: grid; gap: 8px; flex: 0 1 220px; min-width: 0; }
+.restock-app .filter-toolbar .refresh-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; font-size: 13px; }
+.restock-app .filter-toolbar > .button { flex: 0 0 auto; }
+.restock-app .quantity-field { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.restock-app .quantity-field input { width: 112px; font-variant-numeric: tabular-nums; }
+.restock-app .quantity-field > span { font-size: 12px; color: var(--muted); }
+.restock-app .checkbox-group { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--line); max-width: 880px; }
+.restock-app .checkbox-group legend { padding-inline: 6px; font-size: 13px; font-weight: 600; }
+.restock-app .checkbox-group label { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
+.restock-app .evidence-display dl:not(:has(> div)):not(.assessment-story) { display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 0 24px; }
+.restock-app .evidence-display dl:not(:has(> div)):not(.assessment-story) :is(dt,dd) { margin: 0; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.restock-app .evidence-display .assessment-story :is(dt,dd) { margin: 0; }
+.restock-app .evidence-list > div { grid-template-columns: 170px minmax(0,1fr); padding-block: 12px; border-bottom: 1px solid var(--line); }
+.restock-app .evidence-list :is(dt,dd) { margin: 0; }
+.restock-app .terms-header { position: sticky; top: 0; background: #f8f9f4; z-index: 2; }
+.restock-app .terms-header > div { min-width: 0; }
+.restock-app .terms-header .icon-button { flex-shrink: 0; }
+.restock-app .terms-facts dd { overflow-wrap: anywhere; }
+.restock-app .recommendation-support .text-action { min-height: 44px; }
+@media(max-width:1000px) { .restock-app .area-guide dl { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:1000px) { .restock-app { --workspace-gutter: 28px; } }
 @media(max-width:700px) {
   .restock-app { --workspace-gutter: 18px; --panel-padding: 18px; }
   .restock-app .page-heading { align-items: flex-start; gap: 16px; }
+  .restock-app .page-heading > .button { margin-top: 0; }
+  .restock-app :is(.area-tabs,.tabs) { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 16px; overflow: visible; }
+  .restock-app :is(.area-tabs a,.tabs button) { min-width: 0; white-space: normal; text-align: left; line-height: 1.5; padding-block: 12px; }
+  .restock-app .area-guide dl:has(> div:nth-child(4)) { grid-template-columns: minmax(0,1fr); }
+  .restock-app .area-guide dl { grid-template-columns: minmax(0,1fr); }
+  .restock-app .filter-toolbar > label:not(.refresh-toggle) { flex-basis: calc(50% - 12px); }
+  .restock-app .filter-toolbar .refresh-toggle { flex-basis: 100%; }
+  .restock-app .terms-header,.restock-app .terms-body { padding: 20px 18px; }
+  .restock-app .terms-header h2 { font-size: 22px; }
+  .restock-app .evidence-display dl:not(:has(> div)):not(.assessment-story) { grid-template-columns: minmax(0,1fr); }
+  .restock-app .evidence-display dl:not(:has(> div)):not(.assessment-story) dt { border: 0; padding-bottom: 4px; }
+  .restock-app .evidence-display dl:not(:has(> div)):not(.assessment-story) dd { padding-top: 0; }
   .restock-app .panel-head { gap: 8px 16px; }
   .restock-app .panel-head .quiet { font-size: 12px; }
   .restock-app .form-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }

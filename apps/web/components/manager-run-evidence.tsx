@@ -37,9 +37,11 @@ function ApprovalAttempt({ attempt }: { attempt: ManagerApprovalAttempt }) {
 export function ManagerEvidencePanel({
   runId,
   compact = false,
+  embedded = false,
 }: {
   runId: string;
   compact?: boolean;
+  embedded?: boolean;
 }) {
   const evidence = useQuery({
     queryKey: ["manager-run-evidence", runId],
@@ -127,10 +129,10 @@ export function ManagerEvidencePanel({
                           : "Review the recorded decision, reasons and evidence gaps before acting."}
         </dd>
       </dl>
-      {value.approval.required && value.active_plan && (
+      {!embedded && value.approval.required && value.active_plan && (
         <p><Link className="button button-primary" href={`/workspace/recommendations?version=${encodeURIComponent(value.active_plan.id)}`}>Review version {value.active_plan.version} →</Link></p>
       )}
-      {compact && <Link href={`/workspace/activity/${encodeURIComponent(runId)}`}>
+      {compact && !embedded && <Link href={`/workspace/activity/${encodeURIComponent(runId)}`}>
         Open this assessment →
       </Link>}
 

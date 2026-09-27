@@ -1,14 +1,13 @@
 "use client";
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type Run } from "@/lib/api";
 import { readCalculationResult } from "@/lib/calculation-results";
 import { CalculationResults } from "@/components/calculation-results";
-import { ErrorNotice, PageHeading } from "@/components/workspace";
+import { ErrorNotice, PageHeading, useWorkspaceView } from "@/components/workspace";
 import { humanize, singaporeTime } from "@/lib/format";
 
 export default function CalculationsPage() {
-  const [run, setRun] = useState("");
+  const [run, setRun] = useWorkspaceView("calculation-assessment", "");
   const runs = useQuery({ queryKey: ["runs"], queryFn: ({ signal }) => api<Run[]>("/runs", { signal }),
     refetchInterval: q => q.state.data?.some(r => r.id === run && ["QUEUED", "RUNNING"].includes(r.status)) ? 2500 : false });
   const selected = runs.data?.find(r => r.id === run);
@@ -17,7 +16,7 @@ export default function CalculationsPage() {
     queryFn: async ({ signal }) => readCalculationResult(await api<unknown>(`/manager/runs/${encodeURIComponent(run)}/calculation-results`, { signal }), run),
     refetchInterval: q => q.state.data && ["QUEUED", "RUNNING"].includes(q.state.data.run_status) ? 2500 : false });
   return <>
-    <PageHeading eyebrow="STOCK & SALES" title="Forecast & projections" description="Inspect the demand and stock calculations frozen for a particular assessment. No calculation is rerun here." />
+    <PageHeading eyebrow="DAILY OPERATIONS" title="Forecast & projections" description="Inspect the demand and stock calculations frozen for a particular assessment. No calculation is rerun here." />
     <section className="panel calculation-display"><div className="panel-body">
       <label className="field-label">Assessment<select value={run} onChange={e => setRun(e.target.value)} disabled={runs.isPending}><option value="">Choose an assessment</option>{runs.data?.map(r => <option key={r.id} value={r.id}>{singaporeTime(r.as_of)} · {humanize(r.trigger)} · {humanize(r.status)} · {r.id.slice(0, 8)}</option>)}</select></label>
       {runs.isPending && <p role="status">Loading assessments…</p>}
