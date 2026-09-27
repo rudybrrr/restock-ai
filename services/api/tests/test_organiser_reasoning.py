@@ -177,7 +177,7 @@ def test_typed_organiser_model_uses_existing_procurement_boundary() -> None:
     assert chat.calls[0][1] is ProcurementModelDecision
 
 
-def test_typed_adapter_supplies_existing_context_and_response_schema() -> None:
+def test_typed_adapter_supplies_existing_context_without_duplicate_schema() -> None:
     chat = RecordingChatModel(valid_decision())
     model = OrganiserProcurementReasoning(chat)  # type: ignore[arg-type]
 
@@ -185,11 +185,10 @@ def test_typed_adapter_supplies_existing_context_and_response_schema() -> None:
     user_payload = json.loads(chat.calls[0][0][1]["content"])
 
     assert isinstance(result, ProcurementModelDecision)
-    assert user_payload["context"]["delegation"]["task_id"] == "TASK-TYPED-1"
-    assert user_payload["response_schema"] == ProcurementModelDecision.model_json_schema()
+    assert user_payload == {"context": context().model_dump(mode="json")}
 
 
-def test_demand_typed_adapter_uses_existing_context_and_response_schema() -> None:
+def test_demand_typed_adapter_uses_existing_context_without_duplicate_schema() -> None:
     decision = DemandModelDecision(
         run_id="RUN-TYPED-1",
         task_id="TASK-TYPED-1",
@@ -205,10 +204,10 @@ def test_demand_typed_adapter_uses_existing_context_and_response_schema() -> Non
 
     assert result == decision
     assert chat.calls[0][1] is DemandModelDecision
-    assert user_payload["response_schema"] == DemandModelDecision.model_json_schema()
+    assert user_payload == {"context": demand_context().model_dump(mode="json")}
 
 
-def test_inventory_typed_adapter_uses_existing_context_and_response_schema() -> None:
+def test_inventory_typed_adapter_uses_existing_context_without_duplicate_schema() -> None:
     decision = InventoryModelDecision(
         run_id="RUN-TYPED-1",
         task_id="TASK-TYPED-1",
@@ -224,7 +223,7 @@ def test_inventory_typed_adapter_uses_existing_context_and_response_schema() -> 
 
     assert result == decision
     assert chat.calls[0][1] is InventoryModelDecision
-    assert user_payload["response_schema"] == InventoryModelDecision.model_json_schema()
+    assert user_payload == {"context": inventory_context().model_dump(mode="json")}
 
 
 def test_factory_is_explicit_and_construction_has_no_network_side_effect() -> None:

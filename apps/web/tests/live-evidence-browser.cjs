@@ -10,6 +10,7 @@ async function main() {
   );
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   const page = await browser.newPage({ reducedMotion: "reduce" });
+  await page.addInitScript(username => localStorage.setItem(`restock:workspace-tour:v1:${encodeURIComponent(username)}`, "seen"), process.env.RESTOCK_TEST_USERNAME || "manager");
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {
@@ -36,10 +37,11 @@ async function main() {
     await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page.getByText("S$100.000", { exact: true }).waitFor();
     await page.getByText(/24\/24 offers · 24\/24 opportunities/).waitFor();
-    await page.getByRole("tab", { name: "Forecast", exact: true }).click();
+    await page.getByRole("tab", { name: "Policy", exact: true }).click();
     await page.getByRole("cell", { name: "2026-01-19", exact: true }).waitFor();
     await page.getByRole("cell", { name: "2026-02-09", exact: true }).waitFor();
     await page.goto(base + "/workspace/sales");
+    await page.getByRole("tab", { name: "Stock estimates", exact: true }).click();
     await page
       .getByRole("heading", { name: "Estimated-stock timeline", exact: true })
       .waitFor();

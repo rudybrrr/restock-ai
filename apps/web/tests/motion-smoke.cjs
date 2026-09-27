@@ -14,7 +14,7 @@ async function main() {
         const entrance = getComputedStyle(document.querySelector(".hero-copy")).animationName;
         const destination = Math.min(target.getBoundingClientRect().top + scrollY - 24,
           document.documentElement.scrollHeight - innerHeight);
-        document.querySelector('.hero-actions a[href="#approach"]').click();
+        document.querySelector('.hero-scroll[href="#approach"]').click();
         const samples = [];
         const start = performance.now();
         await new Promise(resolve => {

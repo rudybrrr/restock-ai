@@ -7,10 +7,13 @@ import { EventRecord, SalesBatch } from "@/lib/operations-types";
 import { intervalSummary, recipeUsage } from "@/lib/intraday";
 import { sumDecimals } from "@/lib/decimal";
 import { singaporeTime } from "@/lib/format";
+import { SalesAssessment } from "@/components/sales-assessment";
 import {
   ErrorNotice,
   PageHeading,
+  TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 
 type Recipe = { menu_item_id: string; ingredient_id: string; quantity: string };
@@ -21,8 +24,9 @@ export default function Sales() {
 }
 
 function SalesDay({ day }: { day: string }) {
-  const [start, setStart] = useState("08:00");
-  const [end, setEnd] = useState("21:00");
+  const [tab, setTab] = useWorkspaceView("sales-tab", "Reported sales");
+  const [start, setStart] = useWorkspaceView(`sales-start:${day}`, "08:00");
+  const [end, setEnd] = useWorkspaceView(`sales-end:${day}`, "21:00");
   const [refresh, setRefresh] = useState(true);
   const interval = refresh ? 10000 : false;
   const events = useQuery({
@@ -81,20 +85,22 @@ function SalesDay({ day }: { day: string }) {
     <>
       <PageHeading
         eyebrow="INTRADAY SALES"
-        title="Follow the service day."
+        title="Sales during service"
         description="Reported sales and backend stock estimates, with their timestamps and gaps kept visible."
       >
-        <Link className="button button-secondary" href="/workspace/daily">
+        <Link className="button button-secondary" href="/workspace/daily?view=sales">
           Record or correct sales →
         </Link>
       </PageHeading>
-      <div className="notice">
-        Submitted or simulated sales—not a live POS connection. Refreshing
-        retrieves recorded activity; it does not generate sales or trigger an
-        assessment.
+      <p className="compact-note">Reported sales, not a live POS feed. Refresh reads existing records only.</p>
+      <div className="tabs" role="tablist" aria-label="Sales views">
+        {["Reported sales", "Ingredient usage", "Stock estimates", "Sales assessment"].map(t => <button key={t} role="tab" id={`sales-${t.replaceAll(" ", "-")}`} aria-selected={tab === t} aria-controls="sales-panel" onClick={() => setTab(t)}>{t}</button>)}
       </div>
+      <TabDescription tab={tab} />
+      <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-${tab.replaceAll(" ", "-")}`}>
+      {tab === "Sales assessment" ? <SalesAssessment day={day} /> : <>
       <section className="panel">
-        <div className="panel-body form-grid">
+        <div className="panel-body filter-toolbar">
           <label>
             Window start
             <input
@@ -143,6 +149,7 @@ function SalesDay({ day }: { day: string }) {
       {loading && <p role="status">Loading reported sales…</p>}
       {!loading && !failures.length && summary && (
         <>
+          {tab === "Reported sales" && <>
           <section className="panel">
             <header className="panel-head">
               <h2>Reported dish sales</h2>
@@ -187,9 +194,7 @@ function SalesDay({ day }: { day: string }) {
                 </div>
               )}
               <p className="quiet">
-                Totals cover only complete reports inside this window, not
-                necessarily all sales. Zero means omitted or zero in those
-                reports.
+                Included reports only—not necessarily all sales. Omitted dishes count as zero.
               </p>
               {summary.crossing.length > 0 && (
                 <p>
@@ -211,20 +216,18 @@ function SalesDay({ day }: { day: string }) {
                 <p>No gaps in the selected reporting window.</p>
               )}
               <p className="quiet">
-                This window check is separate from the backend’s coverage check
-                after each physical count.
+                Reporting-window coverage is separate from stock-estimate coverage.
               </p>
             </div>
           </section>
-          <section className="panel">
+          </>}
+          {tab === "Ingredient usage" && <section className="panel">
             <header className="panel-head">
               <h2>Recipe-implied ingredient usage</h2>
             </header>
             <div className="panel-body">
               <p>
-                Reported portions × current recipe quantities. This is not
-                measured depletion, waste, or a substitute for the backend
-                estimate.
+                Reported portions × current recipes. Calculated use, not measured depletion.
               </p>
               <div className="table-scroll">
                 <table>
@@ -262,8 +265,8 @@ function SalesDay({ day }: { day: string }) {
                 </table>
               </div>
             </div>
-          </section>
-          <section className="panel">
+          </section>}
+          {tab === "Stock estimates" && <section className="panel">
             <header className="panel-head">
               <h2>Estimated-stock timeline</h2>
             </header>
@@ -339,8 +342,8 @@ function SalesDay({ day }: { day: string }) {
                 </section>
               ))}
             </div>
-          </section>
-          <section className="panel">
+          </section>}
+          {tab === "Reported sales" && <section className="panel">
             <header className="panel-head">
               <h2>Included report revisions</h2>
             </header>
@@ -358,9 +361,11 @@ function SalesDay({ day }: { day: string }) {
                 <p>No complete reports in this window.</p>
               )}
             </div>
-          </section>
+          </section>}
         </>
       )}
+      </>}
+      </div>
     </>
   );
 }

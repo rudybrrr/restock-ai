@@ -10,10 +10,14 @@ from test_contingency_first_case_backend import (
     test_first_case_stock_and_delayed_commitment_are_frozen_once as prepare_first_case,
 )
 
+from src import assessment_worker as worker
 from src import database as db
 from src import planning
+from src.agent_contracts import AgentOutcome, EvidenceCategory
+from src.coordinator import CoordinatorExecution
 from src.errors import ApiError
 from src.post_purchase_contingency import (
+    RESULT_KEY,
     PostPurchaseInput,
     PostPurchaseResult,
     freeze_post_purchase_input,
@@ -37,6 +41,75 @@ def recorded(client, database_url):
     prepare_first_case(client, database_url)
     deliveries = client.get("/api/v1/deliveries").json()
     return {row["kind"]: row for row in deliveries}
+
+
+def queue_worker_run(client, issue=ISSUE):
+    manager(client)
+    queued = next(
+        (row for row in client.get("/api/v1/runs").json() if row["status"] == "QUEUED"),
+        None,
+    )
+    body = {"as_of": issue}
+    if queued is not None and queued["snapshot"].get("revises_plan_id"):
+        body["revises_plan_id"] = queued["snapshot"]["revises_plan_id"]
+    response = client.post("/api/v1/assessments", json=body)
+    assert response.status_code == 202, response.text
+    return response.json()["id"]
+
+
+def run_worker(database_url):
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            return worker.run_one_queued_assessment(session)
+    finally:
+        engine.dispose()
+
+
+def forbid_model_construction(monkeypatch):
+    monkeypatch.setattr(
+        worker,
+        "build_organiser_reasoning_models",
+        lambda _settings: pytest.fail("post-purchase routing must not construct a model"),
+    )
+
+
+def capture_worker_execution(monkeypatch):
+    executions: list[CoordinatorExecution] = []
+    original = worker.run_backend_coordinator
+
+    def capture(*args, **kwargs):
+        execution = original(*args, **kwargs)
+        executions.append(execution)
+        return execution
+
+    monkeypatch.setattr(worker, "run_backend_coordinator", capture)
+    return executions
+
+
+def assert_worker_evidence(execution, completed_run, *, has_candidate):
+    result = PostPurchaseResult.model_validate(
+        completed_run["snapshot"][RESULT_KEY]
+    )
+    completion = execution.completion
+    result_refs = [
+        ref
+        for ref in completion.evidence_refs
+        if ref.category is EvidenceCategory.POST_PURCHASE_RESULT
+    ]
+    assert len(result_refs) == 1
+    assert result_refs[0].reference_id == result.id
+    assert result_refs[0].run_id == completed_run["id"]
+    assert result_refs[0].state_revision == str(completed_run["input_revision"])
+    if has_candidate:
+        candidate_ref = completion.candidate_result_ref
+        assert candidate_ref is not None
+        assert candidate_ref.reference_id == result.candidate_reference
+        assert candidate_ref.run_id == completed_run["id"]
+        assert candidate_ref.state_revision == str(completed_run["input_revision"])
+    else:
+        assert completion.candidate_result_ref is None
+    return result
 
 
 def claim(client, issue=ISSUE):
@@ -169,6 +242,266 @@ def test_recorded_purchase_keep_then_receipt_no_duplicate(
     assert client.get(f"/api/v1/deliveries/{original['id']}").json() == original
     assert len(client.get("/api/v1/deliveries").json()) == 2
     assert client.get("/api/v1/plan-history").json() == plan_before
+
+
+def test_worker_keeps_sufficient_purchase_and_counts_later_receipt_once(
+    client, database_url, recorded, monkeypatch
+):
+    deliveries_before = client.get("/api/v1/deliveries").json()
+    plans_before = client.get("/api/v1/plan-history").json()
+    first_id = queue_worker_run(client)
+    forbid_model_construction(monkeypatch)
+    executions = capture_worker_execution(monkeypatch)
+
+    first = run_worker(database_url)
+
+    assert first.run_id == first_id
+    assert first.outcome is AgentOutcome.KEEP_CURRENT_PLAN
+    assert first.publication_status == "PUBLISHED"
+    assert first.publication_reference is None
+    first_run = client.get(f"/api/v1/runs/{first_id}").json()
+    first_contract = assert_worker_evidence(
+        executions[0], first_run, has_candidate=False
+    )
+    assert first_contract.complete and first_contract.outcome == "KEEP_CURRENT_PLAN"
+    assert first_contract.candidate is not None
+    assert first_contract.candidate.lines == []
+    assert client.get("/api/v1/deliveries").json() == deliveries_before
+    assert client.get("/api/v1/plan-history").json() == plans_before
+
+    emergency = recorded["EMERGENCY"]
+    zero_coverage(client)
+    received = client.post(
+        f"/api/v1/deliveries/{emergency['id']}/receive",
+        json={
+            "request_id": "worker-post-purchase-four",
+            "quantity": "4",
+            "received_at": RECEIPT,
+            "expiry_date": "2026-02-17",
+            "remainder": "EXPECTED",
+        },
+    )
+    assert received.status_code == 200, received.text
+    deliveries_after_receipt = client.get("/api/v1/deliveries").json()
+    second_id = queue_worker_run(client, RECEIPT)
+
+    second = run_worker(database_url)
+
+    assert second.run_id == second_id
+    assert second.outcome is AgentOutcome.KEEP_CURRENT_PLAN
+    assert second.publication_status == "PUBLISHED"
+    second_run = client.get(f"/api/v1/runs/{second_id}").json()
+    second_contract = assert_worker_evidence(
+        executions[1], second_run, has_candidate=False
+    )
+    assert second_contract.complete and second_contract.outcome == "KEEP_CURRENT_PLAN"
+    frozen = second_run["snapshot"]["post_purchase_contingency_input"]
+    opening_vegetables = sum(
+        Decimal(lot["quantity"])
+        for lot in frozen["case"]["opening_lots"]
+        if lot["ingredient_id"] == "vegetables" and lot["status"] == "ACTIVE"
+    )
+    assert opening_vegetables == Decimal(10)
+    assert client.get("/api/v1/deliveries").json() == deliveries_after_receipt
+    assert client.get(f"/api/v1/deliveries/{recorded['NORMAL']['id']}").json() == recorded[
+        "NORMAL"
+    ]
+    assert len(client.get("/api/v1/deliveries").json()) == 2
+    assert client.get("/api/v1/plan-history").json() == plans_before
+
+
+def test_worker_revises_with_only_exact_additional_candidate(
+    client, database_url, recorded, monkeypatch
+):
+    emergency = recorded["EMERGENCY"]
+    updated = client.post(
+        f"/api/v1/deliveries/{emergency['id']}/update",
+        json={
+            "expected_quantity": "2",
+            "expected_at": RECEIPT,
+            "expected_expiry_date": "2026-02-17",
+            "effective_at": ISSUE,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    fixed_before = client.get("/api/v1/deliveries").json()
+    requested_id = queue_worker_run(client)
+    forbid_model_construction(monkeypatch)
+    executions = capture_worker_execution(monkeypatch)
+
+    result = run_worker(database_url)
+
+    assert result.run_id == requested_id
+    assert result.outcome is AgentOutcome.REVISE_PLAN
+    assert result.publication_status == "PUBLISHED"
+    assert result.publication_reference is not None
+    completed = client.get(f"/api/v1/runs/{requested_id}").json()
+    persisted = assert_worker_evidence(executions[0], completed, has_candidate=True)
+    assert persisted.outcome == "REVISE_PLAN" and persisted.complete
+    assert persisted.candidate is not None and persisted.candidate_reference
+    assert [line.quantity for line in persisted.candidate.lines] == [Decimal(2)]
+    plan_response = client.get(f"/api/v1/plans/{result.publication_reference}")
+    assert plan_response.status_code == 200, plan_response.text
+    plan = plan_response.json()
+    assert plan["status"] == "PENDING_APPROVAL"
+    assert plan["calculation_mode"] == "CONTINGENCY_ENGINE"
+    assert plan["cost_scope"] == "NEW_PURCHASE_CASH_ONLY"
+    assert [Decimal(line["quantity"]) for line in plan["lines"]] == [Decimal(2)]
+    assert client.get("/api/v1/deliveries").json() == fixed_before
+
+
+def test_worker_preserves_no_feasible_supplier_escalation(
+    client, database_url, recorded, monkeypatch
+):
+    emergency = recorded["EMERGENCY"]
+    updated = client.post(
+        f"/api/v1/deliveries/{emergency['id']}/update",
+        json={
+            "expected_quantity": "4",
+            "expected_at": "2026-02-17T09:00:00+08:00",
+            "expected_expiry_date": "2026-02-17",
+            "effective_at": ISSUE,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    zero_coverage(client)
+    fixed_before = client.get("/api/v1/deliveries").json()
+    plans_before = client.get("/api/v1/plan-history").json()
+    requested_id = queue_worker_run(client, RECEIPT)
+    forbid_model_construction(monkeypatch)
+    executions = capture_worker_execution(monkeypatch)
+
+    result = run_worker(database_url)
+
+    assert result.run_id == requested_id
+    assert result.outcome is AgentOutcome.ESCALATE
+    assert result.failure_classification == "NO_FEASIBLE_SUPPLIER"
+    assert result.publication_reference is None
+    completed = client.get(f"/api/v1/runs/{requested_id}").json()
+    persisted = assert_worker_evidence(executions[0], completed, has_candidate=False)
+    assert persisted.complete and persisted.escalation_reason == "NO_FEASIBLE_SUPPLIER"
+    assert persisted.candidate is None
+    assert client.get("/api/v1/deliveries").json() == fixed_before
+    assert client.get("/api/v1/plan-history").json() == plans_before
+
+
+def test_worker_preserves_policy_violation_escalation(
+    client, database_url, recorded, monkeypatch
+):
+    emergency = recorded["EMERGENCY"]
+    updated = client.post(
+        f"/api/v1/deliveries/{emergency['id']}/update",
+        json={
+            "expected_quantity": "2",
+            "expected_at": RECEIPT,
+            "effective_at": ISSUE,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as session:
+            table = db.contingency_policy_versions
+            row = (
+                session.execute(select(table).where(table.c.version == 5))
+                .mappings()
+                .one()
+            )
+            payload = deepcopy(row["payload"])
+            payload["new_order_budget_sgd"] = "10"
+            session.execute(
+                update(table).where(table.c.id == row["id"]).values(payload=payload)
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+    fixed_before = client.get("/api/v1/deliveries").json()
+    plans_before = client.get("/api/v1/plan-history").json()
+    requested_id = queue_worker_run(client)
+    forbid_model_construction(monkeypatch)
+    executions = capture_worker_execution(monkeypatch)
+
+    result = run_worker(database_url)
+
+    assert result.run_id == requested_id
+    assert result.outcome is AgentOutcome.ESCALATE
+    assert result.failure_classification == "POLICY_VIOLATION"
+    completed = client.get(f"/api/v1/runs/{requested_id}").json()
+    persisted = assert_worker_evidence(executions[0], completed, has_candidate=False)
+    assert persisted.complete and persisted.escalation_reason == "POLICY_VIOLATION"
+    assert persisted.candidate is None
+    assert client.get("/api/v1/deliveries").json() == fixed_before
+    assert client.get("/api/v1/plan-history").json() == plans_before
+
+
+def test_worker_escalates_incomplete_frozen_evidence_without_candidate(
+    client, database_url, recorded, monkeypatch
+):
+    plans_before = client.get("/api/v1/plan-history").json()
+    deliveries_before = client.get("/api/v1/deliveries").json()
+    requested_id = queue_worker_run(client, RECEIPT)
+    forbid_model_construction(monkeypatch)
+    executions = capture_worker_execution(monkeypatch)
+
+    result = run_worker(database_url)
+
+    assert result.run_id == requested_id
+    assert result.outcome is AgentOutcome.ESCALATE
+    assert result.failure_classification in {
+        "MISSING_REQUIRED_DATA",
+        "CALCULATION_INCOMPLETE",
+    }
+    completed = client.get(f"/api/v1/runs/{requested_id}").json()
+    persisted = assert_worker_evidence(executions[0], completed, has_candidate=False)
+    assert not persisted.complete
+    assert persisted.outcome == "ESCALATE"
+    assert persisted.escalation_reason in {
+        "MISSING_REQUIRED_DATA",
+        "CALCULATION_INCOMPLETE",
+    }
+    assert persisted.candidate is None
+    assert client.get("/api/v1/deliveries").json() == deliveries_before
+    assert client.get("/api/v1/plan-history").json() == plans_before
+
+
+def test_worker_rejects_state_change_after_post_purchase_claim(
+    client, database_url, recorded, monkeypatch
+):
+    requested_id = queue_worker_run(client)
+    forbid_model_construction(monkeypatch)
+    persist = worker.persist_post_purchase_result
+
+    def persist_then_change_state(session, run_id):
+        result = persist(session, run_id)
+        manager(client)
+        response = client.patch(
+            "/api/v1/supplier-offers/market-chicken",
+            json={
+                "effective_at": "2026-02-16T10:00:00+08:00",
+                "current_status": "UNAVAILABLE",
+            },
+        )
+        assert response.status_code == 200, response.text
+        return result
+
+    monkeypatch.setattr(
+        worker, "persist_post_purchase_result", persist_then_change_state
+    )
+    plans_before = client.get("/api/v1/plan-history").json()
+    deliveries_before = client.get("/api/v1/deliveries").json()
+
+    result = run_worker(database_url)
+
+    assert result.run_id == requested_id
+    assert result.outcome is None
+    assert result.publication_status == "STALE_REJECTED"
+    assert result.failure_classification == "STATE_REVISION_STALE"
+    stale = client.get(f"/api/v1/runs/{requested_id}").json()
+    assert stale["status"] == "FAILED"
+    assert stale["failure_reason"] == "STATE_REVISION_STALE"
+    assert stale["plan_version_id"] is None
+    assert client.get("/api/v1/plan-history").json() == plans_before
+    assert client.get("/api/v1/deliveries").json() == deliveries_before
 
 
 @pytest.mark.parametrize(

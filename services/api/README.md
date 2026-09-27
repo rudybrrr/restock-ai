@@ -281,6 +281,10 @@ are immutable and support exact idempotent retries. A sales-triggered run cannot
 complete without the saved result; incomplete evidence must escalate and a
 material result cannot certify `KEEP_CURRENT_PLAN`.
 
+Material sales trigger deterministic reassessment. In the current first-slice
+procurement domain, post-issue replanning is unsupported and therefore escalates
+`CALCULATION_INCOMPLETE` rather than fabricating a purchase plan.
+
 ### Promotion and inventory-correction contracts
 
 Claimed snapshots expose promotions as complete strict `PromotionEvent` records,

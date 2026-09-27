@@ -303,11 +303,14 @@ class BackendDemandTools:
             target_date=policy.target_date,
             profile=profile,
         )
+        buckets = [bucket for bucket in buckets if bucket.start >= contract.as_of]
         evidence = tuple(
             (
                 name,
                 SourceEvidence(
-                    f"{contract.forecast_input.id}:{name}",
+                    contract.forecast_input.id
+                    if name == "history"
+                    else f"{contract.forecast_input.id}:{name}",
                     contract.known_at,
                     contract.captured_state_revision,
                 ),

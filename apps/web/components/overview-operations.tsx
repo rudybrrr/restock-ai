@@ -7,6 +7,7 @@ import {
   Delivery,
   EventRecord,
   OrderCycle,
+  Promotion,
 } from "@/lib/operations-types";
 import { singaporeTime, humanize } from "@/lib/format";
 import { ErrorNotice, Status, useServiceDate } from "./workspace";
@@ -30,6 +31,12 @@ export function OverviewOperations() {
     queryKey: ["events"],
     queryFn: ({ signal }) => api<EventRecord[]>("/events", { signal }),
   });
+  const promotions = useQuery({
+    queryKey: ["promotions"],
+    queryFn: ({ signal }) => api<Promotion[]>("/promotions", { signal }),
+  });
+  const relevantPromotions = promotions.data?.filter(p => p.active && p.end_date >= day)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
   return (
     <>
       <div className="two-columns">
@@ -117,6 +124,15 @@ export function OverviewOperations() {
         </section>
       </div>
       <section className="panel">
+        <header className="panel-head"><h2>Active & upcoming promotions</h2><Link href="/workspace/suppliers">Manage promotions →</Link></header>
+        <div className="panel-body">
+          {promotions.error ? <ErrorNotice error={promotions.error} retry={() => promotions.refetch()} />
+            : promotions.isPending ? <p role="status">Loading promotions…</p>
+              : relevantPromotions?.length ? relevantPromotions.slice(0, 4).map(p => <div key={p.id} className="record-details"><strong>{p.name}</strong><p><Status value={p.start_date > day ? "Upcoming" : "Active"} /> · {p.start_date} – {p.end_date}</p><small>Configured demand multiplier: {p.demand_multiplier} · revision {p.revision}. This is an input, not a certified demand forecast.</small></div>)
+                : <p className="quiet">No active or upcoming promotions for the selected date.</p>}
+        </div>
+      </section>
+      <section className="panel">
         <header className="panel-head">
           <h2>Latest changes</h2>
           <Link href="/workspace/activity">View timeline →</Link>
@@ -124,7 +140,7 @@ export function OverviewOperations() {
         <div className="panel-body">
           {events.error ? (
             <ErrorNotice error={events.error} retry={() => events.refetch()} />
-          ) : (
+          ) : events.isPending ? <p role="status">Loading recent changes…</p> : (
             events.data
               ?.slice(-4)
               .reverse()

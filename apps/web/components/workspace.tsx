@@ -1,14 +1,12 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Package,
-  ClipboardList,
   FileCheck2,
-  Truck,
   History,
   Store,
   LogOut,
@@ -16,6 +14,8 @@ import {
 } from "lucide-react";
 import { api, ApiError, Identity } from "@/lib/api";
 import { Wordmark } from "./wordmark";
+import { WorkspaceTour } from "./workspace-tour";
+import { areaGuides, areas, tabDescriptions, tabGuides, workspaceArea } from "@/lib/workspace-navigation";
 import "./restock.css";
 import "./workspace-spacing.css";
 
@@ -24,22 +24,23 @@ const DateContext = createContext<{
   setDay: (day: string) => void;
 }>({ day: "2026-02-16", setDay: () => {} });
 export const useServiceDate = () => useContext(DateContext);
-const links = [
-  ["overview", "Overview", LayoutDashboard],
-  ["inventory", "Inventory", Package],
-  ["daily", "Daily update", ClipboardList],
-  ["sales", "Intraday sales", History],
-  ["recommendations", "Recommendations", FileCheck2],
-  ["deliveries", "Deliveries", Truck],
-  ["suppliers", "Suppliers & promotions", Store],
-  ["activity", "Activity", History],
-] as const;
+const ViewContext = createContext<{ values: Record<string, string>; set: (key: string, value: string) => void }>({ values: {}, set: () => {} });
+// Only navigation preferences live here. Never retain forms, credentials or operational facts.
+export function useWorkspaceView(key: string, initial: string): [string, (value: string) => void] {
+  const context = useContext(ViewContext);
+  return [context.values[key] ?? initial, value => context.set(key, value)];
+}
+const icons = [LayoutDashboard, Package, FileCheck2, History, Store];
 
 export function Workspace({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const params = useSearchParams();
+  const area = workspaceArea(pathname, params.get("view"));
+  const returnPath = params.toString() ? `${pathname}?${params.toString()}` : pathname;
   const router = useRouter();
   const cache = useQueryClient();
   const [day, setDay] = useState("2026-02-16");
+  const [views, setViews] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const identity = useQuery({
@@ -50,11 +51,11 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const expire = () => {
       cache.clear();
-      router.replace(`/login?expired=1&next=${encodeURIComponent(pathname)}`);
+      router.replace(`/login?expired=1&next=${encodeURIComponent(returnPath)}`);
     };
     window.addEventListener("restock:session-expired", expire);
     return () => window.removeEventListener("restock:session-expired", expire);
-  }, [cache, pathname, router]);
+  }, [cache, returnPath, router]);
   useEffect(() => {
     const navigateTabs = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -85,8 +86,8 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => {
     if (identity.error instanceof ApiError && identity.error.status === 401)
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [identity.error, pathname, router]);
+      router.replace(`/login?next=${encodeURIComponent(returnPath)}`);
+  }, [identity.error, returnPath, router]);
   async function logout() {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -120,27 +121,29 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     );
   return (
     <DateContext.Provider value={{ day, setDay }}>
+    <ViewContext.Provider value={{ values: views, set: (key, value) => setViews(previous => ({ ...previous, [key]: value })) }}>
       <div className="restock-app workspace">
         <a className="skip-link" href="#workspace-main">
           Skip to content
         </a>
-        <aside className={`sidebar ${open ? "is-open" : ""}`}>
+        {open && <button className="navigation-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)} />}
+        <aside id="workspace-navigation" className={`sidebar ${open ? "is-open" : ""}`} onKeyDown={event => { if (event.key === "Escape") { setOpen(false); document.querySelector<HTMLButtonElement>(".mobile-menu")?.focus(); } }}>
           <Wordmark />
           <p className="sidebar-caption">THE RESTAURANT WORKSPACE</p>
           <nav aria-label="Workspace navigation">
-            {links.map(([path, label, Icon]) => (
+            {areas.map((item, index) => { const Icon = icons[index]; return (
               <Link
-                key={path}
-                href={`/workspace/${path}`}
+                key={item.id}
+                href={item.href}
                 aria-current={
-                  pathname === `/workspace/${path}` ? "page" : undefined
+                  area.id === item.id ? "page" : undefined
                 }
                 onClick={() => setOpen(false)}
               >
                 <Icon size={18} />
-                {label}
+                {item.label}
               </Link>
-            ))}
+            ); })}
           </nav>
           <div className="sidebar-bottom">
             <span className="avatar">
@@ -166,11 +169,13 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               className="icon-button mobile-menu"
               aria-label="Toggle navigation"
               aria-expanded={open}
+              aria-controls="workspace-navigation"
               onClick={() => setOpen(!open)}
             >
               <Menu size={21} />
             </button>
-            <span>Restaurant operations</span>
+            <span>{area.label}</span>
+            <WorkspaceTour key={identity.data.username} username={identity.data.username} />
             <label className="service-date">
               Service date
               <input
@@ -184,6 +189,17 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             </label>
           </header>
           <main id="workspace-main" className="workspace-content">
+            <div className="area-intro" aria-label={`${area.label} area`}>
+              <p>{area.description}</p>
+              {!!area.pages.length && <nav className="area-tabs" aria-label={`${area.label} pages`}>{area.pages.map(page => {
+                const current = page.href.includes("?") ? `${pathname}?view=${params.get("view")}` === page.href : pathname === page.href && (area.id !== "settings" || pathname === "/workspace/suppliers");
+                return <Link key={page.href} href={page.href} aria-current={current ? "page" : undefined}>{page.label}</Link>;
+              })}</nav>}
+              <details key={area.id} className="area-guide">
+                <summary>What can I do in {area.label}?</summary>
+                <dl>{areaGuides[area.id].map(group => <div key={group.title}><dt>{group.title}</dt><dd>{group.description}</dd></div>)}</dl>
+              </details>
+            </div>
             {children}
           </main>
           <footer className="workspace-footer">
@@ -191,8 +207,19 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
-    </DateContext.Provider>
+    </ViewContext.Provider></DateContext.Provider>
   );
+}
+
+export function TabDescription({ tab }: { tab: string }) {
+  const guide = tabGuides[tab];
+  return <div className="view-guidance">
+    <p className="tab-description" aria-live="polite">{tabDescriptions[tab]}</p>
+    {guide && <details key={tab} className="view-guide"><summary>How to use {tab.toLowerCase()}</summary><dl>
+      <div><dt>Typical task</dt><dd>{guide.task}</dd></div>
+      <div><dt>Keep in mind</dt><dd>{guide.note}</dd></div>
+    </dl></details>}
+  </div>;
 }
 
 export function ErrorNotice({
@@ -205,7 +232,9 @@ export function ErrorNotice({
   return (
     <div className="notice notice-error" role="alert">
       <strong>
-        {error instanceof ApiError && error.status === 409
+        {error instanceof ApiError && error.code === "PLAN_VERSION_STALE"
+          ? "This recommendation is out of date"
+          : error instanceof ApiError && error.status === 409
           ? "This record has changed"
           : "Unable to complete this request"}
       </strong>

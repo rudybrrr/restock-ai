@@ -1,18 +1,18 @@
 # ReStock
 
-ReStock is a local, Backend-authoritative planning assistant for restaurants. It helps a manager reassess what to buy, how much, when, and from which approved supplier as demand, inventory, deliveries, promotions, and supplier conditions change.
+ReStock is an adaptive restaurant inventory and procurement agent that maintains a continuously valid purchasing plan within its approved domains. It helps a manager reassess what to buy, how much, when, and from which approved supplier as demand, inventory, deliveries, promotions, and supplier conditions change.
 
 ## One-line pitch
 
-ReStock turns changing restaurant facts into evidence-backed purchase recommendations with bounded specialist investigation, deterministic validation, and exact-version human approval.
+ReStock does not just predict what a restaurant should order — it keeps the purchasing plan valid as reality changes. Bounded specialist investigation and deterministic validation produce evidence-backed recommendations for exact-version human approval.
 
-## What is proven locally
+## What is proven
 
 The current branch contains a working local path for Procurement, Demand, and Inventory specialists; dynamic Coordinator routing; deterministic demand/inventory/procurement calculations; genuine `PENDING_APPROVAL` plan publication; supplier, promotion, delivery, and sales-materiality replanning; stale approval rejection; append-only audit history; manager evidence projections; and a provider-free evaluation/demo harness.
 
 AI selects what needs investigation and when a plan should be reconsidered. Deterministic Python systems calculate and validate the candidate. The Backend is the only authority that validates state, publishes plan versions, applies lifecycle transitions, accepts approval, and persists audit records.
 
-This repository is a local hardening/submission build. It does not claim live Sonnet/OpenClaw behavior, AWS/Bedrock behavior, deployed reliability, restaurant savings, or production SME outcomes.
+The organiser gateway has now been exercised with real typed Demand, Inventory, and Procurement calls. A fresh normal assessment published an `ENGINE` plan pending approval, and a later material sales event escalated safely at the unsupported issue opening. A separate post-purchase contingency run preserved fixed commitments and recommended only an additional purchase. [The 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md) names those runs and distinguishes controlled setup from live-model execution. Hosted deployment, AWS/Bedrock, live-model service-level reliability, restaurant savings, and production SME outcomes are not proven.
 
 ## Architecture
 
@@ -36,7 +36,7 @@ flowchart TD
 
 The Coordinator may invoke specialists, but specialists cannot invoke other specialists or mutate Backend state. Each specialist has a narrow domain allowlist. Backend validation, publication, lifecycle, approval, and audit persistence remain outside prompts and specialist reasoning.
 
-The application worker uses typed specialist reasoning through the organiser gateway, configured for Claude/Sonnet. OpenClaw remains an isolated smoke-test path and is not used by the application worker. The local demo can use scripted reasoning over the same contracts; live provider verification is still pending.
+The application worker uses strictly validated typed specialist decisions through the organiser gateway. OpenClaw remains an isolated smoke-test path and is not used by the application worker. The local evaluation harness uses scripted reasoning over the same contracts; its results are separate from the live gateway checks.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/AGENTS_PLAN.md](docs/AGENTS_PLAN.md), and [CONTEXT.md](CONTEXT.md) for detailed contracts and glossary terms.
 
@@ -75,7 +75,7 @@ The manager UI defaults to `http://localhost:8000` for the API and `http://local
 
 ## Demo flow
 
-The supported local golden demo uses only currently working flows:
+The supported provider-free golden evaluation uses these local flows:
 
 1. Prepare a seven-scenario, evaluator-truth-free sheet.
 2. Run supplier replanning, promotion routing, delivery disruption, safe and material inventory correction, sales-materiality fail-closed routing, and exact-version stale approval.
@@ -96,7 +96,7 @@ uv run python -m src.evaluation.local_demo run `
 
 The inventory-adjustment route uses Backend PR #32's canonical event/context/assessment contract. The safe case keeps the current plan without Procurement; the material case reaches the real Procurement engine and publishes a revision.
 
-See [docs/LOCAL_DEMO_SCRIPT.md](docs/LOCAL_DEMO_SCRIPT.md) for the concise rehearsal script and [docs/SCREENSHOT_VIDEO_CHECKLIST.md](docs/SCREENSHOT_VIDEO_CHECKLIST.md) for the capture plan. These documents do not perform capture or submission.
+See [docs/LOCAL_DEMO_SCRIPT.md](docs/LOCAL_DEMO_SCRIPT.md) for the live contingency rehearsal and local evaluation fallback. No capture or external submission is performed by the repository.
 
 ## Approval and safety boundary
 
@@ -108,19 +108,20 @@ The local safety suite covers permission boundaries, prompt-injection attempts, 
 
 The checked-in manifest contains 19 runnable scenario rows. It includes development and held-out splits and keeps expected truth separate from runtime inputs. The supported golden pass measures seven development scenarios across Static, Rule, and local Adaptive ReStock adapters: 21 executions, zero failed executions, stable observed-boundary fingerprints across two runs, and stale approval evidence with a persisted audit reference.
 
-Fresh local verification on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). The complete PostgreSQL backend suite passed 782 tests. The database-independent synthetic-history suite passed 68 tests with an external temp root. Ruff, Pyright, Alembic upgrade/check, clean seed/reseed, and screenshot-disabled frontend evidence assertions also passed; frontend source was unchanged by this pass.
+The historical provider-free evaluation on 19 September 2026 is recorded in [docs/evaluation/LOCAL_RESULTS_2026-09-19.md](docs/evaluation/LOCAL_RESULTS_2026-09-19.md). At that checkpoint, the PostgreSQL suite passed 782 tests and the separate synthetic-history suite passed 68. Current full-suite and live-flow evidence is in [the 26 September validation record](docs/FINAL_VALIDATION_2026-09-26.md); those historical totals are not current test counts.
 
-The local evaluation reports routing, outcome, specialist-call, tool-call, retry, latency, failure, and prompt-injection evidence only where the harness supports it. Live model calls, token usage, live latency/cost, and business outcomes are `pending` or `unsupported`, never zero-filled. The data is synthetic and first-slice; it is not evidence of food-waste reduction, stockout reduction, lost-sales reduction, procurement savings, emergency-order savings, or real restaurant performance.
+The local evaluation reports routing, outcome, specialist-call, tool-call, retry, latency, failure, and prompt-injection evidence only where the harness supports it. Live model calls and connected worker paths have since been demonstrated separately; live token usage, cost distributions, and business outcomes remain unmeasured. The data is synthetic and first-slice; it is not evidence of food-waste reduction, stockout reduction, lost-sales reduction, procurement savings, emergency-order savings, or real restaurant performance.
 
 ## Current open items
 
-- Run `python -m src.assessment_worker --loop` alongside the API for local queue polling; the one-shot command remains available. A hosted process supervisor and live-provider verification are still pending.
+- Run `python -m src.assessment_worker --loop` alongside the API for queue polling; it has claimed a queued local run. A hosted process supervisor is still needed.
 - Persisted human-review request workflow semantics, which remain undefined by the Backend contract.
-- Live organiser-gateway/Sonnet behavior, AWS/Bedrock verification, live token/cost metrics, and live-model evaluation.
+- AWS/Bedrock verification, live token/cost metrics, and a statistically useful live-model reliability evaluation.
 - Deployment, production reliability, hosted URLs, video, screenshots, and external submission actions.
 - Real-world restaurant and SME outcome metrics.
 
 The current local status is tracked in [docs/AGENTS_TASKS.md](docs/AGENTS_TASKS.md).
+The exact hosted handoff is in [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HANDOFF.md).
 
 ## Project material
 

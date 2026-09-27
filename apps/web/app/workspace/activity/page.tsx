@@ -15,6 +15,7 @@ import {
   ErrorNotice,
   PageHeading,
   Status,
+  TabDescription,
   useServiceDate,
 } from "@/components/workspace";
 type Audit = {
@@ -52,8 +53,11 @@ export default function Activity() {
     enabled: tab === "Audit details",
   });
   async function request(path: string, body?: unknown) {
+    if (pending || !time) return;
     setPending(true);
     setError(null);
+    setMessage("");
+    setRequestedId(null);
     try {
       const result = await api<Run>(path, { method: "POST", body });
       setMessage(`Assessment ${result.id} is ${humanize(result.status)}.`);
@@ -71,7 +75,7 @@ export default function Activity() {
     <>
       <PageHeading
         eyebrow="ACTIVITY"
-        title="Every change, in context."
+        title="Activity"
         description="Follow the restaurant’s recorded changes, assessments, and manager decisions."
       />
       <section className="panel">
@@ -126,6 +130,7 @@ export default function Activity() {
           </button>
         ))}
       </div>
+      <TabDescription tab={tab} />
       {tab === "Timeline" ? (
         <>
           <label className="field-label">
@@ -172,6 +177,8 @@ export default function Activity() {
                           ))}
                       </dl>
                       <p className="quiet">Event reference: {e.id}</p>
+                      {typeof e.payload.version_id === "string" && <p><Link href={`/workspace/recommendations?version=${encodeURIComponent(e.payload.version_id)}`}>Open exact plan version →</Link></p>}
+                      {typeof e.payload.batch === "object" && e.type === "SALES_UPDATED" && <EventAssessments eventId={e.id} />}
                       {e.type === "INVENTORY_ADJUSTED" && (
                         <CorrectionDetails event={e} />
                       )}
@@ -200,6 +207,7 @@ export default function Activity() {
                 {events.data?.length === 0 && (
                   <p className="quiet">No events recorded yet.</p>
                 )}
+                {!!events.data?.length && !events.data.some(e => humanize(e.type).includes(filter.toLowerCase())) && <p className="quiet">No activity matches this filter. Try another term or clear the search.</p>}
               </div>
             </section>
           )}
@@ -214,6 +222,7 @@ export default function Activity() {
               <span className="quiet">Active runs refresh every 5 seconds</span>
             </header>
             <div className="panel-body">
+              {runs.isPending && <p role="status">Loading assessment history…</p>}
               {runs.data
                 ?.slice()
                 .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -235,6 +244,7 @@ export default function Activity() {
                       </p>
                     )}
                     <p className="quiet">Run reference: {r.id}</p>
+                    <p><Link href={`/workspace/activity/${encodeURIComponent(r.id)}`}>Open assessment details →</Link></p>
                     <RunEvidence run={r} />
                     <div className="form-actions">
                       {r.plan_version_id && (
@@ -275,6 +285,7 @@ export default function Activity() {
         <ErrorNotice error={audit.error} retry={() => audit.refetch()} />
       ) : (
         <section className="panel">
+          {audit.isPending && <p className="empty-state" role="status">Loading audit history…</p>}
           <div className="table-scroll">
             <table>
               <thead>
@@ -302,6 +313,7 @@ export default function Activity() {
               </tbody>
             </table>
           </div>
+          {audit.data?.length === 0 && <p className="empty-state">No audit entries recorded.</p>}
         </section>
       )}
     </>

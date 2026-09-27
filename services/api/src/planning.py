@@ -348,6 +348,20 @@ def _snapshot(
         ],
         "offers": offers,
     }
+    if plan_version_reference is not None and session.execute(
+        select(db.planning_runs.c.trigger).where(db.planning_runs.c.id == run_id)
+    ).scalar_one() == "SALES_UPDATED":
+        issued_row = session.execute(
+            select(db.plan_versions.c.run_id, db.planning_runs.c.snapshot)
+            .join(db.planning_runs, db.plan_versions.c.run_id == db.planning_runs.c.id)
+            .where(db.plan_versions.c.id == plan_version_reference)
+        ).one()
+        issued_contract = issued_row.snapshot.get("procurement_contract")
+        if issued_contract is not None:
+            snapshot["issued_forecast_origin"] = {
+                "run_id": issued_row.run_id,
+                "contract": issued_contract,
+            }
     contract = freeze_first_slice_contract(
         session, as_of, known_at, captured_state_revision
     )

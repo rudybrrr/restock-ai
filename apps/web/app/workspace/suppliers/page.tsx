@@ -1,27 +1,33 @@
 "use client";
 import { useState } from "react";
+import { SupplierTerms } from "@/components/supplier-terms";
+import { ProcurementEvidence } from "@/components/procurement-evidence";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ingredient, NamedRecord } from "@/lib/api";
 import { Offer, Promotion, OrderCycle } from "@/lib/operations-types";
-import { singaporeTime, timestamp } from "@/lib/format";
+import { timestamp } from "@/lib/format";
 import {
   ErrorNotice,
   PageHeading,
   Status,
+  TabDescription,
   useServiceDate,
+  useWorkspaceView,
 } from "@/components/workspace";
 export default function SuppliersPage() {
   const { day } = useServiceDate();
   const cache = useQueryClient();
-  const [tab, setTab] = useState("Supplier offers");
+  const [tab, setTab] = useWorkspaceView("supplier-tab", "Supplier offers");
+  const [policyOpen, setPolicyOpen] = useState(false);
   const [editing, setEditing] = useState<Offer | null>(null);
+  const [terms, setTerms] = useState<Offer | null>(null);
   const [promotion, setPromotion] = useState<Promotion | null | undefined>(
     undefined,
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [message, setMessage] = useState("");
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useWorkspaceView("supplier-filter", "");
   const suppliers = useQuery({
     queryKey: ["suppliers"],
     queryFn: ({ signal }) => api<NamedRecord[]>("/suppliers", { signal }),
@@ -80,7 +86,7 @@ export default function SuppliersPage() {
     <>
       <PageHeading
         eyebrow="RESTAURANT CONTEXT"
-        title="Keep your purchasing picture current."
+        title="Suppliers & promotions"
         description="Approved suppliers, promotions, ordering occasions, and holiday context."
       />
       <div
@@ -108,12 +114,21 @@ export default function SuppliersPage() {
           </button>
         ))}
       </div>
+      <TabDescription tab={tab} />
       {error && <ErrorNotice error={error} />}{" "}
       {message && (
         <p role="status" className="notice">
           {message}
         </p>
       )}
+      {(suppliers.error || ingredients.error || menu.error) && <ErrorNotice error={suppliers.error ?? ingredients.error ?? menu.error!} retry={() => { void suppliers.refetch(); void ingredients.refetch(); void menu.refetch(); }} />}
+      {tab === "Supplier offers" && offers.isPending && <p role="status">Loading supplier offers…</p>}
+      {tab === "Promotions" && promotions.isPending && <p role="status">Loading promotions…</p>}
+      {tab === "Ordering occasions" && cycles.isPending && <p role="status">Loading ordering occasions…</p>}
+      {tab === "Holidays" && holidays.isPending && <p role="status">Loading holiday context…</p>}
+      {tab === "Supplier offers" && offers.data?.length === 0 && <p className="empty-state">No supplier offers recorded.</p>}
+      {tab === "Supplier offers" && !!offers.data?.length && !offers.data.some(o => !filter || o.ingredient_id === filter) && <p className="empty-state">No supplier offers match this ingredient.</p>}
+      {tab === "Holidays" && holidays.data?.length === 0 && <p className="empty-state">No holiday dates recorded.</p>}
       {tab === "Supplier offers" ? (
         <>
           <label className="field-label">
@@ -277,37 +292,7 @@ export default function SuppliersPage() {
                             </small>
                           </td>
                           <td>
-                            <details>
-                              <summary>View terms</summary>
-                              <p>
-                                Lead time: {o.lead_time_minutes ?? "Unknown"}{" "}
-                                minutes
-                              </p>
-                              <p>
-                                Cutoff: {o.order_cutoff.kind}{" "}
-                                {o.order_cutoff.local_time}
-                              </p>
-                              <p>
-                                Shelf life:{" "}
-                                {o.shelf_life_days_on_arrival ?? "Unknown"} days
-                              </p>
-                              <p>
-                                Delivery: {o.delivery_fee_sgd ?? "Unknown"} SGD
-                                · emergency: {o.emergency_fee_sgd ?? "Unknown"}{" "}
-                                SGD
-                              </p>
-                              <p>Observed: {singaporeTime(o.observed_at)}</p>
-                              <p>Arrival opportunities:</p>
-                              {o.feasible_delivery_at === null ? (
-                                <p>Unknown</p>
-                              ) : o.feasible_delivery_at.length === 0 ? (
-                                <p>No feasible arrivals reported</p>
-                              ) : (
-                                o.feasible_delivery_at.map((a) => (
-                                  <p key={a}>{singaporeTime(a)}</p>
-                                ))
-                              )}
-                            </details>
+                            <button className="terms-link" onClick={() => setTerms(o)}>View terms</button>
                             <button
                               className="button button-secondary"
                               onClick={() => setEditing(o)}
@@ -430,19 +415,19 @@ export default function SuppliersPage() {
                       defaultValue={`${day}T08:00`}
                     />
                   </label>
-                  <label>
-                    Active
+                  <label className="checkbox-field">
                     <input
                       type="checkbox"
                       name="active"
                       defaultChecked={promotion?.active ?? true}
                     />
+                    Active
                   </label>
                 </div>
-                <fieldset style={{ marginTop: 20 }}>
+                <fieldset className="checkbox-group" style={{ marginTop: 20 }}>
                   <legend>Affected dishes (select at least one)</legend>
                   {menu.data?.map((m) => (
-                    <label key={m.id} style={{ display: "block" }}>
+                    <label key={m.id}>
                       <input
                         type="checkbox"
                         name="dishes"
@@ -632,6 +617,11 @@ export default function SuppliersPage() {
           </p>
         </section>
       )}
+      {tab === "Supplier offers" && <details className="record-details" onToggle={e => setPolicyOpen(e.currentTarget.open)}><summary>Procurement policy version history · reference only</summary>{policyOpen && <ProcurementEvidence />}</details>}
+      {terms && <SupplierTerms offer={terms}
+        supplier={suppliers.data?.find(s => s.id === terms.supplier_id)?.name ?? terms.supplier_id}
+        ingredient={ingredients.data?.find(i => i.id === terms.ingredient_id)?.name ?? terms.ingredient_id}
+        onClose={() => setTerms(null)} />}
     </>
   );
 }

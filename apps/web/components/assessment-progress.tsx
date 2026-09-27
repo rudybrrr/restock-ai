@@ -14,7 +14,7 @@ const progress: Record<Run["status"], { title: string; detail: string }> = {
   SUCCEEDED: {
     title: "Assessment finished",
     detail:
-      "Processing finished. Check the decision below: a finished assessment may still require information or manager review.",
+      "Review the recorded decision below.",
   },
   FAILED: {
     title: "Assessment could not finish",
@@ -26,9 +26,14 @@ const progress: Record<Run["status"], { title: string; detail: string }> = {
 export function AssessmentProgress({ status }: { status: Run["status"] }) {
   const value = progress[status];
   return (
-    <section className="notice" aria-label="Assessment progress" role="status">
+    <section className={`notice ${status === "SUCCEEDED" ? "processing-complete" : ""}`} aria-label="Assessment progress" role="status">
       <strong>{value.title}</strong>
       <p>{value.detail}</p>
+      <ol className="progress-track" aria-label="Recorded processing stages">
+        <li data-state="done">Request saved</li>
+        <li data-state={status === "QUEUED" ? "waiting" : status === "RUNNING" ? "current" : "done"}>Worker processing</li>
+        <li data-state={status === "SUCCEEDED" ? "done" : status === "FAILED" ? "failed" : "waiting"}>{status === "FAILED" ? "Processing failed" : "Result recorded"}</li>
+      </ol>
     </section>
   );
 }

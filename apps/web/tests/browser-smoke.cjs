@@ -8,6 +8,17 @@ const { chromium } = require(
 );
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+async function captureForm(page, name) {
+  const original = page.viewportSize();
+  for (const width of [1440, 820, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: page overflow at ${width}`);
+    const form = page.locator('form').first();
+    assert(await form.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${name}: form overflow at ${width}`);
+    await page.screenshot({ path: `test-results/form-${name}-${width}.png`, fullPage: true, animations: 'disabled' });
+  }
+  await page.setViewportSize(original);
+}
 const base = process.env.UI_TEST_URL || "http://localhost:3000";
 const now = "2026-02-16T08:00:00+08:00";
 const ingredient = {
@@ -97,6 +108,7 @@ async function main() {
     viewport: { width: 1440, height: 1000 },
   });
   const page = await context.newPage();
+  await page.addInitScript(() => localStorage.setItem("restock:workspace-tour:v1:manager", "seen"));
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let authenticated = false,
@@ -332,6 +344,7 @@ async function main() {
     await page.getByRole("button", { name: "Receive", exact: true }).click();
     await page.getByLabel("Quantity received").fill("2");
     await page.getByLabel("Actual expiry date").fill("2026-02-19");
+    await captureForm(page, "receipt");
     await page.getByRole("button", { name: "Confirm receipt" }).click();
     await page.getByText("Receipt recorded and inventory updated.").waitFor();
     assert.equal(
@@ -349,6 +362,7 @@ async function main() {
     await page.goto(base + "/workspace/daily");
     await page.getByRole("tab", { name: "Sales intervals" }).click();
     await page.getByLabel("Batch identity").fill("batch-test");
+    await captureForm(page, "sales");
     await page.getByLabel("Interval end (Singapore)").fill("2026-02-16T08:00");
     await page.getByRole("button", { name: "Submit complete report" }).click();
     await page
@@ -364,6 +378,7 @@ async function main() {
     await page.goto(base + "/workspace/suppliers");
     await page.getByRole("button", { name: "Update", exact: true }).click();
     await page.getByLabel("Unit price (SGD)").fill("5.50");
+    await captureForm(page, "supplier-update");
     await page.getByRole("button", { name: "Save supplier change" }).click();
     await page.getByText(/Change recorded/).waitFor();
     assert.equal(
@@ -375,6 +390,12 @@ async function main() {
     await page.getByLabel("Promotion identifier").fill("promo-test");
     await page.getByLabel("Name", { exact: true }).fill("Lunch special");
     await page.getByLabel("Declared demand multiplier").fill("1.2");
+    assert(await page.getByRole("checkbox", { name: "Active", exact: true }).evaluate(el => {
+      const label = el.closest('label').getBoundingClientRect();
+      const control = el.getBoundingClientRect();
+      return control.left - label.left < 2 && label.height >= 44;
+    }), 'Active checkbox must align with its label and remain touch-friendly');
+    await captureForm(page, "promotion");
     await page.getByRole("button", { name: "Save promotion revision" }).click();
     await page.getByText(/Choose at least one dish/).waitFor();
     await page.getByRole("checkbox", { name: "Chicken rice" }).check();
@@ -396,6 +417,7 @@ async function main() {
     await page.locator('select[name="supplier"]').selectOption("fresh");
     await page.locator('select[name="ingredient"]').selectOption("chicken");
     await page.getByLabel("Quantity", { exact: true }).fill("4");
+    await captureForm(page, "purchase");
     await page
       .locator("form")
       .getByRole("button", { name: "Record actual purchase", exact: true })
@@ -456,7 +478,7 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base + "/workspace/overview");
     await page.getByRole("button", { name: "Toggle navigation" }).click();
-    await page.getByRole("link", { name: "Inventory", exact: true }).click();
+    await page.getByRole("link", { name: "Daily operations", exact: true }).click();
     await page.waitForURL("**/workspace/inventory");
     expire = true;
     await page.goto(base + "/workspace/activity");

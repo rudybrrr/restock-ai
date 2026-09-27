@@ -89,6 +89,12 @@ export type PlanLine = {
   quantity: string;
   unit_price: string;
   arrival_at: string;
+  ordered_at?: string | null;
+  expiry_date?: string | null;
+  kind?: "NORMAL" | "EMERGENCY" | null;
+  offer_id?: string | null;
+  opportunity_id?: string | null;
+  shipment_group_id?: string | null;
 };
 export type Plan = {
   id: string;
@@ -100,13 +106,15 @@ export type Plan = {
     | "REJECTED"
     | "INVALIDATED"
     | "SUPERSEDED";
-  calculation_mode: "DEVELOPMENT_FIXTURE" | "ENGINE";
+  calculation_mode: "DEVELOPMENT_FIXTURE" | "ENGINE" | "CONTINGENCY_ENGINE";
+  cost_scope: "LEGACY_FIELDS" | "NEW_PURCHASE_CASH_ONLY";
+  new_purchase_cash_cost: string | null;
   lines: PlanLine[];
   total_purchase_cost: string;
   delivery_cost: string;
-  total_expected_cost: string;
-  expected_waste_cost: string;
-  expected_stockout_cost: string;
+  total_expected_cost: string | null;
+  expected_waste_cost: string | null;
+  expected_stockout_cost: string | null;
   emergency_penalty: string;
   forecast_id: string;
   inventory_snapshot_id: string;
@@ -118,6 +126,21 @@ export type Run = {
   claimed_at?: string | null;
   completed_at?: string | null;
   snapshot?: {
+    commitments?: import("./operations-types").Delivery[];
+    ingredients?: (NamedRecord & { unit?: string })[];
+    suppliers?: NamedRecord[];
+    decision_engine_artifacts?: {
+      validation?: { complete?: boolean; feasible?: boolean; id?: string };
+      search_result?: StoredSearchEvidence | null;
+    };
+    post_purchase_contingency_result?: {
+      id: string;
+      complete: boolean;
+      findings: string[];
+      fixed_delivery_ids: string[];
+      independent_validation: { complete?: boolean; feasible?: boolean } | null;
+      numerical_result?: StoredSearchEvidence | null;
+    };
     known_at?: string;
     missing_offer_history?: string[];
     procurement_contract_unavailable_reason?: string;
@@ -132,6 +155,16 @@ export type Run = {
   escalation_reason: string | null;
   failure_reason: string | null;
   plan_version_id: string | null;
+};
+
+// Only public numerical diagnostics; never render arbitrary snapshot contents.
+export type StoredSearchEvidence = {
+  status?: string;
+  search_complete?: boolean;
+  optimal_in_domain?: boolean;
+  evaluated?: number;
+  domain_size?: number | null;
+  work_used?: number;
 };
 
 export type ManagerEvidenceRef = {
@@ -151,7 +184,9 @@ export type ManagerPlanReference = {
   run_id: string;
   created_at: string;
   line_count: number;
-  total_expected_cost: string;
+  cost_scope: "LEGACY_FIELDS" | "NEW_PURCHASE_CASH_ONLY";
+  new_purchase_cash_cost: string | null;
+  total_expected_cost: string | null;
 };
 export type ManagerTimelineEntry = {
   id: string;

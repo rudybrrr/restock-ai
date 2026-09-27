@@ -1,39 +1,38 @@
-# Submission Material — Local Evidence Only
+# Submission material — evidence as of 26 September 2026
 
 ## Short description
 
-ReStock helps restaurant managers keep purchasing recommendations current as demand, inventory, promotions, deliveries, and supplier conditions change. A Coordinator routes only the needed domain specialists; deterministic Backend/Decision Engine services calculate and validate the recommendation; managers approve the exact version before acting externally.
+ReStock is an adaptive restaurant inventory and procurement agent that maintains a continuously valid purchasing plan within its approved domains. It does not just predict what a restaurant should order — it keeps the purchasing plan valid as reality changes. A Coordinator selects bounded Demand, Inventory, and Procurement investigations. Deterministic services calculate materiality, forecasts, stock exposure, purchase options, and feasibility. Backend owns frozen state, validation, plan publication, approval, and audit history.
 
-## Business value
+## Demonstrated story
 
-The local product path makes changing assumptions visible, limits unnecessary investigation, preserves the evidence behind a recommendation, and prevents a manager from approving a stale version. Potential waste, stockout, and purchasing-cost benefits are product goals, not measured claims in this synthetic first-slice build.
+An approved synthetic purchasing plan and recorded external deliveries formed fixed commitments. After an emergency delivery shortfall, ReStock's post-purchase worker first kept the plan when commitments covered need, then recommended only 2.000 kg of additional vegetables when the commitment fell to 2 kg. The new version was `CONTINGENCY_ENGINE`, `NEW_PURCHASE_CASH_ONLY`, S$11 new cash and `PENDING_APPROVAL`; it did not duplicate the external purchases or record a delivery. The initial plan for this bounded case used a controlled typed-reasoning setup. The later contingency assessments used the real deterministic worker path.
 
-## Why an Agent architecture
+A separate clean normal assessment used the live organiser gateway for ten valid typed specialist decisions and published an `ENGINE` recommendation pending approval. After observed sales changed materially, Backend persisted a complete deterministic materiality result before Coordinator reconsideration. The dated normal procurement issue window could not be reopened. The worker safely recorded `ESCALATE` / `CALCULATION_INCOMPLETE` and no new plan. An exact-version approval attempt against the invalidated prior plan returned `PLAN_VERSION_STALE`.
 
-Restaurant changes are heterogeneous and event-driven. A Coordinator can select a bounded investigation path rather than invoking every domain for every event. Retained specialists exist because Demand, Inventory, and Procurement have separate evidence contracts, tool permissions, and failure semantics. The architecture does not delegate arithmetic or policy enforcement to prompts.
+Run IDs, plan IDs, and validation limits are in [the final validation record](FINAL_VALIDATION_2026-09-26.md). The [demo runbook](LOCAL_DEMO_SCRIPT.md) gives the exact manager views and setup sequence.
 
-## Deterministic versus LLM responsibilities
+## Why an agent
 
-- LLM/provider responsibility later: interpret context, select investigation order, explain evidence, and request a typed outcome.
-- Deterministic responsibility now and in production: forecast/requirements/inventory/procurement calculations, materiality, constraints, state revisions, validation, lifecycle, publication, approval, and audit persistence.
-- Local demonstration: scripted provider-free reasoning over the same typed Coordinator/specialist boundaries.
+Restaurant changes are heterogeneous and event-driven. The Coordinator decides which bounded specialist to invoke, and specialists select investigations within separate tool permissions. Their typed decisions never supply authoritative prices, quantities, materiality, feasibility, validation, or approvals. Backend rejects stale state and ambiguous or malformed model output.
 
-## Human in the loop
+## Evidence level
 
-Every actionable plan is a new immutable `PENDING_APPROVAL` version. Approval names the exact version and never places an order. If facts change, the old approval context is rejected with `PLAN_VERSION_STALE`.
+| Claim | Status |
+| --- | --- |
+| Normal live organiser-gateway worker to validated pending plan | Proven live on isolated local PostgreSQL |
+| Complete material sales detection and policy-safe escalation | Proven live on isolated local PostgreSQL |
+| Additional-only post-purchase contingency and manager display | Proven locally through API, real deterministic worker, and frontend; initial plan used controlled setup |
+| Seven-scenario Static/Rule/local Adaptive evaluation | Deterministic provider-free harness, measured 19 September 2026 |
+| Hosted deployment, second-machine operation, AWS/Bedrock | Not yet proven |
+| Real restaurant savings, waste/stockout reduction, live token/cost distributions | Not measured |
 
-## Guardrails
+Every actionable revision remains `PENDING_APPROVAL`. Approval names the exact version and does not place an order. The manager sees evidence and a stale-version rejection rather than an Agent-controlled state mutation.
 
-Typed inputs/outputs, exact specialist allowlists, no specialist recursion, bounded rounds/calls/retries, Backend-only mutation, stale state checks, deterministic candidate validation, append-only audit history, fail-closed unknowns, prompt-injection tests, and manager-safe evidence projections are locally verified.
+## Boundaries and limitations
 
-## Evaluation evidence
-
-Fresh local results are in [LOCAL_RESULTS_2026-09-19.md](evaluation/LOCAL_RESULTS_2026-09-19.md). The complete PostgreSQL backend suite passed 782 tests; the database-independent synthetic-history suite passed 68. The supported golden pass covers seven development scenarios across Static, Rule, and local Adaptive adapters, with stable runtime evidence fingerprints.
-
-## Limitations and pending claims
-
-- Synthetic first-slice data is not evidence of restaurant savings or production SME outcomes.
-- Live Sonnet/OpenClaw behavior, tokens, latency, cost, AWS/Bedrock, and deployment are pending.
-- Business metrics are unsupported by the current harness and are not reported as zero.
-- Inventory correction is locally complete through the landed Backend `INVENTORY_ADJUSTED` context/assessment contract; live LLM/AWS/deployment remain out of scope.
-- Persisted human-review workflow semantics are not defined and remain open.
+- The post-purchase domain is a bounded approved synthetic case. Fixed commitments remain fixed, and its S$11 figure is new purchase cash only, not full economic cost or real-world savings.
+- Late sales materiality can prove a change while the approved normal ordering window is closed. ReStock escalates instead of inventing an intraday order; the declared contingency path handles its supported additional-purchase state.
+- The organiser gateway has also produced malformed responses during earlier runs. One bounded repair is allowed for malformed/schema output; ambiguity fails closed. The successful runs do not establish a provider availability guarantee.
+- OpenClaw is an isolated smoke-test path, not the application worker. No hosted URL or AWS/Bedrock behavior is claimed.
+- Historical engineering and numerical documents describe their dated checkpoints. Use this document and the 26 September validation record for current submission claims.
