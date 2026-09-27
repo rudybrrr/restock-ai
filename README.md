@@ -72,6 +72,8 @@ uv run python -m src.seed
 uv run uvicorn src.main:app --reload --port 8000
 ```
 
+Assessments are processed by a separate worker. In a second terminal, from `services/api`, run `uv run python -m src.assessment_worker --loop` against the same `DATABASE_URL`. Live specialist decisions also need the organiser gateway settings (`LLM_GATEWAY_URL`, `LLM_GATEWAY_API_KEY`, `LLM_MODEL`) in `.env`; without the worker, requested assessments stay queued.
+
 The seed is insert-only and safe to repeat for an existing database. Use a new database for a clean local run. The local demo reset helper is stricter: it only accepts a database name beginning with `restock_demo_` and truncates/reseeds that explicitly dedicated database.
 
 Frontend:
