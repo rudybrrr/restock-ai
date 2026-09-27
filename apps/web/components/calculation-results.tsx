@@ -47,9 +47,11 @@ function ProjectionView({ data, proposed }: { data: Projection; proposed: string
 export function CalculationResults({ result }: { result: CalculationResult }) {
   const [tab, setTab] = useState("Forecast");
   const [basis, setBasis] = useState("existing");
-  if (result.status === "NOT_RECORDED" || !result.artifact) return <div className="empty-state"><h2>No stored calculation output for this assessment.</h2><p>Queued, older, contingency and unsupported calculation paths may not record this artifact. This is not a zero forecast or a safe-stock result.</p></div>;
+  if (result.status === "NOT_RECORDED" || !result.artifact) return <div className="empty-state"><h2>{["QUEUED", "RUNNING"].includes(result.run_status) ? "Assessment in progress" : "No stored calculation output for this assessment."}</h2><p>Assessment status: {humanize(result.run_status)}. {["QUEUED", "RUNNING"].includes(result.run_status) ? "This view checks automatically while the assessment is pending." : "Older, contingency and unsupported calculation paths may not record this artifact."}</p>{result.outcome && <p>Outcome: {humanize(result.outcome)}</p>}{result.escalation_reason && <p className="notice">Escalation: {humanize(result.escalation_reason)}</p>}<p>This is not a zero forecast or a safe-stock result.</p></div>;
   const data = result.artifact.outputs;
   return <>
+    <p>Assessment status: {humanize(result.run_status)}.</p>
+    {["QUEUED", "RUNNING"].includes(result.run_status) && <p className="notice" role="status">Calculation captured; assessment completion and publication are still pending. This view continues to refresh.</p>}
     {result.stale && <p className="notice" role="alert">Historical result: restaurant state has changed since this calculation. Read it as captured evidence, not a current recommendation.</p>}
     <p>Service: {data.forecast.target_date} · Stored first-slice calculation. This is not a general 21-day forecast or full economic assessment.</p>
     {!!data.limitations.length && <details className="record-details"><summary>Calculation limitations</summary><ul>{data.limitations.map((s, i) => <li key={i}>{s}</li>)}</ul></details>}

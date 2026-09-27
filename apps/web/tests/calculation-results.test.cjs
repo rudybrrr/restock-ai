@@ -40,7 +40,7 @@ test('historical stale output is readable without mutation', () => {
   assert.deepEqual(readCalculationResult(r, r.run_id), r);
 });
 test('unrecorded is not an empty calculation', () => {
-  const r = { run_id: 'queued', status: 'NOT_RECORDED', current_state_revision: '1', stale: null, plan_version_id: null, artifact: null };
+  const r = { run_id: 'queued', run_status: 'QUEUED', outcome: null, escalation_reason: null, status: 'NOT_RECORDED', current_state_revision: '1', stale: null, plan_version_id: null, artifact: null };
   assert.deepEqual(readCalculationResult(r, 'queued'), r);
   assert.throws(() => readCalculationResult({ ...r, stale: false }, 'queued'));
 });

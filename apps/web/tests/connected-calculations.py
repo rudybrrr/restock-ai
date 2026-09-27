@@ -19,7 +19,8 @@ from pydantic import SecretStr
 from src.config import Settings
 from src.main import create_app
 from tests.conftest import database_url
-from tests.test_assessment_worker import prepare_engine_plan
+from tests.test_assessment_worker import queue_manager_assessment, invoke_worker, models
+from src import assessment_worker as worker
 
 
 def main():
@@ -39,22 +40,33 @@ def main():
         )
         with pytest.MonkeyPatch.context() as patch:
             with TestClient(create_app(settings), base_url="https://api.example") as client:
-                run, _ = prepare_engine_plan(client, url, patch)
+                run = queue_manager_assessment(client)
                 result = client.get(f"/api/v1/manager/runs/{run['id']}/calculation-results").json()
-                assert result["status"] == "AVAILABLE"
-                assert result["stale"] is False
-        server = uvicorn.Server(uvicorn.Config(create_app(settings), host="127.0.0.1", port=8031, log_level="warning"))
-        thread = threading.Thread(target=server.run, daemon=True)
-        thread.start()
-        deadline = time.monotonic() + 15
-        while not server.started:
-            if time.monotonic() > deadline or not thread.is_alive():
-                raise RuntimeError("Isolated API failed to start")
-            time.sleep(0.05)
-        web = Path(__file__).resolve().parents[1]
-        env = {**os.environ, "CONNECTED_RUN_ID": run["id"], "CONNECTED_API_URL": "http://127.0.0.1:8031"}
-        subprocess.run(["node", "tests/connected-calculations.cjs"], cwd=web, env=env, check=True)
-        print("PASS: real engine -> PostgreSQL artifact -> manager HTTP read -> browser; test database disposed afterward.")
+                assert result["status"] == "NOT_RECORDED"
+                assert result["run_status"] == "QUEUED"
+            patch.setattr(worker, "build_organiser_reasoning_models", lambda settings: models())
+            app = create_app(settings)
+
+            # Test-only trigger on an isolated loopback server, never a production route.
+            @app.post("/_test/finish")
+            def finish():
+                completed = invoke_worker(url)
+                assert completed.run_id == run["id"]
+                assert completed.publication_status == "PUBLISHED"
+                return {"finished": True}
+
+            server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=8031, log_level="warning"))
+            thread = threading.Thread(target=server.run, daemon=True)
+            thread.start()
+            deadline = time.monotonic() + 15
+            while not server.started:
+                if time.monotonic() > deadline or not thread.is_alive():
+                    raise RuntimeError("Isolated API failed to start")
+                time.sleep(0.05)
+            web = Path(__file__).resolve().parents[1]
+            env = {**os.environ, "CONNECTED_RUN_ID": run["id"], "CONNECTED_API_URL": "http://127.0.0.1:8031"}
+            subprocess.run(["node", "tests/connected-calculations.cjs"], cwd=web, env=env, check=True)
+        print("PASS: queued selection -> real worker completion -> PostgreSQL -> automatic browser refresh; isolated database disposed afterward.")
     finally:
         if server:
             server.should_exit = True

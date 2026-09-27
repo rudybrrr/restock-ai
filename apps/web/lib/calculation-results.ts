@@ -10,6 +10,7 @@ export type Projection = {
   first_shortages: { ingredient_id: string; start: string; end: string }[] | null;
 };
 export type CalculationResult = {
+  run_status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED"; outcome: string | null; escalation_reason: string | null;
   run_id: string; status: "AVAILABLE" | "NOT_RECORDED"; current_state_revision: string;
   stale: boolean | null; plan_version_id: string | null;
   artifact: null | { id: string; content_sha256: string; outputs: {
@@ -50,6 +51,9 @@ function projection(v: unknown) {
 
 export function readCalculationResult(value: unknown, selectedRun: string): CalculationResult {
   const r = object(value); if (r.run_id !== selectedRun) fail(); str(r.current_state_revision);
+  if (!["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"].includes(str(r.run_status))) fail();
+  if (r.outcome !== null) str(r.outcome);
+  if (r.escalation_reason !== null) str(r.escalation_reason);
   if (r.plan_version_id !== null) str(r.plan_version_id);
   if (r.status === "NOT_RECORDED") { if (r.artifact !== null || r.stale !== null) fail(); return value as CalculationResult; }
   if (r.status !== "AVAILABLE") fail(); bool(r.stale);

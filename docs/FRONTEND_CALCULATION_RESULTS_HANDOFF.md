@@ -34,6 +34,8 @@ Final local gates: frontend lint and production build passed; 12 adapter/prepara
 
 ## Remaining teammate work
 
+27 September update: integrated CY's PR #61 head `fd705ce` as local merge `8e509b3`. The screen now validates run-status/outcome/escalation fields, polls only the selected pending assessment and rereads on terminal transitions, with manual refresh available. An AVAILABLE artifact while a run is still running is labelled captured-but-pending, not final publication. The connected regression now starts QUEUED/NOT_RECORDED and verifies real worker completion, SUCCEEDED plus publication, and automatic display without navigation/reload. See [submission scope and sign-off review](SUBMISSION_SCOPE_REVIEW_2026-09-27.md). New sales-issued-forecast and multi-day contingency read contracts are merged but not newly wired into this page.
+
 - CY: broader projection/forecast paths and multi-day publication are separate work. Waste needs an approved append-only lifecycle, chronological replay, manager writes/history and validation. Full economics needs authoritative frozen inputs and persisted results.
 - Rudy: consume only independently validated complete economic current candidates; diagnostics and future continuation must not become approvable plans or recorded orders.
 - Aniq/team: confirm unresolved economic/terminal/continuation/waste policy choices. The older frontend handoff's optional-scope wording conflicts with Aniq's newer mandatory-scope account; do not silently settle that discrepancy through UI code.

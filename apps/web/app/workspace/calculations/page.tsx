@@ -9,9 +9,13 @@ import { humanize, singaporeTime } from "@/lib/format";
 
 export default function CalculationsPage() {
   const [run, setRun] = useState("");
-  const runs = useQuery({ queryKey: ["runs"], queryFn: ({ signal }) => api<Run[]>("/runs", { signal }) });
-  const output = useQuery({ queryKey: ["manager-calculation-results", run], enabled: !!run,
-    queryFn: async ({ signal }) => readCalculationResult(await api<unknown>(`/manager/runs/${encodeURIComponent(run)}/calculation-results`, { signal }), run) });
+  const runs = useQuery({ queryKey: ["runs"], queryFn: ({ signal }) => api<Run[]>("/runs", { signal }),
+    refetchInterval: q => q.state.data?.some(r => r.id === run && ["QUEUED", "RUNNING"].includes(r.status)) ? 2500 : false });
+  const selected = runs.data?.find(r => r.id === run);
+  // A terminal transition must trigger a fresh read even if NOT_RECORDED was cached.
+  const output = useQuery({ queryKey: ["manager-calculation-results", run, selected?.status], enabled: !!run,
+    queryFn: async ({ signal }) => readCalculationResult(await api<unknown>(`/manager/runs/${encodeURIComponent(run)}/calculation-results`, { signal }), run),
+    refetchInterval: q => q.state.data && ["QUEUED", "RUNNING"].includes(q.state.data.run_status) ? 2500 : false });
   return <>
     <PageHeading eyebrow="STOCK & SALES" title="Forecast & projections" description="Inspect the demand and stock calculations frozen for a particular assessment. No calculation is rerun here." />
     <section className="panel calculation-display"><div className="panel-body">
@@ -21,6 +25,7 @@ export default function CalculationsPage() {
       {runs.isSuccess && !runs.data.length && <p>No assessments recorded yet. Request one in Activity.</p>}
       {!run && <p>Select the exact assessment you want to inspect. Results are never silently replaced with a newer calculation.</p>}
       {!!run && output.isPending && <p role="status">Loading stored calculation…</p>}
+      {!!run && <button className="button button-secondary" disabled={output.isFetching} onClick={() => { void runs.refetch(); void output.refetch(); }}>Refresh assessment result</button>}
       {output.error && <><ErrorNotice error={output.error} /><button className="button button-secondary" onClick={() => output.refetch()}>Retry stored result</button></>}
       {!!run && !output.error && !output.isPending && output.data && <CalculationResults key={run} result={output.data} />}
     </div></section>
